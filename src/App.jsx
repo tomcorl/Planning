@@ -1,0 +1,1916 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import './App.css';
+import AdminUsersPage from './AdminUsersPage.jsx';
+import CompaniesPage from './CompaniesPage.jsx';
+import LandingPage from './LandingPage.jsx';
+import LoginPage from './LoginPage.jsx';
+import PaymentPage from './PaymentPage.jsx';
+import { supabase } from './lib/supabase.js';
+import * as api from './lib/api.js';
+
+const INITIAL_CELL_WIDTH = 52;
+const MIN_CELL_WIDTH = 32;
+const MAX_CELL_WIDTH = 90;
+
+const CHANTIER_COLORS = [
+  '#b7c6d8',
+  '#c7f9c7',
+  '#fff68f',
+  '#35c759',
+  '#f4a261',
+  '#ffafcc',
+  '#bdb2ff',
+  '#fca5a5',
+  '#93c5fd',
+  '#fde68a',
+  '#86efac',
+  '#d8b4fe',
+];
+
+const CONDUCTEUR_COLORS = [
+  '#2563eb',
+  '#16a34a',
+  '#dc2626',
+  '#9333ea',
+  '#ea580c',
+  '#0891b2',
+  '#ca8a04',
+  '#be123c',
+];
+
+const DEFAULT_TEAMS = Array.from({ length: 16 }, (_, i) => `Équipe ${i + 1}`);
+
+function toDate(value) {
+  if (value instanceof Date) return value;
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function formatDate(date) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function isWeekend(dateStr) {
+  const day = toDate(dateStr).getDay();
+  return day === 0 || day === 6;
+}
+
+function getIsoWeek(dateStr) {
+  const date = toDate(dateStr);
+  const tmp = new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  );
+  const dayNum = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  return Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+}
+
+function getFrenchHolidays(year) {
+  return [
+    { date: `${year}-01-01`, nom: 'Jour de l’an' },
+    { date: `${year}-05-01`, nom: 'Fête du Travail' },
+    { date: `${year}-05-08`, nom: 'Victoire 1945' },
+    { date: `${year}-07-14`, nom: 'Fête nationale' },
+    { date: `${year}-08-15`, nom: 'Assomption' },
+    { date: `${year}-11-01`, nom: 'Toussaint' },
+    { date: `${year}-11-11`, nom: 'Armistice' },
+    { date: `${year}-12-25`, nom: 'Noël' },
+  ];
+}
+
+function generateDays(start, count) {
+  return Array.from({ length: count }, (_, i) => {
+    const d = addDays(start, i);
+    const date = formatDate(d);
+
+    return {
+      date,
+      dayNumber: d.getDate(),
+      month: d.toLocaleDateString('fr-FR', { month: 'short' }),
+      weekday: d.toLocaleDateString('fr-FR', { weekday: 'short' }),
+      weekend: isWeekend(date),
+      week: getIsoWeek(date),
+    };
+  });
+}
+
+function sameOrAfter(a, b) {
+  return toDate(a).getTime() >= toDate(b).getTime();
+}
+
+function sameOrBefore(a, b) {
+  return toDate(a).getTime() <= toDate(b).getTime();
+}
+
+export default function App() {
+  const scrollRef = useRef(null);
+  const today = formatDate(new Date());
+  const [session, setSession] = useState(null);
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [loginError, setLoginError] = useState('');
+  const [authScreen, setAuthScreen] = useState('home');
+  const [selectedPlan, setSelectedPlan] = useState('Pro');
+  const [activePage, setActivePage] = useState('planning');
+  const [viewMode, setViewMode] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('viewMode')) || 'week'; } catch { return 'week'; }
+  });
+  const [companies, setCompanies] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  const activeCompanyId = session?.companyId || companies[0]?.id || '';
+  const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0] || { id: '', nom: '', secteur: '', plan: '' };
+  const availableCompanies = session
+    ? companies.filter((company) => session.companyIds.includes(company.id))
+    : [];
+  const isAdmin = session?.role === 'admin';
+
+  const [theme, setTheme] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('theme')) || 'light'; } catch { return 'light'; }
+  });
+  const [cellWidth, setCellWidth] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cellWidth')) || INITIAL_CELL_WIDTH; } catch { return INITIAL_CELL_WIDTH; }
+  });
+  const [showWeekends, setShowWeekends] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('showWeekends')) !== false; } catch { return true; }
+  });
+  const [chainMove, setChainMove] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('chainMove')) !== false; } catch { return true; }
+  });
+
+  const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -30));
+  const [calendarLength, setCalendarLength] = useState(40);
+
+  const [teams, setTeams] = useState([]);
+  const [conducteurs, setConducteurs] = useState([]);
+  const [customFeries, setCustomFeries] = useState([]);
+  const [ferieForm, setFerieForm] = useState({ nom: '', date: today });
+  const [chantiers, setChantiers] = useState([]);
+  const [conges, setConges] = useState([]);
+
+  const [, setHistory] = useState({ past: [], future: [] });
+  const [selection, setSelection] = useState(null);
+  const [resize, setResize] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dragPreview, setDragPreview] = useState(null);
+
+  const [filters, setFilters] = useState({
+    equipe: 'all',
+    conducteur: 'all',
+    color: 'all',
+    statut: 'all',
+  });
+
+  const [modal, setModal] = useState({
+    open: false,
+    mode: 'creation',
+    type: 'chantier',
+  });
+  const [form, setForm] = useState(null);
+
+  const allDays = useMemo(
+    () => generateDays(calendarStart, calendarLength),
+    [calendarStart, calendarLength]
+  );
+
+  const holidays = useMemo(() => {
+    const years = new Set(allDays.map((d) => toDate(d.date).getFullYear()));
+    const base = Array.from(years).flatMap((year) => getFrenchHolidays(year));
+    return [...base, ...customFeries];
+  }, [allDays, customFeries]);
+
+  const visibleDays = useMemo(() => {
+    return showWeekends ? allDays : allDays.filter((d) => !d.weekend);
+  }, [allDays, showWeekends]);
+
+  const weekGroups = useMemo(() => {
+    const groups = [];
+    visibleDays.forEach((day) => {
+      const last = groups[groups.length - 1];
+      if (!last || last.week !== day.week || last.month !== day.month) {
+        groups.push({ week: day.week, month: day.month, count: 1 });
+      } else {
+        last.count += 1;
+      }
+    });
+    return groups;
+  }, [visibleDays]);
+  const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  useEffect(
+    () => document.documentElement.setAttribute('data-theme', theme),
+    [theme]
+  );
+
+  // Persist UI preferences to localStorage (client-side only)
+  useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
+  useEffect(() => localStorage.setItem('cellWidth', JSON.stringify(cellWidth)), [cellWidth]);
+  useEffect(() => localStorage.setItem('showWeekends', JSON.stringify(showWeekends)), [showWeekends]);
+  useEffect(() => localStorage.setItem('chainMove', JSON.stringify(chainMove)), [chainMove]);
+  useEffect(() => localStorage.setItem('viewMode', JSON.stringify(viewMode)), [viewMode]);
+
+  // ── Supabase Auth + Data Loading ──
+  const loadedRef = useRef(false);
+
+  // Debounced persistence to Supabase (runs 800ms after data settles)
+  useEffect(() => {
+    if (!loadedRef.current || !session || !activeCompanyId) return;
+    const timer = setTimeout(() => {
+      api.upsertChantiers(activeCompanyId, chantiers).catch(console.error);
+      api.upsertConges(activeCompanyId, conges).catch(console.error);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [chantiers, conges, session, activeCompanyId]);
+
+  useEffect(() => {
+    if (!loadedRef.current || !session || !activeCompanyId) return;
+    const timer = setTimeout(() => {
+      api.upsertEquipes(activeCompanyId, teams).catch(console.error);
+      api.upsertConducteurs(activeCompanyId, conducteurs).catch(console.error);
+      api.upsertCustomFeries(activeCompanyId, customFeries).catch(console.error);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [teams, conducteurs, customFeries, session, activeCompanyId]);
+
+  async function loadCompanyData(companyId) {
+    setDataLoading(true);
+    try {
+      const data = await api.loadCompanyData(companyId);
+      setTeams(data.equipes.length > 0 ? data.equipes : DEFAULT_TEAMS);
+      if (data.equipes.length === 0) {
+        await api.upsertEquipes(companyId, DEFAULT_TEAMS);
+      }
+      setConducteurs(data.conducteurs.length > 0 ? data.conducteurs : []);
+      setChantiers(data.chantiers);
+      setConges(data.conges);
+      setCustomFeries(data.customFeries);
+      setHistory({ past: [], future: [] });
+      setSelection(null);
+      setSelectedItem(null);
+      setFilterPanelOpen(false);
+      setSettingsOpen(false);
+    } catch (e) {
+      console.error('Failed to load company data:', e);
+    } finally {
+      setDataLoading(false);
+    }
+  }
+
+  async function buildSessionMeta(user) {
+    let profile = null;
+    const r1 = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    if (!r1.error) profile = r1.data;
+    let companyIds = [];
+    const r2 = await supabase.from('user_companies').select('company_id').eq('user_id', user.id);
+    if (!r2.error) companyIds = r2.data?.map((l) => l.company_id) || [];
+    const preferred = user.user_metadata?.companyId;
+    const meta = {
+      email: user.email,
+      nom: profile?.nom || user.email?.split('@')[0] || '',
+      role: profile?.role || 'planning',
+      companyIds,
+      companyId: preferred && companyIds.includes(preferred) ? preferred : companyIds[0] || '',
+    };
+    // Sync role to JWT so RLS policies can check it without recursion
+    if (profile?.role && profile.role !== user.user_metadata?.role) {
+      await supabase.auth.updateUser({ data: { role: profile.role, nom: profile.nom } }).catch(() => {});
+    }
+    return meta;
+  }
+
+  async function loadAllData(sessionData) {
+    setDataLoading(true);
+    try {
+      const { data: companiesData } = await supabase
+        .from('companies')
+        .select('*')
+        .in('id', sessionData.companyIds);
+      setCompanies(companiesData || []);
+      const enrichedUsers = await api.fetchUsers();
+      setUsers(enrichedUsers);
+      const cid = sessionData.companyId || sessionData.companyIds?.[0];
+      if (cid) { await loadCompanyData(cid); }
+    } catch (e) {
+      console.error('Failed to load initial data:', e);
+      setUsers([]);
+    } finally {
+      setDataLoading(false);
+      loadedRef.current = true;
+    }
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
+      if (s) {
+        try {
+          const meta = await buildSessionMeta(s.user);
+          setSession(meta);
+          loadAllData(meta);
+        } catch (e) {
+          console.error('Session restore failed:', e);
+          setDataLoading(false);
+        }
+      } else {
+        setDataLoading(false);
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'SIGNED_IN' && s) {
+        buildSessionMeta(s.user).then((meta) => {
+          setSession(meta);
+          loadAllData(meta);
+        }).catch((e) => {
+          console.error('Auth state change error:', e);
+          setDataLoading(false);
+        });
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null);
+        setCompanies([]);
+        setUsers([]);
+        setTeams([]);
+        setConducteurs([]);
+        setChantiers([]);
+        setConges([]);
+        setCustomFeries([]);
+        setDataLoading(false);
+      }
+    });
+
+    return () => listener?.subscription?.unsubscribe();
+  }, []);
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setLoginError('');
+
+    try {
+      await api.login(loginForm.email.trim(), loginForm.password);
+      setLoginForm((f) => ({ ...f, password: '' }));
+      // Auth listener handles the rest (session + data loading)
+    } catch {
+      setLoginError('Email ou mot de passe incorrect.');
+    }
+  }
+
+  async function switchCompany(companyId) {
+    setSession((current) => ({ ...current, companyId }));
+    try { await supabase.auth.updateUser({ data: { companyId } }); } catch { /* ignore */ }
+    await loadCompanyData(companyId);
+    setActivePage('planning');
+    setSettingsOpen(false);
+  }
+
+  async function saveUsers(nextUsers) {
+    setUsers(nextUsers);
+    if (!session) return;
+    const currentUser = nextUsers.find((u) => u.email === session.email);
+    if (currentUser) {
+      try {
+        await api.updateUserProfile(currentUser.id, {
+          nom: currentUser.nom,
+          role: currentUser.role,
+          companyIds: currentUser.companyIds,
+        });
+        setSession((cur) => ({
+          ...cur,
+          nom: currentUser.nom,
+          role: currentUser.role,
+          companyIds: currentUser.companyIds,
+          companyId: currentUser.companyIds.includes(cur.companyId)
+            ? cur.companyId
+            : currentUser.companyIds[0],
+        }));
+        await supabase.auth.updateUser({
+          data: {
+            nom: currentUser.nom,
+            role: currentUser.role,
+            companyIds: currentUser.companyIds,
+            companyId: currentUser.companyIds.includes(session.companyId)
+              ? session.companyId
+              : currentUser.companyIds[0],
+          },
+        });
+      } catch (err) {
+        console.error('Failed to update user:', err);
+      }
+    }
+  }
+
+  async function addUser(email, password, nom, role, companyIds) {
+    try {
+      const newUser = await api.createUser(email, password, nom, role, companyIds);
+      setUsers((prev) => [...prev, newUser]);
+      return newUser;
+    } catch (err) {
+      console.error('Failed to create user:', err);
+      throw err;
+    }
+  }
+
+  async function removeUser(userId) {
+    try {
+      await api.deleteUser(userId);
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+    }
+  }
+
+  async function saveCompanies(nextCompanies) {
+    setCompanies(nextCompanies);
+    const companyIds = nextCompanies.map((c) => c.id);
+    try {
+      await api.saveCompanies(nextCompanies);
+    } catch (err) {
+      console.error('Failed to save companies:', err);
+    }
+    setUsers((currentUsers) =>
+      currentUsers.map((u) => ({
+        ...u,
+        companyIds:
+          u.role === 'admin'
+            ? companyIds
+            : u.companyIds.filter((id) => companyIds.includes(id)),
+      }))
+    );
+    setSession((current) =>
+      current
+        ? {
+            ...current,
+            companyIds:
+              current.role === 'admin'
+                ? companyIds
+                : current.companyIds.filter((id) => companyIds.includes(id)),
+          }
+        : current
+    );
+  }
+
+  async function logout() {
+    await api.logout();
+    setSession(null);
+    setAuthScreen('home');
+    setActivePage('planning');
+    setLoginForm({ email: '', password: '' });
+    setLoginError('');
+  }
+
+  function snapshot() {
+    return { chantiers, conges, teams, conducteurs, customFeries };
+  }
+
+  function restore(s) {
+    setChantiers(s.chantiers);
+    setConges(s.conges);
+    setTeams(s.teams);
+    setConducteurs(s.conducteurs);
+    setCustomFeries(s.customFeries);
+  }
+
+  function commit(action) {
+    setHistory((h) => ({
+      past: [...h.past.slice(-30), snapshot()],
+      future: [],
+    }));
+    action();
+  }
+
+  function undo() {
+    setHistory((h) => {
+      if (!h.past.length) return h;
+      const previous = h.past[h.past.length - 1];
+      const current = snapshot();
+      restore(previous);
+      return { past: h.past.slice(0, -1), future: [current, ...h.future] };
+    });
+  }
+
+  function redo() {
+    setHistory((h) => {
+      if (!h.future.length) return h;
+      const next = h.future[0];
+      const current = snapshot();
+      restore(next);
+      return { past: [...h.past, current], future: h.future.slice(1) };
+    });
+  }
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      const z = e.key.toLowerCase() === 'z';
+      const y = e.key.toLowerCase() === 'y';
+
+      if ((e.ctrlKey || e.metaKey) && z && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (y || (z && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
+  function dayIndex(date) {
+    return visibleDays.findIndex((d) => d.date === date);
+  }
+
+  function visibleDateByIndex(index) {
+    if (!visibleDays.length) return today;
+    if (index < 0) return visibleDays[0].date;
+    if (index >= visibleDays.length)
+      return visibleDays[visibleDays.length - 1].date;
+    return visibleDays[index].date;
+  }
+
+  function isFerie(date) {
+    return holidays.some((h) => h.date === date);
+  }
+
+  function addWorkingDays(start, workingDays, equipe, options = {}) {
+    let date = start;
+    let count = 0;
+    let safety = 0;
+
+    while (count < Number(workingDays) && safety < 1200) {
+      const blocked = options.countConges
+        ? isWeekend(date) || isFerie(date)
+        : isBlockedDay(equipe, date);
+
+      if (!blocked) count += 1;
+      if (count >= Number(workingDays)) break;
+
+      date = formatDate(addDays(toDate(date), 1));
+      safety += 1;
+    }
+
+    return date;
+  }
+
+  function isCongeForTeam(equipe, date) {
+    return conges.some((c) => {
+      if (c.equipe !== equipe) return false;
+
+      const realEnd = addWorkingDays(c.start, c.duree, c.equipe, {
+        countConges: true,
+      });
+
+      return sameOrAfter(date, c.start) && sameOrBefore(date, realEnd);
+    });
+  }
+
+  function isBlockedDay(equipe, date, options = {}) {
+    const blockWeekend = isWeekend(date);
+    const blockFerie = isFerie(date);
+    const blockConge = options.ignoreConges
+      ? false
+      : isCongeForTeam(equipe, date);
+
+    return blockWeekend || blockFerie || blockConge;
+  }
+
+  function nextWorkingDay(date, equipe) {
+    let d = date;
+    let safety = 0;
+
+    while (isBlockedDay(equipe, d) && safety < 366) {
+      d = formatDate(addDays(toDate(d), 1));
+      safety += 1;
+    }
+
+    return d;
+  }
+
+  function getEndDateForChantier(c) {
+    return addWorkingDays(c.start, c.duree, c.equipe);
+  }
+
+  function getConducteur(id) {
+    return conducteurs.find((c) => c.id === Number(id));
+  }
+
+  function filteredChantiers() {
+    return chantiers.filter((c) => {
+      if (filters.equipe !== 'all' && Number(filters.equipe) !== c.equipe)
+        return false;
+      if (
+        filters.conducteur !== 'all' &&
+        Number(filters.conducteur) !== Number(c.conducteurId)
+      )
+        return false;
+      if (filters.color !== 'all' && filters.color !== c.color) return false;
+      if (filters.statut === 'termine' && !c.termine) return false;
+      if (filters.statut === 'encours' && c.termine) return false;
+      return true;
+    });
+  }
+
+  function splitChantier(chantier) {
+    const endDate = getEndDateForChantier(chantier);
+    const range = visibleDays
+      .map((d, i) => ({ ...d, i }))
+      .filter(
+        (d) =>
+          sameOrAfter(d.date, chantier.start) && sameOrBefore(d.date, endDate)
+      );
+
+    const segments = [];
+    let current = null;
+
+    range.forEach((day) => {
+      if (isBlockedDay(chantier.equipe, day.date)) {
+        if (current) {
+          segments.push(current);
+          current = null;
+        }
+        return;
+      }
+
+      if (!current) {
+        current = { start: day.i, end: day.i };
+      } else if (day.i === current.end + 1) {
+        current.end = day.i;
+      } else {
+        segments.push(current);
+        current = { start: day.i, end: day.i };
+      }
+    });
+
+    if (current) segments.push(current);
+    return segments;
+  }
+
+  function getCongeSegment(conge) {
+    const start = dayIndex(conge.start);
+    if (start === -1) return null;
+
+    const endDate = addWorkingDays(conge.start, conge.duree, conge.equipe, {
+      countConges: true,
+    });
+    const end = dayIndex(endDate);
+
+    return { start, end: Math.max(start, end) };
+  }
+
+  function updateTeam(index, value) {
+    commit(() => {
+      setTeams((prev) => prev.map((t, i) => (i === index ? value : t)));
+    });
+  }
+
+  function addTeam() {
+    commit(() => setTeams((prev) => [...prev, `Équipe ${prev.length + 1}`]));
+  }
+
+  function deleteTeam(index) {
+    if (
+      !window.confirm(
+        'Supprimer cette équipe ? Les chantiers et congés de cette ligne seront aussi supprimés.'
+      )
+    )
+      return;
+
+    commit(() => {
+      setTeams((prev) => prev.filter((_, i) => i !== index));
+
+      setChantiers((prev) =>
+        prev
+          .filter((c) => c.equipe !== index)
+          .map((c) => (c.equipe > index ? { ...c, equipe: c.equipe - 1 } : c))
+      );
+
+      setConges((prev) =>
+        prev
+          .filter((c) => c.equipe !== index)
+          .map((c) => (c.equipe > index ? { ...c, equipe: c.equipe - 1 } : c))
+      );
+    });
+  }
+
+  function startSelection(e, equipe, date) {
+    if (e.button !== 0) return;
+    if (resize || modal.open) return;
+
+    setSelection({ equipe, startDate: date, endDate: date });
+  }
+
+  function updateSelection(equipe, date) {
+    if (!selection || selection.equipe !== equipe) return;
+
+    setSelection({ ...selection, endDate: date });
+  }
+
+  function endSelection() {
+    if (!selection || resize || modal.open) return;
+
+    const startIdx = dayIndex(selection.startDate);
+    const endIdx = dayIndex(selection.endDate);
+
+    const a = Math.min(startIdx, endIdx);
+    const b = Math.max(startIdx, endIdx);
+
+    if (a === b) {
+      setSelection(null);
+      return;
+    }
+
+    const start = visibleDateByIndex(a);
+    const selectedRange = visibleDays.slice(a, b + 1);
+    const workingCount =
+      selectedRange.filter((d) => !isBlockedDay(selection.equipe, d.date))
+        .length || 1;
+
+    setForm({
+      id: null,
+      equipe: selection.equipe,
+      start: nextWorkingDay(start, selection.equipe),
+      duree: workingCount,
+      nom: '',
+      conducteurId: conducteurs[0]?.id || null,
+      color: CHANTIER_COLORS[1],
+      detail: '',
+      note: '',
+      termine: false,
+      linked: false,
+    });
+
+    setModal({ open: true, mode: 'creation', type: 'chantier' });
+  }
+
+  function isSelected(equipe, date) {
+    if (!selection || selection.equipe !== equipe) return false;
+
+    const current = dayIndex(date);
+    const a = dayIndex(selection.startDate);
+    const b = dayIndex(selection.endDate);
+
+    return current >= Math.min(a, b) && current <= Math.max(a, b);
+  }
+
+  function openEditChantier(chantier) {
+    if (!chantier) return;
+
+    setSelectedItem({ type: 'chantier', id: chantier.id });
+    setForm({ ...chantier });
+    setModal({ open: true, mode: 'modification', type: 'chantier' });
+  }
+
+  function openEditConge(conge) {
+    if (!conge) return;
+
+    setSelectedItem({ type: 'conge', id: conge.id });
+    setForm({ ...conge });
+    setModal({ open: true, mode: 'modification', type: 'conge' });
+  }
+
+  function closeModal() {
+    setModal({ open: false, mode: 'creation', type: 'chantier' });
+    setForm(null);
+    setSelection(null);
+  }
+
+  function saveModal() {
+    if (!form?.nom?.trim() && modal.type !== 'conducteur') {
+      alert('Il faut donner un nom.');
+      return;
+    }
+
+    commit(() => {
+      if (modal.type === 'chantier') {
+        const item = {
+          ...form,
+          id: form.id || Date.now(),
+          equipe: Number(form.equipe),
+          duree: Number(form.duree),
+          conducteurId: Number(form.conducteurId),
+          start: nextWorkingDay(form.start, Number(form.equipe)),
+        };
+
+        setChantiers((prev) =>
+          modal.mode === 'modification'
+            ? prev.map((c) => (c.id === item.id ? item : c))
+            : applyInsertion(prev, item, item.equipe, item.start, true)
+        );
+      }
+
+      if (modal.type === 'conge') {
+        const item = {
+          id: form.id || Date.now(),
+          equipe: Number(form.equipe),
+          start: form.start,
+          duree: Number(form.duree),
+          nom: form.nom,
+        };
+
+        setConges((prev) =>
+          modal.mode === 'modification'
+            ? prev.map((c) => (c.id === item.id ? item : c))
+            : [...prev, item]
+        );
+      }
+    });
+
+    closeModal();
+  }
+
+  function applyInsertion(
+    list,
+    movedItem,
+    targetEquipe,
+    targetStart,
+    includeSelf = false
+  ) {
+    let next = includeSelf
+      ? list
+          .filter((c) => c.id !== movedItem.id)
+          .concat({ ...movedItem, equipe: targetEquipe, start: targetStart })
+      : list.map((c) =>
+          c.id === movedItem.id
+            ? { ...c, equipe: targetEquipe, start: targetStart }
+            : c
+        );
+
+    if (!chainMove) return next;
+
+    const moved = next.find((c) => c.id === movedItem.id);
+    const movedEnd = getEndDateForChantier(moved);
+
+    let cursor = formatDate(addDays(toDate(movedEnd), 1));
+    cursor = nextWorkingDay(cursor, targetEquipe);
+
+    const affected = next
+      .filter(
+        (c) =>
+          c.id !== moved.id &&
+          c.equipe === targetEquipe &&
+          sameOrAfter(c.start, targetStart)
+      )
+      .sort((a, b) => toDate(a.start) - toDate(b.start));
+
+    const changed = new Map();
+
+    affected.forEach((c) => {
+      const newStart = nextWorkingDay(cursor, targetEquipe);
+      changed.set(c.id, { ...c, start: newStart });
+
+      cursor = formatDate(
+        addDays(toDate(getEndDateForChantier({ ...c, start: newStart })), 1)
+      );
+      cursor = nextWorkingDay(cursor, targetEquipe);
+    });
+
+    next = next.map((c) => changed.get(c.id) || c);
+    return next;
+  }
+
+  function onDragStart(e, id) {
+    e.dataTransfer.setData('chantierId', String(id));
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onDrop(e, equipe, date) {
+    e.preventDefault();
+
+    const id = Number(e.dataTransfer.getData('chantierId'));
+    const item = chantiers.find((c) => c.id === id);
+    if (!item) return;
+
+    const start = nextWorkingDay(date, equipe);
+
+    commit(() => {
+      setChantiers((prev) => applyInsertion(prev, item, equipe, start));
+    });
+  }
+
+  function startResize(e, chantier, side) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setResize({
+      id: chantier.id,
+      side,
+      startX: e.clientX,
+      originalStart: chantier.start,
+      originalDuree: chantier.duree,
+      originalEquipe: chantier.equipe,
+    });
+  }
+  function countWorkingDays(start, end, equipe) {
+    let count = 0;
+    let current = start;
+    let safety = 0;
+
+    while (sameOrBefore(current, end) && safety < 1200) {
+      if (!isBlockedDay(equipe, current)) {
+        count += 1;
+      }
+
+      current = formatDate(addDays(toDate(current), 1));
+      safety += 1;
+    }
+
+    return count;
+  }
+  useEffect(() => {
+    if (!resize) return;
+
+    function onMouseMove(e) {
+      const delta = Math.round((e.clientX - resize.startX) / cellWidth);
+
+      setChantiers((prev) =>
+        prev.map((c) => {
+          if (c.id !== resize.id) return c;
+
+          // Côté droit : seule la durée change
+          if (resize.side === 'right') {
+            const newDuree = Math.max(1, resize.originalDuree + delta);
+
+            return {
+              ...c,
+              start: resize.originalStart,
+              duree: newDuree,
+            };
+          }
+
+          // Côté gauche : le début change, la fin reste fixe
+          if (resize.side === 'left') {
+            const originalEnd = addWorkingDays(
+              resize.originalStart,
+              resize.originalDuree,
+              resize.originalEquipe
+            );
+
+            const rawNewStart = formatDate(
+              addDays(toDate(resize.originalStart), delta)
+            );
+
+            const newStart = nextWorkingDay(rawNewStart, resize.originalEquipe);
+
+            const newDuree = countWorkingDays(
+              newStart,
+              originalEnd,
+              resize.originalEquipe
+            );
+
+            if (newDuree < 1) return c;
+
+            return {
+              ...c,
+              start: newStart,
+              duree: newDuree,
+            };
+          }
+
+          return c;
+        })
+      );
+    }
+
+    function onMouseUp() {
+      commit(() => {});
+      setResize(null);
+    }
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [resize, cellWidth]);
+
+  function handleScroll(e) {
+    const el = e.currentTarget;
+
+    if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
+      setCalendarLength((prev) => prev + 15);
+    }
+
+    if (el.scrollLeft < 200) {
+      setCalendarStart((prev) => addDays(prev, -30));
+      setCalendarLength((prev) => prev + 15);
+
+      setTimeout(() => {
+        el.scrollLeft += 30 * cellWidth;
+      }, 0);
+    }
+  }
+
+  function goToday() {
+    const idx = dayIndex(today);
+    const el = scrollRef.current;
+
+    if (el && idx >= 0) {
+      el.scrollLeft = Math.max(0, idx * cellWidth - 500);
+    }
+  }
+
+  function changeViewMode(mode) {
+    const settings = {
+      day: { before: 3, length: 10, width: 84 },
+      week: { before: 14, length: 42, width: 58 },
+      month: { before: 30, length: 120, width: 42 },
+      year: { before: 45, length: 365, width: 32 },
+    };
+    const next = settings[mode] || settings.week;
+
+    setViewMode(mode);
+    setCalendarStart(addDays(new Date(), -next.before));
+    setCalendarLength(next.length);
+    setCellWidth(next.width);
+
+    setTimeout(() => {
+      const idx = dayIndex(today);
+      const el = scrollRef.current;
+      if (el && idx >= 0) {
+        el.scrollLeft = Math.max(0, idx * next.width - 360);
+      }
+    }, 0);
+  }
+
+  function quickAdd() {
+    setForm({
+      id: null,
+      equipe: 0,
+      start: nextWorkingDay(today, 0),
+      duree: 3,
+      nom: '',
+      conducteurId: conducteurs[0]?.id || null,
+      color: CHANTIER_COLORS[1],
+      detail: '',
+      note: '',
+      termine: false,
+      linked: false,
+    });
+
+    setModal({ open: true, mode: 'creation', type: 'chantier' });
+
+  }
+
+  function addCustomFerie() {
+    if (!ferieForm.nom.trim() || !ferieForm.date) return;
+
+    commit(() => {
+      setCustomFeries((prev) => [
+        ...prev,
+        { id: Date.now(), nom: ferieForm.nom, date: ferieForm.date },
+      ]);
+    });
+
+    setFerieForm({ nom: '', date: today });
+  }
+
+  const chantiersParCellule = useMemo(() => {
+    const map = new Map();
+
+    filteredChantiers().forEach((chantier) => {
+      splitChantier(chantier).forEach((seg, i) => {
+        const key = `${chantier.equipe}-${seg.start}`;
+
+        if (!map.has(key)) {
+          map.set(key, []);
+        }
+
+        const cellItems = map.get(key);
+        cellItems.push({ chantier, seg, i, stack: cellItems.length });
+      });
+    });
+
+    return map;
+  }, [chantiers, conges, holidays, visibleDays, filters, showWeekends]);
+
+  const gridTemplateColumns = `260px repeat(${visibleDays.length}, ${cellWidth}px)`;
+
+  function handleSelectPlan(planName) {
+    setSelectedPlan(planName);
+    setAuthScreen('payment');
+  }
+
+  function handlePaymentComplete() {
+    setAuthScreen('login');
+  }
+
+  if (dataLoading && session) {
+    return <div className="loading-screen"><div className="loading-spinner"/><p>Chargement...</p></div>;
+  }
+
+  if (!session) {
+    if (authScreen === 'login') {
+      return (
+        <LoginPage
+          loginError={loginError}
+          loginForm={loginForm}
+          onBack={() => setAuthScreen('home')}
+          onChange={setLoginForm}
+          onSubmit={handleLogin}
+        />
+      );
+    }
+
+    if (authScreen === 'payment') {
+      return (
+        <PaymentPage
+          planName={selectedPlan}
+          onBack={() => setAuthScreen('home')}
+          onComplete={handlePaymentComplete}
+        />
+      );
+    }
+
+    return <LandingPage onLogin={() => setAuthScreen('login')} onSelectPlan={handleSelectPlan} />;
+  }
+
+  return (
+    <div
+      className="app"
+      onMouseUp={endSelection}
+    >
+      <div className="topbar">
+        <div className="title">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          Planning
+          <span>{activeCompany.nom}</span>
+        </div>
+
+        <div className="top-actions">
+          {availableCompanies.length > 1 && (
+            <select
+              className="company-select"
+              value={activeCompanyId}
+              onChange={(e) => switchCompany(e.target.value)}
+            >
+              {availableCompanies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.nom}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <div className="workspace-nav">
+            <button
+              className={activePage === 'planning' ? 'active-nav' : ''}
+              onClick={() => setActivePage('planning')}
+            >
+              Planning
+            </button>
+            {isAdmin && (
+              <>
+                <button
+                  className={activePage === 'users' ? 'active-nav' : ''}
+                  onClick={() => setActivePage('users')}
+                >
+                  Utilisateurs
+                </button>
+                <button
+                  className={activePage === 'companies' ? 'active-nav' : ''}
+                  onClick={() => setActivePage('companies')}
+                >
+                  Entreprises
+                </button>
+              </>
+            )}
+          </div>
+
+          {activePage === 'planning' && (
+            <div className="view-switcher">
+              {[
+                ['day', 'Jour'],
+                ['week', 'Semaine'],
+                ['month', 'Mois'],
+                ['year', 'Annee'],
+              ].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  className={viewMode === mode ? 'active-view' : ''}
+                  onClick={() => changeViewMode(mode)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {activePage === 'planning' && (
+            <button onClick={goToday}>Aujourd'hui</button>
+          )}
+
+          {activePage === 'planning' && (
+            <button className="primary-action" onClick={quickAdd}>
+              + Chantier
+            </button>
+          )}
+
+          {activePage === 'planning' && (
+            <button onClick={() => setSettingsOpen((v) => !v)}>
+              Parametres
+            </button>
+          )}
+
+          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? 'Clair' : 'Sombre'}
+          </button>
+
+          <button onClick={logout}>Deconnexion</button>
+        </div>
+      </div>
+
+      {activePage === 'planning' && settingsOpen && (
+        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+          <div
+            className="settings-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="settings-header">
+              <strong>Paramètres</strong>
+              <button
+                className="settings-close"
+                onClick={() => setSettingsOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="settings-body">
+              <div className="settings-section">
+                <span className="settings-label">Actions</span>
+                <div className="settings-buttons">
+                  <button onClick={undo} title="Ctrl+Z">
+                    Annuler
+                  </button>
+                  <button onClick={redo} title="Ctrl+Y">
+                    Rétablir
+                  </button>
+                  <button onClick={() => { setFilterPanelOpen((v) => !v); setSettingsOpen(false); }}>
+                    Filtres
+                  </button>
+                  <button onClick={() => { setHolidayModalOpen(true); setSettingsOpen(false); }}>
+                    Jours fériés
+                  </button>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <span className="settings-label">Affichage</span>
+                <div className="zoom-control">
+                  <button
+                    onClick={() =>
+                      setCellWidth((w) => Math.max(MIN_CELL_WIDTH, w - 5))
+                    }
+                  >
+                    -
+                  </button>
+                  <strong>Zoom</strong>
+                  <button
+                    onClick={() =>
+                      setCellWidth((w) => Math.min(MAX_CELL_WIDTH, w + 5))
+                    }
+                  >
+                    +
+                  </button>
+                </div>
+                <label className="toggle-line">
+                  <input
+                    type="checkbox"
+                    checked={showWeekends}
+                    onChange={(e) => {
+                      setShowWeekends(e.target.checked);
+                      setTimeout(() => goToday(), 0);
+                    }}
+                  />
+                  Afficher les week-ends
+                </label>
+                <label className="toggle-line">
+                  <input
+                    type="checkbox"
+                    checked={chainMove}
+                    onChange={(e) => setChainMove(e.target.checked)}
+                  />
+                  Décaler automatiquement la suite
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activePage === 'users' && isAdmin && (
+        <AdminUsersPage
+          companies={companies}
+          onSaveUsers={saveUsers}
+          onAddUser={addUser}
+          onRemoveUser={removeUser}
+          users={users}
+        />
+      )}
+
+      {activePage === 'companies' && isAdmin && (
+        <CompaniesPage
+          activeCompanyId={activeCompanyId}
+          companies={companies}
+          onSaveCompanies={saveCompanies}
+          onSwitchCompany={switchCompany}
+        />
+      )}
+
+      {activePage === 'planning' && (
+        <>
+      {filterPanelOpen && (
+        <div className="panel filter-panel">
+          <select
+            value={filters.equipe}
+            onChange={(e) => setFilters({ ...filters, equipe: e.target.value })}
+          >
+            <option value="all">Toutes les équipes</option>
+            {teams.map((t, i) => (
+              <option key={i} value={i}>
+                {t}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.conducteur}
+            onChange={(e) =>
+              setFilters({ ...filters, conducteur: e.target.value })
+            }
+          >
+            <option value="all">Tous les conducteurs</option>
+            {conducteurs.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nom}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.color}
+            onChange={(e) => setFilters({ ...filters, color: e.target.value })}
+          >
+            <option value="all">Toutes les couleurs</option>
+            {CHANTIER_COLORS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filters.statut}
+            onChange={(e) => setFilters({ ...filters, statut: e.target.value })}
+          >
+            <option value="all">Tous les statuts</option>
+            <option value="encours">En cours</option>
+            <option value="termine">Terminés</option>
+          </select>
+
+          <button
+            onClick={() =>
+              setFilters({
+                equipe: 'all',
+                conducteur: 'all',
+                color: 'all',
+                statut: 'all',
+              })
+            }
+          >
+            Réinitialiser filtres
+          </button>
+        </div>
+      )}
+
+      <div className="planning-scroll" ref={scrollRef} onScroll={handleScroll}>
+        <div className="grid week-grid" style={{ gridTemplateColumns }}>
+          <div className="corner week-corner">
+            <strong>Équipes</strong>
+            <button onClick={addTeam}>+ Ajouter</button>
+          </div>
+
+          {weekGroups.map((g, i) => (
+            <div
+              className="week-cell"
+              key={`${g.week}-${i}`}
+              style={{ gridColumn: `span ${g.count}` }}
+            >
+              S{g.week} <span>{g.month}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid main-grid" style={{ gridTemplateColumns }}>
+          <div className="corner date-corner"></div>
+
+          {visibleDays.map((d) => (
+            <div
+              key={d.date}
+              className={`date-cell ${d.weekend ? 'weekend' : ''} ${
+                isFerie(d.date) ? 'ferie' : ''
+              }`}
+              title={d.date}
+            >
+              <span>{d.weekday}</span>
+              <strong>{d.dayNumber}</strong>
+            </div>
+          ))}
+
+          {teams.map((team, equipeIndex) => {
+            if (
+              filters.equipe !== 'all' &&
+              Number(filters.equipe) !== equipeIndex
+            )
+              return null;
+
+            return (
+              <React.Fragment key={equipeIndex}>
+                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''}`}>
+                  <div className="avatar">{equipeIndex + 1}</div>
+
+                  <input
+                    value={team}
+                    onChange={(e) => updateTeam(equipeIndex, e.target.value)}
+                  />
+
+                  <button
+                    className="delete-team"
+                    onClick={() => deleteTeam(equipeIndex)}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {visibleDays.map((day) => {
+                  const segments =
+                    chantiersParCellule.get(
+                      `${equipeIndex}-${dayIndex(day.date)}`
+                    ) || [];
+
+                  const congeItems = conges
+                    .filter((c) => c.equipe === equipeIndex)
+                    .map((c) => ({ conge: c, seg: getCongeSegment(c) }))
+                    .filter((x) => x.seg && x.seg.start === dayIndex(day.date));
+
+                  return (
+                    <div
+                      key={`${equipeIndex}-${day.date}`}
+                      className={`cell ${equipeIndex % 2 ? 'odd' : ''} ${
+                        day.weekend ? 'weekend' : ''
+                      } ${isFerie(day.date) ? 'ferie' : ''} ${
+                        isSelected(equipeIndex, day.date) ? 'selected' : ''
+                      } ${
+                        dragPreview?.equipe === equipeIndex &&
+                        dragPreview?.date === day.date
+                          ? 'drag-preview'
+                          : ''
+                      }`}
+                      onMouseDown={(e) =>
+                        startSelection(e, equipeIndex, day.date)
+                      }
+                      onMouseEnter={() =>
+                        updateSelection(equipeIndex, day.date)
+                      }
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragPreview({ equipe: equipeIndex, date: day.date });
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragPreview(null);
+                        onDrop(e, equipeIndex, day.date);
+                      }}
+                    >
+                      {segments.map(({ chantier, seg, i, stack }) => {
+                        const conducteur = getConducteur(chantier.conducteurId);
+                        const width = (seg.end - seg.start + 1) * cellWidth - 8;
+                        const compact = segments.length > 1;
+                        const height = compact
+                          ? Math.max(15, Math.min(22, 68 / segments.length))
+                          : 54;
+                        const top = compact ? 7 + stack * (height + 3) : 11;
+
+                        return (
+                          <div
+                            key={`${chantier.id}-${i}`}
+                            className={`bloc chantier ${
+                              compact ? 'compact-bloc' : ''
+                            } ${
+                              chantier.termine ? 'termine' : ''
+                            } ${
+                              selectedItem?.type === 'chantier' &&
+                              selectedItem.id === chantier.id
+                                ? 'active-item'
+                                : ''
+                            }`}
+                            draggable={!resize}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() =>
+                              setSelectedItem({
+                                type: 'chantier',
+                                id: chantier.id,
+                              })
+                            }
+                            onDoubleClick={() => openEditChantier(chantier)}
+                            onDragStart={(e) => onDragStart(e, chantier.id)}
+                            style={{
+                              width,
+                              top,
+                              height,
+                              background: chantier.color,
+                            }}
+                          >
+                            <div
+                              className="resize-handle left"
+                              onMouseDown={(e) =>
+                                startResize(e, chantier, 'left')
+                              }
+                            />
+
+                            {chantier.note && (
+                              <div className="note-icon">
+                                💬
+                                <div className="tooltip">{chantier.note}</div>
+                              </div>
+                            )}
+
+                            {chantier.linked && (
+                              <div className="link-icon">🔗</div>
+                            )}
+
+                            <div className="chantier-content">
+                              <strong>{chantier.nom}</strong>
+                              {chantier.detail && <em>{chantier.detail}</em>}
+                              <small>{chantier.duree} j</small>
+                            </div>
+
+                            <div
+                              className="conducteur-bar"
+                              style={{
+                                background: conducteur?.color || '#64748b',
+                              }}
+                            />
+
+                            <div
+                              className="resize-handle right"
+                              onMouseDown={(e) =>
+                                startResize(e, chantier, 'right')
+                              }
+                            />
+                          </div>
+                        );
+                      })}
+
+                      {congeItems.map(({ conge, seg }) => (
+                        <div
+                          key={conge.id}
+                          className={`bloc conge ${
+                            selectedItem?.type === 'conge' &&
+                            selectedItem.id === conge.id
+                              ? 'active-item'
+                              : ''
+                          }`}
+                          style={{
+                            width: (seg.end - seg.start + 1) * cellWidth - 8,
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() =>
+                            setSelectedItem({ type: 'conge', id: conge.id })
+                          }
+                          onDoubleClick={() => openEditConge(conge)}
+                        >
+                          {conge.nom}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      {holidayModalOpen && (
+        <div
+          className="modal-bg"
+          onMouseDown={() => setHolidayModalOpen(false)}
+        >
+          <div
+            className="modal holiday-modal"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2>Jours fériés</h2>
+
+            <div className="holiday-form-row">
+              <input
+                value={ferieForm.nom}
+                placeholder="Nom du jour férié"
+                onChange={(e) =>
+                  setFerieForm({ ...ferieForm, nom: e.target.value })
+                }
+              />
+              <input
+                type="date"
+                value={ferieForm.date}
+                onChange={(e) =>
+                  setFerieForm({ ...ferieForm, date: e.target.value })
+                }
+              />
+              <button onClick={addCustomFerie}>Ajouter</button>
+            </div>
+
+            <h3>Jours personnalisés</h3>
+
+            <div className="holiday-list">
+              {customFeries.length === 0 && (
+                <div className="holiday-empty">Aucun jour personnalisé.</div>
+              )}
+
+              {customFeries.map((f) => (
+                <div key={f.id} className="holiday-item">
+                  <div className="holiday-item-info">
+                    <strong>{f.nom}</strong>
+                    <span>{f.date}</span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      commit(() =>
+                        setCustomFeries((prev) =>
+                          prev.filter((x) => x.id !== f.id)
+                        )
+                      )
+                    }
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="modal-actions">
+              <button
+                className="cancel"
+                onClick={() => setHolidayModalOpen(false)}
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {modal.open && form && (
+        <div className="modal-bg" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2>
+                {modal.mode === 'modification' ? 'Modifier' : 'Nouvel élément'}
+              </h2>
+              <div className="modal-tabs">
+                <button
+                  className={modal.type === 'chantier' ? 'active' : ''}
+                  onClick={() => setModal({ ...modal, type: 'chantier' })}
+                >
+                  Chantier
+                </button>
+                <button
+                  className={modal.type === 'conge' ? 'active' : ''}
+                  onClick={() => setModal({ ...modal, type: 'conge' })}
+                >
+                  Congé
+                </button>
+                <button
+                  className={modal.type === 'conducteur' ? 'active' : ''}
+                  onClick={() => setModal({ ...modal, type: 'conducteur' })}
+                >
+                  Conducteur
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-body">
+              {modal.type !== 'conducteur' && (
+                <>
+                  <div className="modal-date-group">
+                    <div className="modal-field">
+                      <label>Durée</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={form.duree}
+                        onChange={(e) =>
+                          setForm({ ...form, duree: e.target.value })
+                        }
+                      />
+                      <small>jours travaillés</small>
+                    </div>
+                    <div className="modal-field">
+                      <label>Date de début</label>
+                      <input
+                        type="date"
+                        value={form.start}
+                        onChange={(e) =>
+                          setForm({ ...form, start: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="modal-field">
+                      <label>Date de fin</label>
+                      <input
+                        type="date"
+                        value={
+                          modal.type === 'chantier'
+                            ? addWorkingDays(
+                                form.start,
+                                Number(form.duree || 1),
+                                Number(form.equipe || 0)
+                              )
+                            : addWorkingDays(
+                                form.start,
+                                Number(form.duree || 1),
+                                Number(form.equipe || 0),
+                                { countConges: true }
+                              )
+                        }
+                        readOnly
+                      />
+                      <small>calculée</small>
+                    </div>
+                  </div>
+
+                  <div className="modal-field">
+                    <label>
+                      {modal.type === 'chantier'
+                        ? 'Nom du chantier'
+                        : 'Nom du congé'}
+                    </label>
+                    <input
+                      value={form.nom}
+                      onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                      placeholder={
+                        modal.type === 'chantier'
+                          ? 'Ex : Kervouch'
+                          : 'Ex : Congé d\'été'
+                      }
+                    />
+                  </div>
+
+                  <div className="modal-field">
+                    <label>Équipe</label>
+                    <select
+                      value={form.equipe}
+                      onChange={(e) => setForm({ ...form, equipe: e.target.value })}
+                    >
+                      {teams.map((team, i) => (
+                        <option key={i} value={i}>
+                          {team}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {modal.type === 'chantier' && (
+                <>
+                  <div className="modal-field">
+                    <label>Couleur du chantier</label>
+                    <div className="color-grid">
+                      {CHANTIER_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          className={`color-dot ${
+                            form.color === c ? 'selected-color' : ''
+                          }`}
+                          style={{ background: c }}
+                          onClick={() => setForm({ ...form, color: c })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="modal-field">
+                    <label>Conducteur</label>
+                    <div className="conducteur-list">
+                      {conducteurs.map((c) => (
+                        <button
+                          key={c.id}
+                          className={`conducteur-choice ${
+                            Number(form.conducteurId) === c.id
+                              ? 'active-conducteur'
+                              : ''
+                          }`}
+                          onClick={() => setForm({ ...form, conducteurId: c.id })}
+                        >
+                          <span style={{ background: c.color }} /> {c.nom}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="modal-field">
+                    <label>Détail chantier</label>
+                    <input
+                      value={form.detail || ''}
+                      onChange={(e) => setForm({ ...form, detail: e.target.value })}
+                      placeholder="Ex : Ø25 HT6, stabulation, radier chauffant..."
+                    />
+                  </div>
+
+                  <div className="modal-field">
+                    <label>Notes</label>
+                    <textarea
+                      value={form.note}
+                      onChange={(e) => setForm({ ...form, note: e.target.value })}
+                      placeholder="Notes chantier..."
+                    />
+                  </div>
+                </>
+              )}
+
+              {modal.type === 'conducteur' && (
+                <div className="conducteurs-editor">
+                  {conducteurs.map((c, i) => (
+                    <div className="conducteur-edit-row" key={c.id}>
+                      <input
+                        value={c.nom}
+                        onChange={(e) =>
+                          setConducteurs((prev) =>
+                            prev.map((x, idx) =>
+                              idx === i ? { ...x, nom: e.target.value } : x
+                            )
+                          )
+                        }
+                      />
+                      <div className="mini-color-grid">
+                        {CONDUCTEUR_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            style={{ background: color }}
+                            className={c.color === color ? 'selected-color' : ''}
+                            onClick={() =>
+                              setConducteurs((prev) =>
+                                prev.map((x, idx) =>
+                                  idx === i ? { ...x, color } : x
+                                )
+                              )
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <button className="add-conducteur-btn" onClick={() =>
+                    setConducteurs((prev) => [
+                      ...prev,
+                      {
+                        id: Date.now(),
+                        nom: `Conducteur ${prev.length + 1}`,
+                        color: CONDUCTEUR_COLORS[prev.length % CONDUCTEUR_COLORS.length],
+                      },
+                    ])
+                  }>
+                    + Ajouter un conducteur
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              {modal.type !== 'conducteur' && (
+                <button className="modal-btn-primary" onClick={saveModal}>
+                  {modal.mode === 'modification' ? 'Modifier' : 'Créer'}
+                </button>
+              )}
+              <button className="modal-btn-cancel" onClick={closeModal}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+        </>
+      )}
+    </div>
+  );
+}
