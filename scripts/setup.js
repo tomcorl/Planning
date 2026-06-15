@@ -1,22 +1,23 @@
-/* global process */
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 import pg from 'pg';
 import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const SUPA_URL = 'https://kzwhkqxjcdldjujmxvzi.supabase.co';
-const SUPA_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6d2hrcXhqY2RsZGp1am14dnppIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTcyMjYxNiwiZXhwIjoyMDk1Mjk4NjE2fQ.JqVhMH4HFijTCL38XQ4OEjfccUnndYCckab9yuoSoOU';
-const DB_PASS = 'Planningnoree.22';
-
-const DB_URL = `postgresql://postgres:${encodeURIComponent(DB_PASS)}@db.kzwhkqxjcdldjujmxvzi.supabase.co:5432/postgres`;
+const SUPA_URL = process.env.VITE_SUPABASE_URL;
+const SUPA_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const DATABASE_URL = process.env.DATABASE_URL;
 
 async function run() {
-  const pool = new pg.Pool({ connectionString: DB_URL, ssl: { rejectUnauthorized: false } });
+  const pool = new pg.Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
   const supabase = createClient(SUPA_URL, SUPA_SERVICE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
+    realtime: { transport: ws },
   });
 
   // 1. Run SQL schema (ignore "already exists" errors)
@@ -36,8 +37,8 @@ async function run() {
   // 2. Create auth users
   console.log('Creating auth users...');
   const users = [
-    { email: 'admin@demo.fr', password: '1234', nom: 'Administrateur', role: 'admin', companyIds: ['alpha', 'corlay', 'demo'] },
-    { email: 'planning@demo.fr', password: '1234', nom: 'Planning', role: 'planning', companyIds: ['alpha'] },
+    { email: 'admin@demo.fr', password: '1234', nom: 'Administrateur', role: 'admin', companyIds: ['noree', 'couvran', 'rat'] },
+    { email: 'planning@demo.fr', password: '1234', nom: 'Planning', role: 'planning', companyIds: ['noree'] },
   ];
 
   for (const u of users) {

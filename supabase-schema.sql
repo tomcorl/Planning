@@ -12,9 +12,9 @@ CREATE TABLE IF NOT EXISTS companies (
 );
 
 INSERT INTO companies (id, nom, secteur, plan, free) VALUES
-  ('alpha',  'Alpha TP',     'BTP',           'Pro',    1),
-  ('corlay', 'Corlay TP',    'BTP',           'Pro',    1),
-  ('demo',   'Démo',         'Démonstration', 'Starter', 1)
+  ('noree',   'Norée construction', 'BTP', 'Pro', 1),
+  ('couvran', 'Couvran',            'BTP', 'Pro', 1),
+  ('rat',     'Le Rat',             'BTP', 'Pro', 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. PROFILES (lie les auth.users Supabase aux données métier)
@@ -104,34 +104,34 @@ END $$;
 
 -- Conducteurs (3 par entreprise)
 INSERT INTO conducteurs (company_id, nom, color) VALUES
-  ('alpha', 'Conducteur 1', '#2563eb'),
-  ('alpha', 'Conducteur 2', '#16a34a'),
-  ('alpha', 'Conducteur 3', '#dc2626'),
-  ('corlay', 'Conducteur 1', '#2563eb'),
-  ('corlay', 'Conducteur 2', '#16a34a'),
-  ('corlay', 'Conducteur 3', '#dc2626'),
-  ('demo', 'Conducteur 1', '#2563eb'),
-  ('demo', 'Conducteur 2', '#16a34a'),
-  ('demo', 'Conducteur 3', '#dc2626')
+  ('noree', 'Conducteur 1', '#2563eb'),
+  ('noree', 'Conducteur 2', '#16a34a'),
+  ('noree', 'Conducteur 3', '#dc2626'),
+  ('couvran', 'Conducteur 1', '#2563eb'),
+  ('couvran', 'Conducteur 2', '#16a34a'),
+  ('couvran', 'Conducteur 3', '#dc2626'),
+  ('rat', 'Conducteur 1', '#2563eb'),
+  ('rat', 'Conducteur 2', '#16a34a'),
+  ('rat', 'Conducteur 3', '#dc2626')
 ON CONFLICT DO NOTHING;
 
--- Chantiers (pour l'entreprise alpha, comme dans DEFAULT_CHANTIERS)
+-- Chantiers (pour l'entreprise noree)
 INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked) VALUES
-  (1, 'alpha', 0, '2026-05-04', 10, 'Kervouch',          1, '#b7c6d8', 'Prévoir livraison matériel avant démarrage.', 0, 0),
-  (2, 'alpha', 0, '2026-05-18', 6,  'Cosperec énergie',  2, '#c7f9c7', '', 0, 0),
-  (3, 'alpha', 1, '2026-05-04', 8,  'Penhoat',           1, '#f9f9c7', '', 0, 0),
-  (4, 'alpha', 1, '2026-05-14', 5,  'Kerlouan',          3, '#f9c7c7', '', 0, 0),
-  (5, 'alpha', 2, '2026-05-04', 12, 'Roscoff',           2, '#c7e6f9', '', 0, 0),
-  (6, 'alpha', 2, '2026-05-20', 4,  'Plouescat',         1, '#f0f0f0', '', 0, 0),
-  (7, 'alpha', 0, '2026-06-01', 8,  'Pontivy',           1, '#b7c6d8', '', 0, 0),
-  (8, 'alpha', 1, '2026-06-03', 6,  'Lorient',           2, '#c7f9c7', '', 0, 0),
-  (9, 'alpha', 2, '2026-06-05', 10, 'Quimper',           3, '#f9c7c7', '', 0, 0),
-  (10, 'alpha', 1, '2026-06-12', 5,  'Brest',            1, '#c7e6f9', '', 0, 0)
+  (1, 'noree', 0, '2026-05-04', 10, 'Kervouch',          1, '#b7c6d8', 'Prévoir livraison matériel avant démarrage.', 0, 0),
+  (2, 'noree', 0, '2026-05-18', 6,  'Cosperec énergie',  2, '#c7f9c7', '', 0, 0),
+  (3, 'noree', 1, '2026-05-04', 8,  'Penhoat',           1, '#f9f9c7', '', 0, 0),
+  (4, 'noree', 1, '2026-05-14', 5,  'Kerlouan',          3, '#f9c7c7', '', 0, 0),
+  (5, 'noree', 2, '2026-05-04', 12, 'Roscoff',           2, '#c7e6f9', '', 0, 0),
+  (6, 'noree', 2, '2026-05-20', 4,  'Plouescat',         1, '#f0f0f0', '', 0, 0),
+  (7, 'noree', 0, '2026-06-01', 8,  'Pontivy',           1, '#b7c6d8', '', 0, 0),
+  (8, 'noree', 1, '2026-06-03', 6,  'Lorient',           2, '#c7f9c7', '', 0, 0),
+  (9, 'noree', 2, '2026-06-05', 10, 'Quimper',           3, '#f9c7c7', '', 0, 0),
+  (10, 'noree', 1, '2026-06-12', 5,  'Brest',            1, '#c7e6f9', '', 0, 0)
 ON CONFLICT (id) DO NOTHING;
 
 -- Congés
 INSERT INTO conges (id, company_id, equipe, start, duree, nom) VALUES
-  (1, 'alpha', 0, '2026-05-11', 3, 'Congé')
+  (1, 'noree', 0, '2026-05-11', 3, 'Congé')
 ON CONFLICT (id) DO NOTHING;
 
 -- Activation RLS (sécurité multi-entreprises)
@@ -145,88 +145,91 @@ ALTER TABLE conges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE custom_feries ENABLE ROW LEVEL SECURITY;
 
 -- Politiques RLS : un utilisateur ne voit que ses entreprises
-CREATE POLICY "users can view own companies" ON companies
+CREATE POLICY  "users can view own companies" ON companies
   FOR SELECT USING (
     id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
   );
 
-CREATE POLICY "users can view own profile" ON profiles
+CREATE POLICY  "users can view own profile" ON profiles
   FOR SELECT USING (id = auth.uid());
 
-CREATE POLICY "users can view own company data" ON equipes
+CREATE POLICY  "users can view own company links" ON user_companies
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY  "users can view own company data" ON equipes
   FOR SELECT USING (
     company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
   );
 
-CREATE POLICY "users can view own company data" ON conducteurs
+CREATE POLICY  "users can view own company data" ON conducteurs
   FOR SELECT USING (
     company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
   );
 
-CREATE POLICY "users can view own company data" ON chantiers
+CREATE POLICY  "users can view own company data" ON chantiers
   FOR SELECT USING (
     company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
   );
 
-CREATE POLICY "users can view own company data" ON conges
+CREATE POLICY  "users can view own company data" ON conges
   FOR SELECT USING (
     company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
   );
 
-CREATE POLICY "users can view own company data" ON custom_feries
+CREATE POLICY  "users can view own company data" ON custom_feries
   FOR SELECT USING (
     company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
   );
 
 -- Politiques INSERT/UPDATE/DELETE pour les admins
-CREATE POLICY "admin insert" ON chantiers FOR INSERT WITH CHECK (
+CREATE POLICY  "admin insert" ON chantiers FOR INSERT WITH CHECK (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
-CREATE POLICY "admin update" ON chantiers FOR UPDATE USING (
+CREATE POLICY  "admin update" ON chantiers FOR UPDATE USING (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
-CREATE POLICY "admin delete" ON chantiers FOR DELETE USING (
+CREATE POLICY  "admin delete" ON chantiers FOR DELETE USING (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
 
 -- Mêmes politiques pour conges
-CREATE POLICY "admin insert" ON conges FOR INSERT WITH CHECK (
+CREATE POLICY  "admin insert" ON conges FOR INSERT WITH CHECK (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
-CREATE POLICY "admin update" ON conges FOR UPDATE USING (
+CREATE POLICY  "admin update" ON conges FOR UPDATE USING (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
-CREATE POLICY "admin delete" ON conges FOR DELETE USING (
+CREATE POLICY  "admin delete" ON conges FOR DELETE USING (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
 
 -- Pour equipes, conducteurs, custom_feries
-CREATE POLICY "admin insert" ON equipes FOR INSERT WITH CHECK (
+CREATE POLICY  "admin insert" ON equipes FOR INSERT WITH CHECK (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
-CREATE POLICY "admin update" ON equipes FOR UPDATE USING (
+CREATE POLICY  "admin update" ON equipes FOR UPDATE USING (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
-CREATE POLICY "admin delete" ON equipes FOR DELETE USING (
-  company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
-);
-
-CREATE POLICY "admin insert" ON conducteurs FOR INSERT WITH CHECK (
-  company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
-);
-CREATE POLICY "admin update" ON conducteurs FOR UPDATE USING (
-  company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
-);
-CREATE POLICY "admin delete" ON conducteurs FOR DELETE USING (
+CREATE POLICY  "admin delete" ON equipes FOR DELETE USING (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
 
-CREATE POLICY "admin insert" ON custom_feries FOR INSERT WITH CHECK (
+CREATE POLICY  "admin insert" ON conducteurs FOR INSERT WITH CHECK (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
-CREATE POLICY "admin update" ON custom_feries FOR UPDATE USING (
+CREATE POLICY  "admin update" ON conducteurs FOR UPDATE USING (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
-CREATE POLICY "admin delete" ON custom_feries FOR DELETE USING (
+CREATE POLICY  "admin delete" ON conducteurs FOR DELETE USING (
+  company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
+);
+
+CREATE POLICY  "admin insert" ON custom_feries FOR INSERT WITH CHECK (
+  company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
+);
+CREATE POLICY  "admin update" ON custom_feries FOR UPDATE USING (
+  company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
+);
+CREATE POLICY  "admin delete" ON custom_feries FOR DELETE USING (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );

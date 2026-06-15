@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import AdminUsersPage from './AdminUsersPage.jsx';
 import CompaniesPage from './CompaniesPage.jsx';
-import LandingPage from './LandingPage.jsx';
+
 import LoginPage from './LoginPage.jsx';
 import PaymentPage from './PaymentPage.jsx';
 import { supabase } from './lib/supabase.js';
@@ -119,7 +119,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
-  const [authScreen, setAuthScreen] = useState('home');
+  const [authScreen, setAuthScreen] = useState('login');
   const [selectedPlan, setSelectedPlan] = useState('Pro');
   const [activePage, setActivePage] = useState('planning');
   const [viewMode, setViewMode] = useState(() => {
@@ -462,7 +462,7 @@ export default function App() {
   async function logout() {
     await api.logout();
     setSession(null);
-    setAuthScreen('home');
+    setAuthScreen('login');
     setActivePage('planning');
     setLoginForm({ email: '', password: '' });
     setLoginError('');
@@ -1113,29 +1113,25 @@ export default function App() {
   }
 
   if (!session) {
-    if (authScreen === 'login') {
-      return (
-        <LoginPage
-          loginError={loginError}
-          loginForm={loginForm}
-          onBack={() => setAuthScreen('home')}
-          onChange={setLoginForm}
-          onSubmit={handleLogin}
-        />
-      );
-    }
-
     if (authScreen === 'payment') {
       return (
         <PaymentPage
           planName={selectedPlan}
-          onBack={() => setAuthScreen('home')}
+          onBack={() => setAuthScreen('login')}
           onComplete={handlePaymentComplete}
         />
       );
     }
 
-    return <LandingPage onLogin={() => setAuthScreen('login')} onSelectPlan={handleSelectPlan} />;
+    return (
+      <LoginPage
+        loginError={loginError}
+        loginForm={loginForm}
+        onBack={() => setAuthScreen('login')}
+        onChange={setLoginForm}
+        onSubmit={handleLogin}
+      />
+    );
   }
 
   return (

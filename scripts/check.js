@@ -1,6 +1,8 @@
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 import pg from 'pg';
 const pool = new pg.Pool({
-  connectionString: 'postgresql://postgres:Planningnoree.22@db.kzwhkqxjcdldjujmxvzi.supabase.co:5432/postgres',
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 const r = await pool.query(
