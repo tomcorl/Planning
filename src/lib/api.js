@@ -67,11 +67,29 @@ export async function loadCompanyData(companyId) {
   if (conges.error) { console.error('load conges', conges.error); throw conges.error; }
   if (customFeries.error) { console.error('load custom_feries', customFeries.error); throw customFeries.error; }
 
+  const seenChantier = new Set();
+  const dedupedChantiers = chantiers.data
+    .filter((c) => {
+      const key = `${c.equipe}|${c.start}|${c.nom}`;
+      if (seenChantier.has(key)) return false;
+      seenChantier.add(key);
+      return true;
+    })
+    .map(normalizeChantier);
+
+  const seenConge = new Set();
+  const dedupedConges = conges.data.filter((c) => {
+    const key = `${c.equipe}|${c.start}|${c.nom}`;
+    if (seenConge.has(key)) return false;
+    seenConge.add(key);
+    return true;
+  }).map((c) => ({ id: c.id, equipe: c.equipe, start: c.start, duree: c.duree, nom: c.nom, allEquipes: !!c.all_equipes }));
+
   return {
     equipes: equipes.data.map((e) => e.nom),
     conducteurs: conducteurs.data.map((c) => ({ id: c.id, nom: c.nom, color: c.color })),
-    chantiers: chantiers.data.map(normalizeChantier),
-    conges: conges.data.map((c) => ({ id: c.id, equipe: c.equipe, start: c.start, duree: c.duree, nom: c.nom, allEquipes: !!c.all_equipes })),
+    chantiers: dedupedChantiers,
+    conges: dedupedConges,
     customFeries: customFeries.data,
   };
 }
@@ -96,6 +114,7 @@ function normalizeChantier(c) {
 
 export async function upsertChantiers(companyId, chantiers) {
   const rows = chantiers.map((c) => ({
+    id: c.id,
     company_id: companyId,
     equipe: c.equipe,
     start: c.start,
@@ -129,6 +148,7 @@ export async function upsertChantiers(companyId, chantiers) {
 
 export async function upsertConges(companyId, conges) {
   const rows = conges.map((c) => ({
+    id: c.id,
     company_id: companyId,
     equipe: c.equipe,
     start: c.start,
