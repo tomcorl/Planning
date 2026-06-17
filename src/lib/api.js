@@ -171,13 +171,6 @@ export async function upsertEquipes(companyId, equipes) {
 }
 
 export async function upsertConducteurs(companyId, conducteurs) {
-  const { error: delErr } = await supabase
-    .from('conducteurs')
-    .delete()
-    .eq('company_id', companyId);
-
-  if (delErr) { console.error('delete conducteurs', delErr); throw delErr; }
-
   const rows = conducteurs.map((c) => ({
     company_id: companyId,
     nom: c.nom,
@@ -185,8 +178,10 @@ export async function upsertConducteurs(companyId, conducteurs) {
   }));
 
   if (rows.length > 0) {
-    const { error: insErr } = await supabase.from('conducteurs').insert(rows);
-    if (insErr) { console.error('insert conducteurs', insErr); throw insErr; }
+    const { error: insErr } = await supabase
+      .from('conducteurs')
+      .upsert(rows, { onConflict: 'company_id,nom', ignoreDuplicates: false });
+    if (insErr) { console.error('upsert conducteurs', insErr); throw insErr; }
   }
 }
 
