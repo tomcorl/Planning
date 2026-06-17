@@ -1750,13 +1750,14 @@ export default function App() {
                       ))}
                     </select>
                     {modal.type === 'conge' && (
-                      <label className="toggle-line" style={{ marginTop: 8 }}>
+                      <label className="toggle-switch">
                         <input
                           type="checkbox"
                           checked={form.allEquipes || false}
                           onChange={(e) => setForm({ ...form, allEquipes: e.target.checked })}
                         />
-                        Toutes les équipes (congé entreprise)
+                        <span className="toggle-track" />
+                        <span className="toggle-label">Toutes les équipes (congé simultané)</span>
                       </label>
                     )}
                   </div>

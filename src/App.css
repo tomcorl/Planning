@@ -536,11 +536,12 @@ button:active {
 }
 
 .today {
-  background: rgba(22, 163, 74, 0.08) !important;
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
 }
 
 [data-theme='dark'] .today {
-  background: rgba(74, 222, 128, 0.12) !important;
+  outline-color: #4ade80;
 }
 
 .selected {
@@ -770,7 +771,7 @@ button:active {
   padding: 8px 10px;
   font-size: 11px;
   font-weight: 900;
-  z-index: 16;
+  z-index: 18;
   border-left: 3px solid #475569;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -924,6 +925,56 @@ button:active {
 .modal-field textarea {
   min-height: 72px;
   resize: vertical;
+}
+
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-switch input {
+  display: none;
+}
+
+.toggle-track {
+  width: 40px;
+  height: 22px;
+  background: var(--line);
+  border-radius: 11px;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--surface);
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle-switch input:checked + .toggle-track {
+  background: var(--green);
+}
+
+.toggle-switch input:checked + .toggle-track::after {
+  transform: translateX(18px);
+}
+
+.toggle-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .modal-date-group {
