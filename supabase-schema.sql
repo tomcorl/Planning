@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS chantiers (
 
 -- 7. CONGES
 CREATE TABLE IF NOT EXISTS conges (
-  id INTEGER PRIMARY KEY,
+  id BIGINT PRIMARY KEY,
   company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   equipe INTEGER NOT NULL DEFAULT 0,
   start TEXT NOT NULL,
@@ -275,7 +275,7 @@ BEGIN
   DELETE FROM conges WHERE company_id = p_company_id;
   RETURN QUERY
   INSERT INTO conges (id, company_id, equipe, start, duree, nom)
-  SELECT (x->>'id')::INT, (x->>'company_id')::TEXT, (x->>'equipe')::INT,
+  SELECT (x->>'id')::BIGINT, (x->>'company_id')::TEXT, (x->>'equipe')::INT,
          (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT
   FROM jsonb_array_elements(p_conges) AS x
   RETURNING *;
