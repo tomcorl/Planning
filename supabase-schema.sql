@@ -261,8 +261,8 @@ RETURNS SETOF chantiers LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   DELETE FROM chantiers WHERE company_id = p_company_id;
   RETURN QUERY
-  INSERT INTO chantiers (company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail)
-  SELECT (x->>'company_id')::TEXT, (x->>'equipe')::INT, (x->>'start')::TEXT, (x->>'duree')::INT,
+  INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail)
+  SELECT COALESCE((x->>'id')::INT, nextval('chantiers_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT, (x->>'start')::TEXT, (x->>'duree')::INT,
          (x->>'nom')::TEXT, (x->>'conducteurId')::INT, (x->>'color')::TEXT, (x->>'note')::TEXT,
          (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT
   FROM jsonb_array_elements(p_chantiers) AS x
@@ -270,13 +270,15 @@ BEGIN
 END;
 $$;
 
+ALTER TABLE conges ADD COLUMN IF NOT EXISTS all_equipes INTEGER DEFAULT 0;
+
 CREATE OR REPLACE FUNCTION replace_conges(p_company_id TEXT, p_conges JSONB)
 RETURNS SETOF conges LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   DELETE FROM conges WHERE company_id = p_company_id;
   RETURN QUERY
-  INSERT INTO conges (company_id, equipe, start, duree, nom, all_equipes)
-  SELECT (x->>'company_id')::TEXT, (x->>'equipe')::INT,
+  INSERT INTO conges (id, company_id, equipe, start, duree, nom, all_equipes)
+  SELECT COALESCE((x->>'id')::INT, nextval('conges_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT,
          (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT,
          COALESCE((x->>'all_equipes')::INT, 0)
   FROM jsonb_array_elements(p_conges) AS x
