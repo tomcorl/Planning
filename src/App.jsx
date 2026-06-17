@@ -263,6 +263,7 @@ export default function App() {
       setSettingsOpen(false);
     } catch (e) {
       console.error('Failed to load company data:', e);
+      throw e;
     } finally {
       setDataLoading(false);
     }
@@ -302,12 +303,12 @@ export default function App() {
       setUsers(enrichedUsers);
       const cid = sessionData.companyId || sessionData.companyIds?.[0];
       if (cid) { await loadCompanyData(cid); }
+      loadedRef.current = true;
     } catch (e) {
       console.error('Failed to load initial data:', e);
       setUsers([]);
     } finally {
       setDataLoading(false);
-      loadedRef.current = true;
     }
   }
 
