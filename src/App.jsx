@@ -616,16 +616,34 @@ export default function App() {
 
   function splitChantier(chantier) {
     const endDate = getEndDateForChantier(chantier);
-    const range = visibleDays
+    const days = visibleDays
       .map((d, i) => ({ ...d, i }))
       .filter(
         (d) =>
           sameOrAfter(d.date, chantier.start) && sameOrBefore(d.date, endDate)
       );
 
-    if (range.length === 0) return [];
+    if (days.length === 0) return [];
 
-    return [{ start: range[0].i, end: range[range.length - 1].i }];
+    const segments = [];
+    let segStart = null;
+
+    for (const d of days) {
+      if (isBlockedDay(chantier.equipe, d.date)) {
+        if (segStart !== null) {
+          segments.push({ start: segStart, end: d.i - 1 });
+          segStart = null;
+        }
+      } else {
+        if (segStart === null) segStart = d.i;
+      }
+    }
+
+    if (segStart !== null) {
+      segments.push({ start: segStart, end: days[days.length - 1].i });
+    }
+
+    return segments;
   }
 
   function getCongeSegment(conge) {
