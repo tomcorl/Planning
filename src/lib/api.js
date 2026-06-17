@@ -109,22 +109,22 @@ export async function upsertChantiers(companyId, chantiers) {
     detail: c.detail || '',
   }));
 
-  const { error: delErr } = await supabase
-    .from('chantiers')
-    .delete()
-    .eq('company_id', companyId);
-
-  if (delErr) { console.error('delete chantiers error', delErr); throw delErr; }
-
-  if (rows.length > 0) {
-    const { data, error: insErr } = await supabase
+  if (rows.length === 0) {
+    const { error: delErr } = await supabase
       .from('chantiers')
-      .insert(rows)
-      .select();
-    if (insErr) { console.error('insert chantiers error', insErr); throw insErr; }
-    return data;
+      .delete()
+      .eq('company_id', companyId);
+    if (delErr) { console.error('delete chantiers error', delErr); throw delErr; }
+    return [];
   }
-  return [];
+
+  const { data, error } = await supabase.rpc('replace_chantiers', {
+    p_company_id: companyId,
+    p_chantiers: rows,
+  });
+
+  if (error) { console.error('replace_chantiers error', error); throw error; }
+  return data;
 }
 
 export async function upsertConges(companyId, conges) {
