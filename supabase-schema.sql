@@ -240,6 +240,21 @@ CREATE POLICY  "admin delete" ON custom_feries FOR DELETE USING (
 -- RPC TRANSACTIONNELS (sauvegardes atomiques)
 -- ============================================================
 
+-- RPC pour conducteurs : upsert par nom (préserve les IDs)
+CREATE OR REPLACE FUNCTION upsert_conducteurs(p_company_id TEXT, p_conducteurs JSONB)
+RETURNS SETOF conducteurs LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  r JSONB;
+BEGIN
+  FOR r IN SELECT * FROM jsonb_array_elements(p_conducteurs) LOOP
+    INSERT INTO conducteurs (company_id, nom, color)
+    VALUES (p_company_id, r->>'nom', r->>'color')
+    ON CONFLICT (company_id, nom) DO UPDATE SET color = EXCLUDED.color;
+  END LOOP;
+  RETURN QUERY SELECT * FROM conducteurs WHERE company_id = p_company_id ORDER BY id;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION replace_chantiers(p_company_id TEXT, p_chantiers JSONB)
 RETURNS SETOF chantiers LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN

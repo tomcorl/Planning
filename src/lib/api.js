@@ -180,17 +180,19 @@ export async function upsertEquipes(companyId, equipes) {
 
 export async function upsertConducteurs(companyId, conducteurs) {
   const rows = conducteurs.map((c) => ({
-    company_id: companyId,
     nom: c.nom,
     color: c.color,
   }));
 
-  if (rows.length > 0) {
-    const { error: insErr } = await supabase
-      .from('conducteurs')
-      .upsert(rows, { onConflict: 'company_id,nom', ignoreDuplicates: false });
-    if (insErr) { console.error('upsert conducteurs', insErr); throw insErr; }
-  }
+  if (rows.length === 0) return;
+
+  const { data, error } = await supabase.rpc('upsert_conducteurs', {
+    p_company_id: companyId,
+    p_conducteurs: rows,
+  });
+
+  if (error) { console.error('upsert_conducteurs error', error); throw error; }
+  return data;
 }
 
 export async function upsertCustomFeries(companyId, feries) {
