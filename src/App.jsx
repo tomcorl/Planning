@@ -1123,13 +1123,15 @@ export default function App() {
 
   const chantiersParCellule = useMemo(() => {
     const map = new Map();
-
     const byEquipe = {};
+
     chantiers.forEach((chantier) => {
-      const seg = splitChantier(chantier)[0];
-      if (!seg) return;
-      if (!byEquipe[chantier.equipe]) byEquipe[chantier.equipe] = [];
-      byEquipe[chantier.equipe].push({ chantier, seg });
+      const segments = splitChantier(chantier);
+      segments.forEach((seg) => {
+        if (!seg) return;
+        if (!byEquipe[chantier.equipe]) byEquipe[chantier.equipe] = [];
+        byEquipe[chantier.equipe].push({ chantier, seg });
+      });
     });
 
     Object.values(byEquipe).forEach((items) => {
