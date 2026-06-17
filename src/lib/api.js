@@ -61,11 +61,11 @@ export async function loadCompanyData(companyId) {
     supabase.from('custom_feries').select('*').eq('company_id', companyId),
   ]);
 
-  if (equipes.error) throw equipes.error;
-  if (conducteurs.error) throw conducteurs.error;
-  if (chantiers.error) throw chantiers.error;
-  if (conges.error) throw conges.error;
-  if (customFeries.error) throw customFeries.error;
+  if (equipes.error) { console.error('load equipes', equipes.error); throw equipes.error; }
+  if (conducteurs.error) { console.error('load conducteurs', conducteurs.error); throw conducteurs.error; }
+  if (chantiers.error) { console.error('load chantiers', chantiers.error); throw chantiers.error; }
+  if (conges.error) { console.error('load conges', conges.error); throw conges.error; }
+  if (customFeries.error) { console.error('load custom_feries', customFeries.error); throw customFeries.error; }
 
   return {
     equipes: equipes.data.map((e) => e.nom),
@@ -96,7 +96,6 @@ function normalizeChantier(c) {
 
 export async function upsertChantiers(companyId, chantiers) {
   const rows = chantiers.map((c) => ({
-    id: c.id,
     company_id: companyId,
     equipe: c.equipe,
     start: c.start,
@@ -110,18 +109,22 @@ export async function upsertChantiers(companyId, chantiers) {
     detail: c.detail || '',
   }));
 
-  // Delete all, then insert (simple approach for undo consistency)
   const { error: delErr } = await supabase
     .from('chantiers')
     .delete()
     .eq('company_id', companyId);
 
-  if (delErr) throw delErr;
+  if (delErr) { console.error('delete chantiers error', delErr); throw delErr; }
 
   if (rows.length > 0) {
-    const { error: insErr } = await supabase.from('chantiers').insert(rows);
-    if (insErr) throw insErr;
+    const { data, error: insErr } = await supabase
+      .from('chantiers')
+      .insert(rows)
+      .select();
+    if (insErr) { console.error('insert chantiers error', insErr); throw insErr; }
+    return data;
   }
+  return [];
 }
 
 export async function upsertConges(companyId, conges) {
@@ -139,11 +142,11 @@ export async function upsertConges(companyId, conges) {
     .delete()
     .eq('company_id', companyId);
 
-  if (delErr) throw delErr;
+  if (delErr) { console.error('delete conges', delErr); throw delErr; }
 
   if (rows.length > 0) {
     const { error: insErr } = await supabase.from('conges').insert(rows);
-    if (insErr) throw insErr;
+    if (insErr) { console.error('insert conges', insErr); throw insErr; }
   }
 }
 
@@ -153,7 +156,7 @@ export async function upsertEquipes(companyId, equipes) {
     .delete()
     .eq('company_id', companyId);
 
-  if (delErr) throw delErr;
+  if (delErr) { console.error('delete equipes', delErr); throw delErr; }
 
   const rows = equipes.map((nom, i) => ({
     company_id: companyId,
@@ -163,7 +166,7 @@ export async function upsertEquipes(companyId, equipes) {
 
   if (rows.length > 0) {
     const { error: insErr } = await supabase.from('equipes').insert(rows);
-    if (insErr) throw insErr;
+    if (insErr) { console.error('insert equipes', insErr); throw insErr; }
   }
 }
 
@@ -173,7 +176,7 @@ export async function upsertConducteurs(companyId, conducteurs) {
     .delete()
     .eq('company_id', companyId);
 
-  if (delErr) throw delErr;
+  if (delErr) { console.error('delete conducteurs', delErr); throw delErr; }
 
   const rows = conducteurs.map((c) => ({
     company_id: companyId,
@@ -183,7 +186,7 @@ export async function upsertConducteurs(companyId, conducteurs) {
 
   if (rows.length > 0) {
     const { error: insErr } = await supabase.from('conducteurs').insert(rows);
-    if (insErr) throw insErr;
+    if (insErr) { console.error('insert conducteurs', insErr); throw insErr; }
   }
 }
 
@@ -193,7 +196,7 @@ export async function upsertCustomFeries(companyId, feries) {
     .delete()
     .eq('company_id', companyId);
 
-  if (delErr) throw delErr;
+  if (delErr) { console.error('delete custom_feries', delErr); throw delErr; }
 
   const rows = feries.map((f) => ({
     company_id: companyId,
@@ -203,7 +206,7 @@ export async function upsertCustomFeries(companyId, feries) {
 
   if (rows.length > 0) {
     const { error: insErr } = await supabase.from('custom_feries').insert(rows);
-    if (insErr) throw insErr;
+    if (insErr) { console.error('insert custom_feries', insErr); throw insErr; }
   }
 }
 
@@ -211,24 +214,22 @@ export async function upsertCustomFeries(companyId, feries) {
 
 export async function fetchCompanies() {
   const { data, error } = await supabase.from('companies').select('*');
-  if (error) throw error;
+  if (error) { console.error('fetch companies', error); throw error; }
   return data;
 }
 
 export async function saveCompanies(companies) {
-  // Upsert each company individually (safe with FK constraints)
   for (const c of companies) {
     const { error } = await supabase.from('companies').upsert({
       id: c.id, nom: c.nom, secteur: c.secteur || '', plan: c.plan || 'Starter', free: 1,
     });
-    if (error) throw error;
+    if (error) { console.error('save company', error); throw error; }
   }
 }
 
 export async function fetchUsers() {
-  // profiles are public, passwords are not stored in profiles
   const { data, error } = await supabase.from('profiles').select('*');
-  if (error) throw error;
+  if (error) { console.error('fetch users', error); throw error; }
 
   const enriched = await Promise.all(
     (data || []).map(async (p) => {
@@ -254,20 +255,19 @@ export async function updateUserProfile(userId, updates) {
     .from('profiles')
     .update({ nom: updates.nom, role: updates.role })
     .eq('id', userId);
-  if (error) throw error;
+  if (error) { console.error('update user profile', error); throw error; }
 
-  // Update company links: delete all, re-insert
   const { error: delErr } = await supabase
     .from('user_companies')
     .delete()
     .eq('user_id', userId);
-  if (delErr) throw delErr;
+  if (delErr) { console.error('delete user companies', delErr); throw delErr; }
 
   for (const cid of updates.companyIds || []) {
     const { error: linkErr } = await supabase
       .from('user_companies')
       .insert({ user_id: userId, company_id: cid });
-    if (linkErr) throw linkErr;
+    if (linkErr) { console.error('insert user company link', linkErr); throw linkErr; }
   }
 }
 
@@ -275,33 +275,31 @@ export async function createUser(email, password, nom, role, companyIds) {
   const { data, error } = await supabase.auth.admin.createUser({
     email, password, email_confirm: true,
   });
-  if (error) throw error;
+  if (error) { console.error('create auth user', error); throw error; }
   const uid = data.user.id;
 
   const { error: profileErr } = await supabase
     .from('profiles')
     .insert({ id: uid, email, nom, role });
-  if (profileErr) throw profileErr;
+  if (profileErr) { console.error('create user profile', profileErr); throw profileErr; }
 
   for (const cid of companyIds || []) {
     const { error: linkErr } = await supabase
       .from('user_companies')
       .insert({ user_id: uid, company_id: cid });
-    if (linkErr) throw linkErr;
+    if (linkErr) { console.error('create user company link', linkErr); throw linkErr; }
   }
 
   return { id: uid, email, nom, role, companyIds };
 }
 
 export async function deleteUser(userId) {
-  // Delete profile (cascades to user_companies)
   const { error: profileErr } = await supabase
     .from('profiles')
     .delete()
     .eq('id', userId);
-  if (profileErr) throw profileErr;
+  if (profileErr) { console.error('delete user profile', profileErr); throw profileErr; }
 
-  // Delete the auth user
   const { error: authErr } = await supabase.auth.admin.deleteUser(userId);
-  if (authErr) throw authErr;
+  if (authErr) { console.error('delete auth user', authErr); throw authErr; }
 }
