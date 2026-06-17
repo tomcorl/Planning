@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS equipes (
   id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   nom TEXT NOT NULL,
-  ordre INTEGER NOT NULL DEFAULT 0
+  ordre INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (company_id, nom)
 );
 
 -- 5. CONDUCTEURS
@@ -234,3 +235,58 @@ CREATE POLICY  "admin update" ON custom_feries FOR UPDATE USING (
 CREATE POLICY  "admin delete" ON custom_feries FOR DELETE USING (
   company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
 );
+
+-- ============================================================
+-- RPC TRANSACTIONNELS (sauvegardes atomiques)
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION replace_chantiers(p_company_id TEXT, p_chantiers JSONB)
+RETURNS SETOF chantiers LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  DELETE FROM chantiers WHERE company_id = p_company_id;
+  RETURN QUERY
+  INSERT INTO chantiers (company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail)
+  SELECT (x->>'company_id')::TEXT, (x->>'equipe')::INT, (x->>'start')::TEXT, (x->>'duree')::INT,
+         (x->>'nom')::TEXT, (x->>'conducteurId')::INT, (x->>'color')::TEXT, (x->>'note')::TEXT,
+         (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT
+  FROM jsonb_array_elements(p_chantiers) AS x
+  RETURNING *;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION replace_conges(p_company_id TEXT, p_conges JSONB)
+RETURNS SETOF conges LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  DELETE FROM conges WHERE company_id = p_company_id;
+  RETURN QUERY
+  INSERT INTO conges (id, company_id, equipe, start, duree, nom)
+  SELECT (x->>'id')::INT, (x->>'company_id')::TEXT, (x->>'equipe')::INT,
+         (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT
+  FROM jsonb_array_elements(p_conges) AS x
+  RETURNING *;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION replace_equipes(p_company_id TEXT, p_equipes JSONB)
+RETURNS SETOF equipes LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  DELETE FROM equipes WHERE company_id = p_company_id;
+  RETURN QUERY
+  INSERT INTO equipes (company_id, nom, ordre)
+  SELECT (x->>'company_id')::TEXT, (x->>'nom')::TEXT, (x->>'ordre')::INT
+  FROM jsonb_array_elements(p_equipes) AS x
+  RETURNING *;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION replace_custom_feries(p_company_id TEXT, p_feries JSONB)
+RETURNS SETOF custom_feries LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  DELETE FROM custom_feries WHERE company_id = p_company_id;
+  RETURN QUERY
+  INSERT INTO custom_feries (company_id, nom, date)
+  SELECT (x->>'company_id')::TEXT, (x->>'nom')::TEXT, (x->>'date')::TEXT
+  FROM jsonb_array_elements(p_feries) AS x
+  RETURNING *;
+END;
+$$;
