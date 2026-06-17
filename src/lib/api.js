@@ -114,7 +114,6 @@ function normalizeChantier(c) {
 
 export async function upsertChantiers(companyId, chantiers) {
   const rows = chantiers.map((c) => ({
-    id: c.id,
     company_id: companyId,
     equipe: c.equipe,
     start: c.start,
@@ -148,7 +147,6 @@ export async function upsertChantiers(companyId, chantiers) {
 
 export async function upsertConges(companyId, conges) {
   const rows = conges.map((c) => ({
-    id: c.id,
     company_id: companyId,
     equipe: c.equipe,
     start: c.start,
