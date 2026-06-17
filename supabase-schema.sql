@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS conges (
   equipe INTEGER NOT NULL DEFAULT 0,
   start TEXT NOT NULL,
   duree INTEGER NOT NULL DEFAULT 1,
-  nom TEXT DEFAULT 'Congé'
+  nom TEXT DEFAULT 'Congé',
+  all_equipes INTEGER DEFAULT 0
 );
 
 -- 8. CUSTOM_FERIES
@@ -274,9 +275,10 @@ RETURNS SETOF conges LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   DELETE FROM conges WHERE company_id = p_company_id;
   RETURN QUERY
-  INSERT INTO conges (company_id, equipe, start, duree, nom)
+  INSERT INTO conges (company_id, equipe, start, duree, nom, all_equipes)
   SELECT (x->>'company_id')::TEXT, (x->>'equipe')::INT,
-         (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT
+         (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT,
+         COALESCE((x->>'all_equipes')::INT, 0)
   FROM jsonb_array_elements(p_conges) AS x
   RETURNING *;
 END;
@@ -303,5 +305,61 @@ BEGIN
   SELECT (x->>'company_id')::TEXT, (x->>'nom')::TEXT, (x->>'date')::TEXT
   FROM jsonb_array_elements(p_feries) AS x
   RETURNING *;
+END;
+$$;
+
+-- RPC pour créer un utilisateur (admin seulement, exécuté avec SECURITY DEFINER)
+CREATE OR REPLACE FUNCTION create_user(p_email TEXT, p_password TEXT, p_nom TEXT, p_role TEXT, p_company_ids TEXT[])
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_user_id UUID;
+  v_result JSONB;
+  cid TEXT;
+BEGIN
+  -- Vérifier que l'appelant est admin
+  IF NOT EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+  ) THEN
+    RAISE EXCEPTION 'Seuls les admins peuvent créer des utilisateurs';
+  END IF;
+
+  -- Créer l'utilisateur auth via l'API Supabase
+  SELECT id INTO v_user_id
+  FROM auth.users
+  WHERE email = p_email;
+
+  IF v_user_id IS NULL THEN
+    v_user_id := extensions.uuid_generate_v4();
+    INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data)
+    VALUES (
+      v_user_id,
+      p_email,
+      crypt(p_password, gen_salt('bf')),
+      NOW(),
+      jsonb_build_object('role', p_role, 'nom', p_nom)
+    );
+  END IF;
+
+  -- Insérer dans profiles
+  INSERT INTO profiles (id, email, nom, role)
+  VALUES (v_user_id, p_email, p_nom, p_role)
+  ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, nom = EXCLUDED.nom, role = EXCLUDED.role;
+
+  -- Lier aux entreprises
+  FOREACH cid IN ARRAY p_company_ids LOOP
+    INSERT INTO user_companies (user_id, company_id)
+    VALUES (v_user_id, cid)
+    ON CONFLICT DO NOTHING;
+  END LOOP;
+
+  v_result := jsonb_build_object(
+    'id', v_user_id,
+    'email', p_email,
+    'nom', p_nom,
+    'role', p_role,
+    'companyIds', to_jsonb(p_company_ids)
+  );
+
+  RETURN v_result;
 END;
 $$;

@@ -145,10 +145,6 @@ export default function App() {
   const [showWeekends, setShowWeekends] = useState(() => {
     try { return JSON.parse(localStorage.getItem('showWeekends')) !== false; } catch { return true; }
   });
-  const [chainMove, setChainMove] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('chainMove')) !== false; } catch { return true; }
-  });
-
   const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -30));
   const [calendarLength, setCalendarLength] = useState(40);
 
@@ -163,16 +159,8 @@ export default function App() {
   const [selection, setSelection] = useState(null);
   const [resize, setResize] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragPreview, setDragPreview] = useState(null);
-
-  const [filters, setFilters] = useState({
-    equipe: 'all',
-    conducteur: 'all',
-    color: 'all',
-    statut: 'all',
-  });
 
   const [modal, setModal] = useState({
     open: false,
@@ -214,15 +202,30 @@ export default function App() {
     [theme]
   );
 
+  // Restore or jump to today after data loads
+  // ── Supabase Auth + Data Loading ──
+  const loadedRef = useRef(false);
+
   // Persist UI preferences to localStorage (client-side only)
   useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
   useEffect(() => localStorage.setItem('cellWidth', JSON.stringify(cellWidth)), [cellWidth]);
   useEffect(() => localStorage.setItem('showWeekends', JSON.stringify(showWeekends)), [showWeekends]);
-  useEffect(() => localStorage.setItem('chainMove', JSON.stringify(chainMove)), [chainMove]);
   useEffect(() => localStorage.setItem('viewMode', JSON.stringify(viewMode)), [viewMode]);
 
-  // ── Supabase Auth + Data Loading ──
-  const loadedRef = useRef(false);
+  // Restore scroll position or jump to today after data loads
+  useEffect(() => {
+    if (!loadedRef.current || dataLoading) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const key = `scrollPos_${activeCompanyId}`;
+    const saved = (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })();
+    if (saved) {
+      el.scrollLeft = saved.left || 0;
+      el.scrollTop = saved.top || 0;
+    } else {
+      goToday();
+    }
+  }, [dataLoading, activeCompanyId]);
 
   // Debounced persistence to Supabase (runs 800ms after data settles)
   useEffect(() => {
@@ -259,7 +262,6 @@ export default function App() {
       setHistory({ past: [], future: [] });
       setSelection(null);
       setSelectedItem(null);
-      setFilterPanelOpen(false);
       setSettingsOpen(false);
     } catch (e) {
       console.error('Failed to load company data:', e);
@@ -523,6 +525,11 @@ export default function App() {
         e.preventDefault();
         redo();
       }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItem && !modal.open) {
+        e.preventDefault();
+        deleteSelectedItem();
+      }
     }
 
     window.addEventListener('keydown', onKeyDown);
@@ -567,9 +574,9 @@ export default function App() {
 
   function isCongeForTeam(equipe, date) {
     return conges.some((c) => {
-      if (c.equipe !== equipe) return false;
+      if (c.equipe !== equipe && !c.allEquipes) return false;
 
-      const realEnd = addWorkingDays(c.start, c.duree, c.equipe, {
+      const realEnd = addWorkingDays(c.start, c.duree, c.equipe || 0, {
         countConges: true,
       });
 
@@ -607,22 +614,6 @@ export default function App() {
     return conducteurs.find((c) => c.id === Number(id));
   }
 
-  function filteredChantiers() {
-    return chantiers.filter((c) => {
-      if (filters.equipe !== 'all' && Number(filters.equipe) !== c.equipe)
-        return false;
-      if (
-        filters.conducteur !== 'all' &&
-        Number(filters.conducteur) !== Number(c.conducteurId)
-      )
-        return false;
-      if (filters.color !== 'all' && filters.color !== c.color) return false;
-      if (filters.statut === 'termine' && !c.termine) return false;
-      if (filters.statut === 'encours' && c.termine) return false;
-      return true;
-    });
-  }
-
   function splitChantier(chantier) {
     const endDate = getEndDateForChantier(chantier);
     const range = visibleDays
@@ -632,37 +623,16 @@ export default function App() {
           sameOrAfter(d.date, chantier.start) && sameOrBefore(d.date, endDate)
       );
 
-    const segments = [];
-    let current = null;
+    if (range.length === 0) return [];
 
-    range.forEach((day) => {
-      if (isBlockedDay(chantier.equipe, day.date)) {
-        if (current) {
-          segments.push(current);
-          current = null;
-        }
-        return;
-      }
-
-      if (!current) {
-        current = { start: day.i, end: day.i };
-      } else if (day.i === current.end + 1) {
-        current.end = day.i;
-      } else {
-        segments.push(current);
-        current = { start: day.i, end: day.i };
-      }
-    });
-
-    if (current) segments.push(current);
-    return segments;
+    return [{ start: range[0].i, end: range[range.length - 1].i }];
   }
 
   function getCongeSegment(conge) {
     const start = dayIndex(conge.start);
     if (start === -1) return null;
 
-    const endDate = addWorkingDays(conge.start, conge.duree, conge.equipe, {
+    const endDate = addWorkingDays(conge.start, conge.duree, conge.equipe || 0, {
       countConges: true,
     });
     const end = dayIndex(endDate);
@@ -796,12 +766,17 @@ export default function App() {
     commit(() => {
       if (modal.type === 'chantier') {
         const item = {
-          ...form,
           id: form.id || Date.now(),
           equipe: Number(form.equipe),
-          duree: Number(form.duree),
-          conducteurId: Number(form.conducteurId),
           start: nextWorkingDay(form.start, Number(form.equipe)),
+          duree: Number(form.duree),
+          nom: form.nom,
+          conducteurId: Number(form.conducteurId),
+          color: form.color,
+          note: form.note || '',
+          detail: form.detail || '',
+          termine: !!form.termine,
+          linked: !!form.linked,
         };
 
         setChantiers((prev) =>
@@ -818,6 +793,7 @@ export default function App() {
           start: form.start,
           duree: Number(form.duree),
           nom: form.nom,
+          allEquipes: !!form.allEquipes,
         };
 
         setConges((prev) =>
@@ -847,8 +823,6 @@ export default function App() {
             ? { ...c, equipe: targetEquipe, start: targetStart }
             : c
         );
-
-    if (!chainMove) return next;
 
     const moved = next.find((c) => c.id === movedItem.id);
     const movedEnd = getEndDateForChantier(moved);
@@ -886,6 +860,29 @@ export default function App() {
     e.dataTransfer.effectAllowed = 'move';
   }
 
+  function findNextFreeSlot(equipe, fromDate, duree, excludeId) {
+    let cursor = fromDate;
+    let safety = 0;
+    while (safety < 1200) {
+      cursor = nextWorkingDay(cursor, equipe);
+      const end = addWorkingDays(cursor, duree, equipe);
+      let earliestOverlapEnd = null;
+      for (const c of chantiers) {
+        if (c.id === excludeId || c.equipe !== equipe) continue;
+        const cEnd = addWorkingDays(c.start, c.duree, c.equipe);
+        if (sameOrBefore(c.start, end) && sameOrAfter(cEnd, cursor)) {
+          if (!earliestOverlapEnd || toDate(cEnd) < toDate(earliestOverlapEnd)) {
+            earliestOverlapEnd = cEnd;
+          }
+        }
+      }
+      if (!earliestOverlapEnd) return cursor;
+      cursor = formatDate(addDays(toDate(earliestOverlapEnd), 1));
+      safety += 1;
+    }
+    return cursor;
+  }
+
   function onDrop(e, equipe, date) {
     e.preventDefault();
 
@@ -893,7 +890,7 @@ export default function App() {
     const item = chantiers.find((c) => c.id === id);
     if (!item) return;
 
-    const start = nextWorkingDay(date, equipe);
+    const start = findNextFreeSlot(equipe, date, item.duree, id);
 
     commit(() => {
       setChantiers((prev) => applyInsertion(prev, item, equipe, start));
@@ -1000,6 +997,11 @@ export default function App() {
 
   function handleScroll(e) {
     const el = e.currentTarget;
+    const key = `scrollPos_${activeCompanyId}`;
+
+    try {
+      localStorage.setItem(key, JSON.stringify({ left: el.scrollLeft, top: el.scrollTop }));
+    } catch { }
 
     if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
       setCalendarLength((prev) => prev + 15);
@@ -1079,24 +1081,59 @@ export default function App() {
     setFerieForm({ nom: '', date: today });
   }
 
+  function deleteSelectedItem() {
+    if (!selectedItem) return;
+    commit(() => {
+      if (selectedItem.type === 'chantier') {
+        setChantiers((prev) => prev.filter((c) => c.id !== selectedItem.id));
+      }
+      if (selectedItem.type === 'conge') {
+        setConges((prev) => prev.filter((c) => c.id !== selectedItem.id));
+      }
+    });
+    if (modal.open) closeModal();
+    setSelectedItem(null);
+  }
+
   const chantiersParCellule = useMemo(() => {
     const map = new Map();
 
-    filteredChantiers().forEach((chantier) => {
-      splitChantier(chantier).forEach((seg, i) => {
-        const key = `${chantier.equipe}-${seg.start}`;
+    const byEquipe = {};
+    chantiers.forEach((chantier) => {
+      const seg = splitChantier(chantier)[0];
+      if (!seg) return;
+      if (!byEquipe[chantier.equipe]) byEquipe[chantier.equipe] = [];
+      byEquipe[chantier.equipe].push({ chantier, seg });
+    });
 
-        if (!map.has(key)) {
-          map.set(key, []);
+    Object.values(byEquipe).forEach((items) => {
+      items.sort((a, b) => a.seg.start - b.seg.start);
+      const rows = [];
+      items.forEach(({ chantier, seg }) => {
+        let placed = false;
+        for (let r = 0; r < rows.length; r++) {
+          const lastInRow = rows[r][rows[r].length - 1];
+          if (seg.start > lastInRow.seg.end) {
+            rows[r].push({ chantier, seg, stack: r });
+            placed = true;
+            break;
+          }
         }
-
-        const cellItems = map.get(key);
-        cellItems.push({ chantier, seg, i, stack: cellItems.length });
+        if (!placed) {
+          rows.push([{ chantier, seg, stack: rows.length }]);
+        }
+      });
+      rows.forEach((row) => {
+        row.forEach(({ chantier, seg, stack }) => {
+          const key = `${chantier.equipe}-${seg.start}`;
+          if (!map.has(key)) map.set(key, []);
+          map.get(key).push({ chantier, seg, i: 0, stack });
+        });
       });
     });
 
     return map;
-  }, [chantiers, conges, holidays, visibleDays, filters, showWeekends]);
+  }, [chantiers, conges, holidays, visibleDays, showWeekends]);
 
   const gridTemplateColumns = `260px repeat(${visibleDays.length}, ${cellWidth}px)`;
 
@@ -1227,11 +1264,15 @@ export default function App() {
             </button>
           )}
 
-          <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-            {theme === 'dark' ? 'Clair' : 'Sombre'}
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
           </button>
 
-          <button onClick={logout}>Deconnexion</button>
+          <button onClick={() => { if (window.confirm('Se déconnecter ?')) logout(); }}>Déconnexion</button>
         </div>
       </div>
 
@@ -1253,29 +1294,11 @@ export default function App() {
 
             <div className="settings-body">
               <div className="settings-section">
-                <span className="settings-label">Actions</span>
-                <div className="settings-buttons">
-                  <button onClick={undo} title="Ctrl+Z">
-                    Annuler
-                  </button>
-                  <button onClick={redo} title="Ctrl+Y">
-                    Rétablir
-                  </button>
-                  <button onClick={() => { setFilterPanelOpen((v) => !v); setSettingsOpen(false); }}>
-                    Filtres
-                  </button>
-                  <button onClick={() => { setHolidayModalOpen(true); setSettingsOpen(false); }}>
-                    Jours fériés
-                  </button>
-                </div>
-              </div>
-
-              <div className="settings-section">
                 <span className="settings-label">Affichage</span>
                 <div className="zoom-control">
                   <button
                     onClick={() =>
-                      setCellWidth((w) => Math.max(MIN_CELL_WIDTH, w - 5))
+                      setCellWidth((w) => Math.max(MIN_CELL_WIDTH, w - 2))
                     }
                   >
                     -
@@ -1283,7 +1306,7 @@ export default function App() {
                   <strong>Zoom</strong>
                   <button
                     onClick={() =>
-                      setCellWidth((w) => Math.min(MAX_CELL_WIDTH, w + 5))
+                      setCellWidth((w) => Math.min(MAX_CELL_WIDTH, w + 2))
                     }
                   >
                     +
@@ -1300,14 +1323,12 @@ export default function App() {
                   />
                   Afficher les week-ends
                 </label>
-                <label className="toggle-line">
-                  <input
-                    type="checkbox"
-                    checked={chainMove}
-                    onChange={(e) => setChainMove(e.target.checked)}
-                  />
-                  Décaler automatiquement la suite
-                </label>
+              </div>
+              <div className="settings-section">
+                <span className="settings-label">Jours fériés</span>
+                <button onClick={() => { setHolidayModalOpen(true); setSettingsOpen(false); }}>
+                  Ajouter / Modifier
+                </button>
               </div>
             </div>
           </div>
@@ -1335,70 +1356,6 @@ export default function App() {
 
       {activePage === 'planning' && (
         <>
-      {filterPanelOpen && (
-        <div className="panel filter-panel">
-          <select
-            value={filters.equipe}
-            onChange={(e) => setFilters({ ...filters, equipe: e.target.value })}
-          >
-            <option value="all">Toutes les équipes</option>
-            {teams.map((t, i) => (
-              <option key={i} value={i}>
-                {t}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filters.conducteur}
-            onChange={(e) =>
-              setFilters({ ...filters, conducteur: e.target.value })
-            }
-          >
-            <option value="all">Tous les conducteurs</option>
-            {conducteurs.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nom}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filters.color}
-            onChange={(e) => setFilters({ ...filters, color: e.target.value })}
-          >
-            <option value="all">Toutes les couleurs</option>
-            {CHANTIER_COLORS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filters.statut}
-            onChange={(e) => setFilters({ ...filters, statut: e.target.value })}
-          >
-            <option value="all">Tous les statuts</option>
-            <option value="encours">En cours</option>
-            <option value="termine">Terminés</option>
-          </select>
-
-          <button
-            onClick={() =>
-              setFilters({
-                equipe: 'all',
-                conducteur: 'all',
-                color: 'all',
-                statut: 'all',
-              })
-            }
-          >
-            Réinitialiser filtres
-          </button>
-        </div>
-      )}
-
       <div className="planning-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="grid week-grid" style={{ gridTemplateColumns }}>
           <div className="corner week-corner">
@@ -1425,7 +1382,7 @@ export default function App() {
               key={d.date}
               className={`date-cell ${d.weekend ? 'weekend' : ''} ${
                 isFerie(d.date) ? 'ferie' : ''
-              }`}
+              } ${d.date === today ? 'today' : ''}`}
               title={d.date}
             >
               <span>{d.weekday}</span>
@@ -1434,12 +1391,6 @@ export default function App() {
           ))}
 
           {teams.map((team, equipeIndex) => {
-            if (
-              filters.equipe !== 'all' &&
-              Number(filters.equipe) !== equipeIndex
-            )
-              return null;
-
             return (
               <React.Fragment key={equipeIndex}>
                 <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''}`}>
@@ -1465,7 +1416,7 @@ export default function App() {
                     ) || [];
 
                   const congeItems = conges
-                    .filter((c) => c.equipe === equipeIndex)
+                    .filter((c) => c.equipe === equipeIndex || c.allEquipes)
                     .map((c) => ({ conge: c, seg: getCongeSegment(c) }))
                     .filter((x) => x.seg && x.seg.start === dayIndex(day.date));
 
@@ -1475,6 +1426,8 @@ export default function App() {
                       className={`cell ${equipeIndex % 2 ? 'odd' : ''} ${
                         day.weekend ? 'weekend' : ''
                       } ${isFerie(day.date) ? 'ferie' : ''} ${
+                        day.date === today ? 'today' : ''
+                      } ${
                         isSelected(equipeIndex, day.date) ? 'selected' : ''
                       } ${
                         dragPreview?.equipe === equipeIndex &&
@@ -1536,6 +1489,7 @@ export default function App() {
                               height,
                               background: chantier.color,
                             }}
+                            title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
                           >
                             <div
                               className="resize-handle left"
@@ -1582,6 +1536,8 @@ export default function App() {
                         <div
                           key={conge.id}
                           className={`bloc conge ${
+                            conge.allEquipes ? 'conge-entreprise' : ''
+                          } ${
                             selectedItem?.type === 'conge' &&
                             selectedItem.id === conge.id
                               ? 'active-item'
@@ -1777,6 +1733,7 @@ export default function App() {
                     <select
                       value={form.equipe}
                       onChange={(e) => setForm({ ...form, equipe: e.target.value })}
+                      disabled={form.allEquipes}
                     >
                       {teams.map((team, i) => (
                         <option key={i} value={i}>
@@ -1784,6 +1741,16 @@ export default function App() {
                         </option>
                       ))}
                     </select>
+                    {modal.type === 'conge' && (
+                      <label className="toggle-line" style={{ marginTop: 8 }}>
+                        <input
+                          type="checkbox"
+                          checked={form.allEquipes || false}
+                          onChange={(e) => setForm({ ...form, allEquipes: e.target.checked })}
+                        />
+                        Toutes les équipes (congé entreprise)
+                      </label>
+                    )}
                   </div>
                 </>
               )}
@@ -1894,6 +1861,11 @@ export default function App() {
             </div>
 
             <div className="modal-footer">
+              {modal.mode === 'modification' && modal.type !== 'conducteur' && (
+                <button className="modal-btn-danger" onClick={deleteSelectedItem}>
+                  Supprimer
+                </button>
+              )}
               {modal.type !== 'conducteur' && (
                 <button className="modal-btn-primary" onClick={saveModal}>
                   {modal.mode === 'modification' ? 'Modifier' : 'Créer'}

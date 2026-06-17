@@ -71,7 +71,7 @@ export async function loadCompanyData(companyId) {
     equipes: equipes.data.map((e) => e.nom),
     conducteurs: conducteurs.data.map((c) => ({ id: c.id, nom: c.nom, color: c.color })),
     chantiers: chantiers.data.map(normalizeChantier),
-    conges: conges.data.map((c) => ({ id: c.id, equipe: c.equipe, start: c.start, duree: c.duree, nom: c.nom })),
+    conges: conges.data.map((c) => ({ id: c.id, equipe: c.equipe, start: c.start, duree: c.duree, nom: c.nom, allEquipes: !!c.all_equipes })),
     customFeries: customFeries.data,
   };
 }
@@ -134,6 +134,7 @@ export async function upsertConges(companyId, conges) {
     start: c.start,
     duree: c.duree,
     nom: c.nom || 'Congé',
+    all_equipes: c.allEquipes ? 1 : 0,
   }));
 
   if (rows.length === 0) {
@@ -280,11 +281,22 @@ export async function updateUserProfile(userId, updates) {
 }
 
 export async function createUser(email, password, nom, role, companyIds) {
-  const { data, error } = await supabase.auth.admin.createUser({
+  const { data, error } = await supabase.rpc('create_user', {
+    p_email: email,
+    p_password: password,
+    p_nom: nom,
+    p_role: role,
+    p_company_ids: companyIds,
+  });
+  if (!error) return data;
+
+  // Fallback direct (quand le RPC n'est pas encore créé en base)
+  console.warn('RPC create_user not available, falling back to direct auth admin call');
+  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email, password, email_confirm: true,
   });
-  if (error) { console.error('create auth user', error); throw error; }
-  const uid = data.user.id;
+  if (authError) { console.error('create auth user', authError); throw authError; }
+  const uid = authData.user.id;
 
   const { error: profileErr } = await supabase
     .from('profiles')

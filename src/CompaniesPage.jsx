@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { supabase } from './lib/supabase.js';
 
 export default function CompaniesPage({
   activeCompanyId,
@@ -6,6 +7,11 @@ export default function CompaniesPage({
   onSaveCompanies,
   onSwitchCompany,
 }) {
+  async function deleteCompany(id) {
+    if (!window.confirm('Supprimer définitivement cette entreprise et toutes ses données ?')) return;
+    await supabase.from('companies').delete().eq('id', id);
+    onSaveCompanies(companies.filter((c) => c.id !== id));
+  }
   const [form, setForm] = useState({ nom: '', secteur: 'BTP' });
 
   function addCompany(e) {
@@ -86,9 +92,14 @@ export default function CompaniesPage({
               }
               placeholder="Secteur"
             />
-            <button onClick={() => onSwitchCompany(company.id)}>
-              Ouvrir cette entreprise
-            </button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => onSwitchCompany(company.id)}>
+                Ouvrir
+              </button>
+              <button className="delete-btn" onClick={() => deleteCompany(company.id)}>
+                Supprimer
+              </button>
+            </div>
           </article>
         ))}
       </div>
