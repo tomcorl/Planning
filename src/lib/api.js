@@ -127,7 +127,7 @@ export async function upsertChantiers(companyId, chantiers) {
       linked: c.linked ? 1 : 0,
       detail: c.detail || '',
     };
-    if (c.id && c.id <= 2147483647) row.id = c.id;
+    if (c.id && c.id > 0 && c.id <= 2147483647) row.id = c.id;
     return row;
   });
 
@@ -159,7 +159,7 @@ export async function upsertConges(companyId, conges) {
       nom: c.nom || 'Congé',
       all_equipes: c.allEquipes ? 1 : 0,
     };
-    if (c.id && c.id <= 2147483647) row.id = c.id;
+    if (c.id && c.id > 0 && c.id <= 2147483647) row.id = c.id;
     return row;
   });
 

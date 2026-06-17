@@ -205,6 +205,12 @@ export default function App() {
   // Restore or jump to today after data loads
   // ── Supabase Auth + Data Loading ──
   const loadedRef = useRef(false);
+  const localIdRef = useRef(0);
+
+  function nextLocalId() {
+    localIdRef.current -= 1;
+    return localIdRef.current;
+  }
 
   // Persist UI preferences to localStorage (client-side only)
   useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
@@ -784,7 +790,7 @@ export default function App() {
     commit(() => {
       if (modal.type === 'chantier') {
         const item = {
-          id: form.id || Date.now(),
+          id: form.id || nextLocalId(),
           equipe: Number(form.equipe),
           start: nextWorkingDay(form.start, Number(form.equipe)),
           duree: Number(form.duree),
@@ -806,7 +812,7 @@ export default function App() {
 
       if (modal.type === 'conge') {
         const item = {
-          id: form.id || Date.now(),
+          id: form.id || nextLocalId(),
           equipe: Number(form.equipe),
           start: form.start,
           duree: Number(form.duree),
@@ -1100,7 +1106,7 @@ export default function App() {
     commit(() => {
       setCustomFeries((prev) => [
         ...prev,
-        { id: Date.now(), nom: ferieForm.nom, date: ferieForm.date },
+        { id: nextLocalId(), nom: ferieForm.nom, date: ferieForm.date },
       ]);
     });
 
@@ -1877,7 +1883,7 @@ export default function App() {
                     setConducteurs((prev) => [
                       ...prev,
                       {
-                        id: Date.now(),
+                        id: nextLocalId(),
                         nom: `Conducteur ${prev.length + 1}`,
                         color: CONDUCTEUR_COLORS[prev.length % CONDUCTEUR_COLORS.length],
                       },
