@@ -113,20 +113,23 @@ function normalizeChantier(c) {
 // ─── DATA MUTATIONS ─────────────────────────────────────
 
 export async function upsertChantiers(companyId, chantiers) {
-  const rows = chantiers.map((c) => ({
-    id: c.id || Date.now(),
-    company_id: companyId,
-    equipe: c.equipe,
-    start: c.start,
-    duree: c.duree,
-    nom: c.nom,
-    conducteurId: c.conducteurId || 0,
-    color: c.color || '#b7c6d8',
-    note: c.note || '',
-    termine: c.termine ? 1 : 0,
-    linked: c.linked ? 1 : 0,
-    detail: c.detail || '',
-  }));
+  const rows = chantiers.map((c) => {
+    const row = {
+      company_id: companyId,
+      equipe: c.equipe,
+      start: c.start,
+      duree: c.duree,
+      nom: c.nom,
+      conducteurId: c.conducteurId || 0,
+      color: c.color || '#b7c6d8',
+      note: c.note || '',
+      termine: c.termine ? 1 : 0,
+      linked: c.linked ? 1 : 0,
+      detail: c.detail || '',
+    };
+    if (c.id && c.id <= 2147483647) row.id = c.id;
+    return row;
+  });
 
   if (rows.length === 0) {
     const { error: delErr } = await supabase
@@ -147,15 +150,18 @@ export async function upsertChantiers(companyId, chantiers) {
 }
 
 export async function upsertConges(companyId, conges) {
-  const rows = conges.map((c) => ({
-    id: c.id || Date.now(),
-    company_id: companyId,
-    equipe: c.equipe,
-    start: c.start,
-    duree: c.duree,
-    nom: c.nom || 'Congé',
-    all_equipes: c.allEquipes ? 1 : 0,
-  }));
+  const rows = conges.map((c) => {
+    const row = {
+      company_id: companyId,
+      equipe: c.equipe,
+      start: c.start,
+      duree: c.duree,
+      nom: c.nom || 'Congé',
+      all_equipes: c.allEquipes ? 1 : 0,
+    };
+    if (c.id && c.id <= 2147483647) row.id = c.id;
+    return row;
+  });
 
   if (rows.length === 0) {
     const { error: delErr } = await supabase
