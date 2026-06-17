@@ -860,29 +860,6 @@ export default function App() {
     e.dataTransfer.effectAllowed = 'move';
   }
 
-  function findNextFreeSlot(equipe, fromDate, duree, excludeId) {
-    let cursor = fromDate;
-    let safety = 0;
-    while (safety < 1200) {
-      cursor = nextWorkingDay(cursor, equipe);
-      const end = addWorkingDays(cursor, duree, equipe);
-      let earliestOverlapEnd = null;
-      for (const c of chantiers) {
-        if (c.id === excludeId || c.equipe !== equipe) continue;
-        const cEnd = addWorkingDays(c.start, c.duree, c.equipe);
-        if (sameOrBefore(c.start, end) && sameOrAfter(cEnd, cursor)) {
-          if (!earliestOverlapEnd || toDate(cEnd) < toDate(earliestOverlapEnd)) {
-            earliestOverlapEnd = cEnd;
-          }
-        }
-      }
-      if (!earliestOverlapEnd) return cursor;
-      cursor = formatDate(addDays(toDate(earliestOverlapEnd), 1));
-      safety += 1;
-    }
-    return cursor;
-  }
-
   function onDrop(e, equipe, date) {
     e.preventDefault();
 
@@ -890,7 +867,7 @@ export default function App() {
     const item = chantiers.find((c) => c.id === id);
     if (!item) return;
 
-    const start = findNextFreeSlot(equipe, date, item.duree, id);
+    const start = nextWorkingDay(date, equipe);
 
     commit(() => {
       setChantiers((prev) => applyInsertion(prev, item, equipe, start));

@@ -536,12 +536,11 @@ button:active {
 }
 
 .today {
-  background: rgba(22, 163, 74, 0.06) !important;
-  border-bottom: 2px solid var(--green) !important;
+  background: rgba(22, 163, 74, 0.08) !important;
 }
 
 [data-theme='dark'] .today {
-  background: rgba(74, 222, 128, 0.08) !important;
+  background: rgba(74, 222, 128, 0.12) !important;
 }
 
 .selected {
