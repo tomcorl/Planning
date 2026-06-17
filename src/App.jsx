@@ -909,22 +909,51 @@ export default function App() {
     function onMouseMove(e) {
       const delta = Math.round((e.clientX - resize.startX) / cellWidth);
 
-      setChantiers((prev) =>
-        prev.map((c) => {
+      setChantiers((prev) => {
+        if (resize.side === 'right') {
+          const newDuree = Math.max(1, resize.originalDuree + delta);
+
+          let next = prev.map((c) =>
+            c.id === resize.id
+              ? { ...c, start: resize.originalStart, duree: newDuree }
+              : c
+          );
+
+          const updated = next.find((c) => c.id === resize.id);
+          const updatedEnd = getEndDateForChantier(updated);
+
+          let cursor = formatDate(addDays(toDate(updatedEnd), 1));
+          cursor = nextWorkingDay(cursor, resize.originalEquipe);
+
+          const affected = next
+            .filter(
+              (c) =>
+                c.id !== resize.id &&
+                c.equipe === resize.originalEquipe &&
+                toDate(c.start) > toDate(resize.originalStart)
+            )
+            .sort((a, b) => toDate(a.start) - toDate(b.start));
+
+          const changed = new Map();
+
+          affected.forEach((c) => {
+            const newStart = nextWorkingDay(cursor, resize.originalEquipe);
+            changed.set(c.id, { ...c, start: newStart });
+            cursor = formatDate(
+              addDays(
+                toDate(getEndDateForChantier({ ...c, start: newStart })),
+                1
+              )
+            );
+            cursor = nextWorkingDay(cursor, resize.originalEquipe);
+          });
+
+          return next.map((c) => changed.get(c.id) || c);
+        }
+
+        return prev.map((c) => {
           if (c.id !== resize.id) return c;
 
-          // Côté droit : seule la durée change
-          if (resize.side === 'right') {
-            const newDuree = Math.max(1, resize.originalDuree + delta);
-
-            return {
-              ...c,
-              start: resize.originalStart,
-              duree: newDuree,
-            };
-          }
-
-          // Côté gauche : le début change, la fin reste fixe
           if (resize.side === 'left') {
             const originalEnd = addWorkingDays(
               resize.originalStart,
@@ -955,7 +984,7 @@ export default function App() {
 
           return c;
         })
-      );
+      });
     }
 
     function onMouseUp() {
