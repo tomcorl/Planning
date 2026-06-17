@@ -925,7 +925,9 @@ export default function App() {
           let cursor = formatDate(addDays(toDate(updatedEnd), 1));
           cursor = nextWorkingDay(cursor, resize.originalEquipe);
 
-          const affected = next
+          const changed = new Map();
+
+          const sorted = next
             .filter(
               (c) =>
                 c.id !== resize.id &&
@@ -934,9 +936,9 @@ export default function App() {
             )
             .sort((a, b) => toDate(a.start) - toDate(b.start));
 
-          const changed = new Map();
+          for (const c of sorted) {
+            if (toDate(c.start) >= toDate(cursor)) break;
 
-          affected.forEach((c) => {
             const newStart = nextWorkingDay(cursor, resize.originalEquipe);
             changed.set(c.id, { ...c, start: newStart });
             cursor = formatDate(
@@ -946,7 +948,7 @@ export default function App() {
               )
             );
             cursor = nextWorkingDay(cursor, resize.originalEquipe);
-          });
+          }
 
           return next.map((c) => changed.get(c.id) || c);
         }
