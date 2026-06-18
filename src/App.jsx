@@ -1212,6 +1212,7 @@ export default function App() {
       {activePage === 'planning' && (
         <>
       <div className="planning-scroll" ref={scrollRef} onScroll={handleScroll}>
+        <div className="planning-header">
         <div className="grid month-grid" style={{ gridTemplateColumns }}>
           <div className="corner month-corner"></div>
           {monthGroups.map((g, i) => (
@@ -1242,9 +1243,8 @@ export default function App() {
           ))}
         </div>
 
-        <div className="grid main-grid" style={{ gridTemplateColumns }}>
+        <div className="grid date-grid" style={{ gridTemplateColumns }}>
           <div className="corner date-corner"></div>
-
           {visibleDays.map((d) => (
             <div
               key={d.date}
@@ -1257,6 +1257,11 @@ export default function App() {
               <strong>{d.dayNumber}</strong>
             </div>
           ))}
+        </div>
+        </div>
+
+        <div className="grid main-grid" style={{ gridTemplateColumns }}>
+          <div className="corner main-corner"></div>
 
           {teams.map((team, equipeIndex) => {
             return (
