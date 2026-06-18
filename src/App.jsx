@@ -1164,13 +1164,6 @@ export default function App() {
             </button>
           )}
 
-          {activePage === 'planning' && (
-            <div className="date-nav-group">
-              <input type="date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
-              <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
-            </div>
-          )}
-
           <button
             className="theme-toggle"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -1194,6 +1187,10 @@ export default function App() {
 
       {activePage === 'planning' && (
         <>
+      <div className="date-nav">
+        <input type="date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
+        <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
+      </div>
       <div className="planning-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="grid week-grid" style={{ gridTemplateColumns }}>
             <div className="corner week-corner">
