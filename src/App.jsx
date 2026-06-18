@@ -232,6 +232,24 @@ export default function App() {
     }
   }, [dataLoading]);
 
+  const MIN_CELL_WIDTH = 30;
+  const MAX_CELL_WIDTH = 150;
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const handler = (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setCellWidth((prev) => {
+        const delta = e.deltaY > 0 ? -4 : 4;
+        return Math.min(MAX_CELL_WIDTH, Math.max(MIN_CELL_WIDTH, prev + delta));
+      });
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, []);
+
   // Debounced persistence to Supabase (runs 800ms after data settles)
   useEffect(() => {
     if (!loadedRef.current || !session) return;
