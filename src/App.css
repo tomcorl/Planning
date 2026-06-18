@@ -675,9 +675,7 @@ button:active {
 
 .tooltip {
   display: none;
-  position: absolute;
-  top: 0;
-  left: 22px;
+  position: fixed;
   width: 260px;
   background: var(--surface);
   color: var(--text);
@@ -700,10 +698,6 @@ button:active {
   letter-spacing: 0.04em;
   color: var(--muted);
   margin-bottom: 4px;
-}
-
-.note-icon.open .tooltip {
-  display: block;
 }
 
 .link-icon {
