@@ -244,6 +244,20 @@ button:active {
   border-radius: 6px;
 }
 
+.week-corner-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.today-btn {
+  background: var(--green) !important;
+  color: white !important;
+  font-weight: 800 !important;
+  padding: 4px 12px !important;
+  font-size: 11px !important;
+  box-shadow: 0 1px 6px rgba(22, 163, 74, 0.3);
+}
+
 .date-corner {
   top: 30px;
   height: 44px;

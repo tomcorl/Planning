@@ -1136,10 +1136,6 @@ export default function App() {
           </div>
 
           {activePage === 'planning' && (
-            <button onClick={goToday}>Aujourd'hui</button>
-          )}
-
-          {activePage === 'planning' && (
             <button className="primary-action" onClick={quickAdd}>
               + Chantier
             </button>
@@ -1178,7 +1174,10 @@ export default function App() {
         <div className="grid week-grid" style={{ gridTemplateColumns }}>
           <div className="corner week-corner">
             <strong>Équipes</strong>
-            <button onClick={addTeam}>+ Ajouter</button>
+            <div className="week-corner-actions">
+              <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
+              <button onClick={addTeam}>+ Ajouter</button>
+            </div>
           </div>
 
           {weekGroups.map((g, i) => (
