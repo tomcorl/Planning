@@ -244,18 +244,41 @@ button:active {
   border-radius: 6px;
 }
 
-.week-corner-actions {
+.date-nav {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.date-nav input[type="date"] {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
 }
 
 .today-btn {
-  background: var(--green) !important;
-  color: white !important;
-  font-weight: 800 !important;
-  padding: 4px 12px !important;
-  font-size: 11px !important;
-  box-shadow: 0 1px 6px rgba(22, 163, 74, 0.3);
+  background: var(--green);
+  color: white;
+  font-weight: 800;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.today-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.4);
 }
 
 .date-corner {

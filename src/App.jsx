@@ -132,6 +132,7 @@ export default function App() {
   });
   const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -30));
   const [calendarLength, setCalendarLength] = useState(40);
+  const [jumpDate, setJumpDate] = useState(today);
 
   const [teams, setTeams] = useState([]);
   const [conducteurs, setConducteurs] = useState([]);
@@ -970,10 +971,26 @@ export default function App() {
   function goToday() {
     const idx = dayIndex(today);
     const el = scrollRef.current;
-
     if (el && idx >= 0) {
       el.scrollLeft = Math.max(0, idx * cellWidth - 500);
     }
+    setJumpDate(today);
+  }
+
+  function jumpToDate(date) {
+    const idx = dayIndex(date);
+    const el = scrollRef.current;
+    if (idx < 0) {
+      setCalendarStart(addDays(toDate(date), -30));
+      setCalendarLength(120);
+      setTimeout(() => {
+        const el2 = scrollRef.current;
+        if (el2) el2.scrollLeft = 30 * cellWidth;
+      }, 0);
+    } else if (el) {
+      el.scrollLeft = Math.max(0, idx * cellWidth - 500);
+    }
+    setJumpDate(date);
   }
 
   function quickAdd() {
@@ -1170,14 +1187,15 @@ export default function App() {
 
       {activePage === 'planning' && (
         <>
+      <div className="date-nav">
+        <input type="date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
+        <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
+      </div>
       <div className="planning-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="grid week-grid" style={{ gridTemplateColumns }}>
-          <div className="corner week-corner">
+            <div className="corner week-corner">
             <strong>Équipes</strong>
-            <div className="week-corner-actions">
-              <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
-              <button onClick={addTeam}>+ Ajouter</button>
-            </div>
+            <button onClick={addTeam}>+ Ajouter</button>
           </div>
 
           {weekGroups.map((g, i) => (
