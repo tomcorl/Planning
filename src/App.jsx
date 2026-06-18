@@ -1124,7 +1124,7 @@ export default function App() {
       onMouseUp={endSelection}
     >
       <div className="topbar">
-        <div className="title">
+          <div className="title">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1" />
             <rect x="14" y="3" width="7" height="7" rx="1" />
@@ -1133,6 +1133,13 @@ export default function App() {
           </svg>
           Planning
         </div>
+
+        {activePage === 'planning' && (
+          <div className="date-nav">
+            <input type="date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
+            <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
+          </div>
+        )}
 
         <div className="top-actions">
           <div className="workspace-nav">
@@ -1187,10 +1194,6 @@ export default function App() {
 
       {activePage === 'planning' && (
         <>
-      <div className="date-nav">
-        <input type="date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
-        <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
-      </div>
       <div className="planning-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="grid week-grid" style={{ gridTemplateColumns }}>
             <div className="corner week-corner">
