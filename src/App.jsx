@@ -1262,7 +1262,7 @@ export default function App() {
           ))}
         </div>
 
-        <div className="grid date-grid" style={{ gridTemplateColumns }}>
+        <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: cellWidth < 30 ? (cellWidth < 20 ? 20 : 28) : 44 }}>
           <div className="corner date-corner"></div>
           {visibleDays.map((d) => (
             <div
@@ -1280,12 +1280,12 @@ export default function App() {
         </div>
         </div>
 
-        <div className="grid main-grid" style={{ gridTemplateColumns }}>
+        <div className="grid main-grid" style={{ gridTemplateColumns, gridAutoRows: cellWidth < 30 ? (cellWidth < 20 ? 28 : 40) : 56 }}>
 
           {teams.map((team, equipeIndex) => {
             return (
               <React.Fragment key={equipeIndex}>
-                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${cellWidth < 30 ? 'compact-cell' : ''} ${cellWidth < 20 ? 'mini-cell' : ''}`}>
+                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''}`}>
                   <div className="avatar">{equipeIndex + 1}</div>
 
                   <input
@@ -1326,7 +1326,7 @@ export default function App() {
                         dragPreview?.date === day.date
                           ? 'drag-preview'
                           : ''
-                      } ${cellWidth < 30 ? 'compact-cell' : ''} ${cellWidth < 20 ? 'mini-cell' : ''}`}
+                      }`}
                       onMouseDown={(e) =>
                         startSelection(e, equipeIndex, day.date)
                       }
