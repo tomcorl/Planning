@@ -1392,14 +1392,14 @@ export default function App() {
                               }
                             />
 
-                            {chantier.note && (
+                            {chantier.note && cellWidth >= 34 && (
                               <div className="note-icon">
                                 💬
                                 <div className="tooltip">{chantier.note}</div>
                               </div>
                             )}
 
-                            {chantier.linked && (
+                            {chantier.linked && cellWidth >= 34 && (
                               <div className="link-icon">🔗</div>
                             )}
 
