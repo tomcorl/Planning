@@ -1261,7 +1261,6 @@ export default function App() {
         </div>
 
         <div className="grid main-grid" style={{ gridTemplateColumns }}>
-          <div className="corner main-corner"></div>
 
           {teams.map((team, equipeIndex) => {
             return (

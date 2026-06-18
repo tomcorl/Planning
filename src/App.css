@@ -235,11 +235,6 @@ button:active {
   box-shadow: 6px 0 16px var(--shadow);
 }
 
-.main-corner {
-  height: 0;
-  z-index: 5;
-}
-
 .month-corner {
   height: 28px;
   z-index: 3;
