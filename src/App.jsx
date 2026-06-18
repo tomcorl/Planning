@@ -8,8 +8,6 @@ import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
 const INITIAL_CELL_WIDTH = 52;
-const MIN_CELL_WIDTH = 32;
-const MAX_CELL_WIDTH = 90;
 
 const CHANTIER_COLORS = [
   '#b7c6d8',
@@ -132,9 +130,6 @@ export default function App() {
   const [cellWidth, setCellWidth] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cellWidth')) || INITIAL_CELL_WIDTH; } catch { return INITIAL_CELL_WIDTH; }
   });
-  const [showWeekends, setShowWeekends] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('showWeekends')) !== false; } catch { return true; }
-  });
   const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -30));
   const [calendarLength, setCalendarLength] = useState(40);
 
@@ -149,7 +144,6 @@ export default function App() {
   const [selection, setSelection] = useState(null);
   const [resize, setResize] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [dragPreview, setDragPreview] = useState(null);
 
   const [modal, setModal] = useState({
@@ -171,8 +165,8 @@ export default function App() {
   }, [allDays, customFeries]);
 
   const visibleDays = useMemo(() => {
-    return showWeekends ? allDays : allDays.filter((d) => !d.weekend);
-  }, [allDays, showWeekends]);
+    return allDays.filter((d) => !d.weekend);
+  }, [allDays]);
 
   const weekGroups = useMemo(() => {
     const groups = [];
@@ -205,7 +199,6 @@ export default function App() {
   // Persist UI preferences to localStorage (client-side only)
   useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
   useEffect(() => localStorage.setItem('cellWidth', JSON.stringify(cellWidth)), [cellWidth]);
-  useEffect(() => localStorage.setItem('showWeekends', JSON.stringify(showWeekends)), [showWeekends]);
 
   // Restore scroll position or jump to today after data loads
   useEffect(() => {
@@ -256,7 +249,6 @@ export default function App() {
       setHistory({ past: [], future: [] });
       setSelection(null);
       setSelectedItem(null);
-      setSettingsOpen(false);
     } catch (e) {
       console.error('Failed to load company data:', e);
       throw e;
@@ -1070,7 +1062,7 @@ export default function App() {
     });
 
     return map;
-  }, [chantiers, conges, holidays, visibleDays, showWeekends]);
+  }, [chantiers, conges, holidays, visibleDays]);
 
   const gridTemplateColumns = `260px repeat(${visibleDays.length}, ${cellWidth}px)`;
 
@@ -1154,8 +1146,8 @@ export default function App() {
           )}
 
           {activePage === 'planning' && (
-            <button onClick={() => setSettingsOpen((v) => !v)}>
-              Parametres
+            <button onClick={() => setHolidayModalOpen(true)}>
+              Jours fériés
             </button>
           )}
 
@@ -1170,65 +1162,6 @@ export default function App() {
           <button onClick={() => { if (window.confirm('Se déconnecter ?')) logout(); }}>Déconnexion</button>
         </div>
       </div>
-
-      {activePage === 'planning' && settingsOpen && (
-        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
-          <div
-            className="settings-panel"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="settings-header">
-              <strong>Paramètres</strong>
-              <button
-                className="settings-close"
-                onClick={() => setSettingsOpen(false)}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="settings-body">
-              <div className="settings-section">
-                <span className="settings-label">Affichage</span>
-                <div className="zoom-control">
-                  <button
-                    onClick={() =>
-                      setCellWidth((w) => Math.max(MIN_CELL_WIDTH, w - 2))
-                    }
-                  >
-                    -
-                  </button>
-                  <strong>Zoom</strong>
-                  <button
-                    onClick={() =>
-                      setCellWidth((w) => Math.min(MAX_CELL_WIDTH, w + 2))
-                    }
-                  >
-                    +
-                  </button>
-                </div>
-                <label className="toggle-line">
-                  <input
-                    type="checkbox"
-                    checked={showWeekends}
-                    onChange={(e) => {
-                      setShowWeekends(e.target.checked);
-                      setTimeout(() => goToday(), 0);
-                    }}
-                  />
-                  Afficher les week-ends
-                </label>
-              </div>
-              <div className="settings-section">
-                <span className="settings-label">Jours fériés</span>
-                <button onClick={() => { setHolidayModalOpen(true); setSettingsOpen(false); }}>
-                  Ajouter / Modifier
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {activePage === 'users' && isAdmin && (
         <AdminUsersPage
