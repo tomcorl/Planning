@@ -562,7 +562,7 @@ button:active {
 
 .compact-bloc .chantier-content em,
 .compact-bloc .chantier-content small,
-.compact-bloc .chantier-note,
+.compact-bloc .note-icon,
 .compact-bloc .conducteur-bar {
   display: none;
 }
@@ -619,18 +619,6 @@ button:active {
   color: rgba(23, 32, 51, 0.6);
 }
 
-.chantier-note {
-  display: block;
-  font-size: 9px;
-  font-weight: 600;
-  color: rgba(23, 32, 51, 0.55);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: calc(100% - 30px);
-  line-height: 1.2;
-}
-
 .conducteur-bar {
   position: absolute;
   bottom: 0;
@@ -666,6 +654,56 @@ button:active {
 .resize-handle.right {
   right: 0;
   cursor: ew-resize;
+}
+
+.note-icon {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  background: var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 35;
+  cursor: pointer;
+}
+
+.tooltip {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 22px;
+  width: 260px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 0 12px 36px var(--shadow-md);
+  border: 1px solid var(--line);
+  z-index: 99999;
+  white-space: pre-wrap;
+}
+
+.tooltip::before {
+  content: 'Note chantier';
+  display: block;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.note-icon.open .tooltip {
+  display: block;
 }
 
 .link-icon {

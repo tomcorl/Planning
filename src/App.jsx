@@ -1392,6 +1392,13 @@ export default function App() {
                               }
                             />
 
+                            {chantier.note && cellWidth >= 34 && (
+                              <div className="note-icon" onClick={(e) => { e.stopPropagation(); e.currentTarget.classList.toggle('open'); }}>
+                                💬
+                                <div className="tooltip">{chantier.note}</div>
+                              </div>
+                            )}
+
                             {chantier.linked && cellWidth >= 34 && (
                               <div className="link-icon">🔗</div>
                             )}
@@ -1399,7 +1406,6 @@ export default function App() {
                             <div className="chantier-content">
                               <strong>{chantier.nom}</strong>
                               {chantier.detail && <em>{chantier.detail}</em>}
-                              {chantier.note && <span className="chantier-note">{chantier.note}</span>}
                               <small>{chantier.duree} j</small>
                             </div>
 
