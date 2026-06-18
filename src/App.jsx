@@ -12,18 +12,13 @@ const MIN_CELL_WIDTH = 26;
 const MAX_CELL_WIDTH = 78;
 
 const CHANTIER_COLORS = [
-  '#b7c6d8',
-  '#c7f9c7',
-  '#fff68f',
-  '#35c759',
-  '#f4a261',
-  '#ffafcc',
-  '#bdb2ff',
-  '#fca5a5',
-  '#93c5fd',
-  '#fde68a',
-  '#86efac',
-  '#d8b4fe',
+  '#2563eb', // bleu foncé
+  '#93c5fd', // bleu clair
+  '#eab308', // jaune
+  '#15803d', // vert foncé
+  '#6b7280', // gris
+  '#f97316', // orange
+  '#7dd3fc', // bleu très clair
 ];
 
 const CONDUCTEUR_COLORS = [
@@ -37,7 +32,7 @@ const CONDUCTEUR_COLORS = [
   '#be123c',
 ];
 
-const DEFAULT_TEAMS = Array.from({ length: 16 }, (_, i) => `Équipe ${i + 1}`);
+const DEFAULT_TEAMS = Array.from({ length: 36 }, (_, i) => `Équipe ${i + 1}`);
 
 function toDate(value) {
   if (value instanceof Date) return value;
@@ -152,6 +147,8 @@ export default function App() {
   const [resize, setResize] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [dragPreview, setDragPreview] = useState(null);
+  const [clipboard, setClipboard] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
 
   const [modal, setModal] = useState({
     open: false,
@@ -201,6 +198,22 @@ export default function App() {
     return groups;
   }, [visibleDays]);
   const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+
+  const gridRows = useMemo(() => {
+    const rows = [];
+    const blockSize = 12;
+    for (let b = 0; b < teams.length; b += blockSize) {
+      for (let t = b; t < Math.min(b + blockSize, teams.length); t++) {
+        rows.push({ type: 'team', teamIndex: t, name: teams[t] });
+      }
+      if (b + blockSize < teams.length) {
+        const lastTeamInBlock = Math.min(b + blockSize, teams.length) - 1;
+        for (let p = 0; p < 3; p++) rows.push({ type: 'pending', id: `p-${b}-${p}`, teamIndex: lastTeamInBlock });
+        rows.push({ type: 'separator', id: `s-${b}` });
+      }
+    }
+    return rows;
+  }, [teams]);
   useEffect(
     () => document.documentElement.setAttribute('data-theme', theme),
     [theme]
@@ -493,6 +506,19 @@ export default function App() {
         e.preventDefault();
         deleteSelectedItem();
       }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selectedItem && !modal.open) {
+        e.preventDefault();
+        const item = selectedItem.type === 'chantier'
+          ? chantiers.find((c) => c.id === selectedItem.id)
+          : conges.find((c) => c.id === selectedItem.id);
+        if (item) setClipboard({ ...item, sourceType: selectedItem.type });
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clipboard && !modal.open) {
+        e.preventDefault();
+        pasteClipboard();
+      }
     }
 
     window.addEventListener('keydown', onKeyDown);
@@ -513,6 +539,12 @@ export default function App() {
 
   function isFerie(date) {
     return holidays.some((h) => h.date === date);
+  }
+
+  function isAugustClosure(dateStr) {
+    const d = toDate(dateStr);
+    if (d.getMonth() !== 7) return false; // August = month 7 (0-indexed)
+    return d.getDate() <= 21;
   }
 
   function addWorkingDays(start, workingDays, equipe, options = {}) {
@@ -823,6 +855,7 @@ export default function App() {
     const changed = new Map();
 
     affected.forEach((c) => {
+      if (toDate(c.start) >= toDate(cursor)) return;
       const newStart = nextWorkingDay(cursor, targetEquipe);
       changed.set(c.id, { ...c, start: newStart });
 
@@ -836,20 +869,31 @@ export default function App() {
     return next;
   }
 
-  function onDragStart(e, id) {
-    e.dataTransfer.setData('chantierId', String(id));
+  function onDragStart(e, id, type) {
+    e.dataTransfer.setData('itemId', String(id));
+    e.dataTransfer.setData('itemType', type || 'chantier');
     e.dataTransfer.effectAllowed = 'move';
   }
 
   function onDrop(e, equipe, date) {
     e.preventDefault();
-
-    const id = Number(e.dataTransfer.getData('chantierId'));
+    e.stopPropagation();
+    setDragPreview(null);
+    const id = Number(e.dataTransfer.getData('itemId'));
+    const type = e.dataTransfer.getData('itemType') || 'chantier';
+    if (type === 'conge') {
+      const item = conges.find((c) => c.id === id);
+      if (!item) return;
+      commit(() => {
+        setConges((prev) =>
+          prev.map((c) => c.id === id ? { ...c, equipe, start: date } : c)
+        );
+      });
+      return;
+    }
     const item = chantiers.find((c) => c.id === id);
     if (!item) return;
-
     const start = nextWorkingDay(date, equipe);
-
     commit(() => {
       setChantiers((prev) => applyInsertion(prev, item, equipe, start));
     });
@@ -1076,6 +1120,49 @@ export default function App() {
     setSelectedItem(null);
   }
 
+  function pasteClipboard() {
+    if (!clipboard) return;
+    commit(() => {
+      if (clipboard.sourceType === 'chantier') {
+        const newItem = {
+          ...clipboard,
+          id: nextLocalId(),
+          start: nextWorkingDay(today, clipboard.equipe || 0),
+        };
+        setChantiers((prev) => [...prev, newItem]);
+        setSelectedItem({ type: 'chantier', id: newItem.id });
+      }
+      if (clipboard.sourceType === 'conge') {
+        const newItem = {
+          ...clipboard,
+          id: nextLocalId(),
+          start: today,
+        };
+        setConges((prev) => [...prev, newItem]);
+        setSelectedItem({ type: 'conge', id: newItem.id });
+      }
+    });
+  }
+
+  function handleContextMenu(e, type, id) {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedItem({ type, id });
+    setContextMenu({ x: e.clientX, y: e.clientY, type, id });
+  }
+
+  // Close context menu on click anywhere
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [contextMenu]);
+
   const chantiersParCellule = useMemo(() => {
     const map = new Map();
     const byEquipe = {};
@@ -1272,7 +1359,7 @@ export default function App() {
               key={d.date}
               className={`date-cell ${d.weekend ? 'weekend' : ''} ${
                 isFerie(d.date) ? 'ferie' : ''
-              } ${d.date === today ? 'today' : ''}`}
+              } ${isAugustClosure(d.date) ? 'august-closure' : ''} ${d.date === today ? 'today' : ''}`}
               title={d.date}
             >
               {cellWidth >= 36 && <span>{d.weekday}</span>}
@@ -1284,34 +1371,46 @@ export default function App() {
 
         <div className="grid main-grid" style={{ gridTemplateColumns, gridAutoRows: Math.round(56 + (cellWidth - 26) * (78 - 56) / 26) }}>
 
-          {teams.map((team, equipeIndex) => {
+          {gridRows.map((row) => {
+            if (row.type === 'separator') {
+              return (
+                <React.Fragment key={row.id}>
+                  <div className="team-cell separator-row" />
+                  {visibleDays.map((day) => (
+                    <div key={`sep-${day.date}`} className="cell separator-cell" />
+                  ))}
+                </React.Fragment>
+              );
+            }
+
+            const equipeIndex = row.type === 'pending' ? -(row.id || 0) : row.teamIndex;
+            const isPending = row.type === 'pending';
+
             return (
-              <React.Fragment key={equipeIndex}>
-                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''}`}>
-                  <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{equipeIndex + 1}</div>
-
-                  <input
-                    value={team}
-                    onChange={(e) => updateTeam(equipeIndex, e.target.value)}
-                    style={{ fontSize: Math.round(11 + (cellWidth - 26) * 3 / 26) }}
-                  />
-
-                  <button
-                    className="delete-team"
-                    onClick={() => deleteTeam(equipeIndex)}
-                  >
-                    ×
-                  </button>
+              <React.Fragment key={row.type === 'team' ? row.name : row.id}>
+                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
+                  {isPending ? (
+                    <span className="pending-label">En attente</span>
+                  ) : (
+                    <>
+                      <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.teamIndex + 1}</div>
+                      <input
+                        value={row.name}
+                        onChange={(e) => updateTeam(row.teamIndex, e.target.value)}
+                        style={{ fontSize: Math.round(11 + (cellWidth - 26) * 3 / 26) }}
+                      />
+                      <button
+                        className="delete-team"
+                        onClick={() => deleteTeam(row.teamIndex)}
+                      >×</button>
+                    </>
+                  )}
                 </div>
 
                 {visibleDays.map((day) => {
-                  const segments =
-                    chantiersParCellule.get(
-                      `${equipeIndex}-${dayIndex(day.date)}`
-                    ) || [];
-
-                  const congeItems = conges
-                    .filter((c) => c.equipe === equipeIndex || c.allEquipes)
+                  const segments = isPending ? [] : (chantiersParCellule.get(`${row.teamIndex}-${dayIndex(day.date)}`) || []);
+                  const congeItems = isPending ? [] : conges
+                    .filter((c) => c.equipe === row.teamIndex || c.allEquipes)
                     .map((c) => ({ conge: c, seg: getCongeSegment(c) }))
                     .filter((x) => x.seg && x.seg.start === dayIndex(day.date));
 
@@ -1321,15 +1420,15 @@ export default function App() {
                       className={`cell ${equipeIndex % 2 ? 'odd' : ''} ${
                         day.weekend ? 'weekend' : ''
                       } ${isFerie(day.date) ? 'ferie' : ''} ${
-                        day.date === today ? 'today' : ''
-                      } ${
+                        isAugustClosure(day.date) ? 'august-closure' : ''
+                      } ${day.date === today ? 'today' : ''} ${
                         isSelected(equipeIndex, day.date) ? 'selected' : ''
                       } ${
                         dragPreview?.equipe === equipeIndex &&
                         dragPreview?.date === day.date
                           ? 'drag-preview'
                           : ''
-                      }`}
+                      } ${isPending ? 'pending-cell' : ''}`}
                       onMouseDown={(e) =>
                         startSelection(e, equipeIndex, day.date)
                       }
@@ -1343,7 +1442,7 @@ export default function App() {
                       onDrop={(e) => {
                         e.preventDefault();
                         setDragPreview(null);
-                        onDrop(e, equipeIndex, day.date);
+                        onDrop(e, row.teamIndex || equipeIndex, day.date);
                       }}
                     >
                       {segments.map(({ chantier, seg, i, stack }) => {
@@ -1379,7 +1478,8 @@ export default function App() {
                               })
                             }
                             onDoubleClick={() => openEditChantier(chantier)}
-                            onDragStart={(e) => onDragStart(e, chantier.id)}
+                            onContextMenu={(e) => handleContextMenu(e, 'chantier', chantier.id)}
+                            onDragStart={(e) => onDragStart(e, chantier.id, 'chantier')}
                             style={{
                               width,
                               top,
@@ -1450,6 +1550,8 @@ export default function App() {
                               ? 'active-item'
                               : ''
                           }`}
+                          draggable={!resize}
+                          onDragStart={(e) => onDragStart(e, conge.id, 'conge')}
                           style={{
                             width: (seg.end - seg.start + 1) * cellWidth - 8,
                             height: cH,
@@ -1462,6 +1564,7 @@ export default function App() {
                             setSelectedItem({ type: 'conge', id: conge.id })
                           }
                           onDoubleClick={() => openEditConge(conge)}
+                          onContextMenu={(e) => handleContextMenu(e, 'conge', conge.id)}
                         >
                           {conge.nom}
                         </div>
@@ -1482,6 +1585,34 @@ export default function App() {
         <button className="zoom-btn" onClick={() => setCellWidth(prev => Math.min(MAX_CELL_WIDTH, prev + 4))}>+</button>
       </div>
       </div>
+
+      {contextMenu && (
+        <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button onClick={() => {
+            const item = contextMenu.type === 'chantier'
+              ? chantiers.find((c) => c.id === contextMenu.id)
+              : conges.find((c) => c.id === contextMenu.id);
+            if (item) setClipboard({ ...item, sourceType: contextMenu.type });
+            setContextMenu(null);
+          }}>
+            📋 Copier
+          </button>
+          {clipboard && (
+            <button onClick={() => {
+              pasteClipboard();
+              setContextMenu(null);
+            }}>
+              📌 Coller
+            </button>
+          )}
+          <button onClick={() => {
+            deleteSelectedItem();
+            setContextMenu(null);
+          }}>
+            🗑️ Supprimer
+          </button>
+        </div>
+      )}
 
       {holidayModalOpen && (
         <div
@@ -1508,7 +1639,6 @@ export default function App() {
                 />
                 <input
                   value={ferieForm.nom}
-                  placeholder="Nom du jour férié"
                   onChange={(e) =>
                     setFerieForm({ ...ferieForm, nom: e.target.value })
                   }
@@ -1632,11 +1762,6 @@ export default function App() {
                     <input
                       value={form.nom}
                       onChange={(e) => setForm({ ...form, nom: e.target.value })}
-                      placeholder={
-                        modal.type === 'chantier'
-                          ? 'Ex : Kervouch'
-                          : 'Ex : Congé d\'été'
-                      }
                     />
                   </div>
 
@@ -1683,6 +1808,14 @@ export default function App() {
                           onClick={() => setForm({ ...form, color: c })}
                         />
                       ))}
+                      <label className="color-picker-label" title="Couleur personnalisée">
+                        <input
+                          type="color"
+                          value={form.color || '#2563eb'}
+                          onChange={(e) => setForm({ ...form, color: e.target.value })}
+                        />
+                        <span className="color-picker-icon">🎨</span>
+                      </label>
                     </div>
                   </div>
 
@@ -1710,7 +1843,6 @@ export default function App() {
                     <input
                       value={form.detail || ''}
                       onChange={(e) => setForm({ ...form, detail: e.target.value })}
-                      placeholder="Ex : Ø25 HT6, stabulation, radier chauffant..."
                     />
                   </div>
 
@@ -1719,7 +1851,6 @@ export default function App() {
                     <textarea
                       value={form.note}
                       onChange={(e) => setForm({ ...form, note: e.target.value })}
-                      placeholder="Notes chantier..."
                     />
                   </div>
                 </>

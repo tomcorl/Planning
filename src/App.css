@@ -437,6 +437,50 @@ button:active {
   background: var(--surface-2);
 }
 
+.pending-team {
+  background: var(--surface) !important;
+  border-left: 3px solid var(--line);
+  box-shadow: none !important;
+}
+
+.pending-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-style: italic;
+  padding: 0 12px;
+}
+
+.pending-cell {
+  background: var(--surface) !important;
+}
+
+.separator-row {
+  background: #374151 !important;
+  color: transparent;
+  height: 8px !important;
+  min-height: 8px;
+  box-shadow: none !important;
+  border-right: none;
+  z-index: 1;
+  cursor: default;
+}
+
+[data-theme='dark'] .separator-row {
+  background: #1f2937 !important;
+}
+
+.separator-cell {
+  background: #374151 !important;
+  border-bottom: none;
+  height: 8px !important;
+  min-height: 8px;
+}
+
+[data-theme='dark'] .separator-cell {
+  background: #1f2937 !important;
+}
+
 .avatar {
   width: 32px;
   height: 32px;
@@ -516,6 +560,14 @@ button:active {
   background: #eef3ff !important;
 }
 
+.august-closure {
+  background: #e8e8e8 !important;
+}
+
+[data-theme='dark'] .august-closure {
+  background: #1a1a1a !important;
+}
+
 [data-theme='dark'] .today {
   background: #1a2640 !important;
 }
@@ -590,11 +642,11 @@ button:active {
   position: absolute;
   bottom: 16px;
   left: 8px;
-  font-size: 9px;
+  font-size: 11px;
   font-style: normal;
-  font-weight: 700;
-  color: rgba(23, 32, 51, 0.65);
-  max-width: calc(100% - 50px);
+  font-weight: 800;
+  color: rgba(23, 32, 51, 0.85);
+  max-width: calc(100% - 60px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -718,56 +770,37 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .conge {
-  background: repeating-linear-gradient(
-    45deg,
-    #94a3b8,
-    #94a3b8 4px,
-    #64748b 4px,
-    #64748b 8px
-  );
+  background: #334155;
   color: white;
   padding: 8px 10px;
   font-size: 11px;
   font-weight: 900;
   z-index: 1;
-  border-left: 3px solid #475569;
+  border-left: 3px solid #1e293b;
   text-transform: uppercase;
   letter-spacing: 0.02em;
   display: flex;
   align-items: center;
+  cursor: grab;
 }
 
 [data-theme='dark'] .conge {
-  background: repeating-linear-gradient(
-    45deg,
-    #475569,
-    #475569 4px,
-    #334155 4px,
-    #334155 8px
-  );
-  border-left-color: #94a3b8;
+  background: #1e293b;
+  border-left-color: #475569;
+}
+
+.conge:active {
+  cursor: grabbing;
 }
 
 .conge-entreprise {
-  background: repeating-linear-gradient(
-    45deg,
-    #a78bfa,
-    #a78bfa 4px,
-    #8b5cf6 4px,
-    #8b5cf6 8px
-  );
-  border-left-color: #7c3aed;
+  background: #475569;
+  border-left-color: #1e293b;
 }
 
 [data-theme='dark'] .conge-entreprise {
-  background: repeating-linear-gradient(
-    45deg,
-    #7c3aed,
-    #7c3aed 4px,
-    #6d28d9 4px,
-    #6d28d9 8px
-  );
-  border-left-color: #a78bfa;
+  background: #334155;
+  border-left-color: #1e293b;
 }
 
 /* ═══════════════════════════════════════════════
@@ -1001,6 +1034,28 @@ button:active {
   outline-offset: 1px;
 }
 
+.color-picker-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.color-picker-label input[type="color"] {
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: none;
+  opacity: 0;
+  position: absolute;
+}
+
+.color-picker-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
 /* ═══════════════════════════════════════════════
    CONDUCTEURS
    ═══════════════════════════════════════════════ */
@@ -1144,6 +1199,37 @@ button:active {
   background: rgba(22, 163, 74, 0.12) !important;
   outline: 2px solid var(--green);
   outline-offset: -2px;
+}
+
+.context-menu {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  z-index: 99999;
+  min-width: 160px;
+}
+
+.context-menu button {
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-menu button:hover {
+  background: var(--surface-3);
 }
 
 .modal h3 {
