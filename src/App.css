@@ -119,23 +119,6 @@ textarea {
   justify-content: flex-end;
 }
 
-.company-select {
-  min-width: 140px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 6px 12px;
-  font-weight: 700;
-  font-size: 13px;
-  transition: border-color 0.15s;
-}
-
-.company-select:focus {
-  border-color: var(--green);
-  outline: none;
-}
-
 .workspace-nav,
 .workspace-nav button {
   min-height: 28px;
@@ -1297,8 +1280,7 @@ button:active {
 }
 
 .admin-form input,
-.admin-form select,
-.company-card input {
+.admin-form select {
   width: 100%;
   border: 1px solid var(--line);
   background: var(--surface-2);
@@ -1386,55 +1368,7 @@ button:active {
   color: var(--muted) !important;
 }
 
-/* ═══════════════════════════════════════════════
-   COMPANY CARDS
-   ═══════════════════════════════════════════════ */
 
-.company-form {
-  grid-template-columns: 1.4fr 1fr auto;
-}
-
-.company-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 14px;
-}
-
-.company-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 4px 16px var(--shadow);
-}
-
-.company-card div {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.company-card span {
-  color: var(--green);
-  font-size: 12px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.company-card div input {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.active-company-card {
-  outline: 2px solid var(--green);
-}
 
 /* ═══════════════════════════════════════════════
    ANIMATIONS
@@ -1514,7 +1448,6 @@ button:active {
   }
 
   .admin-form,
-  .company-form,
   .admin-row {
     grid-template-columns: 1fr;
   }

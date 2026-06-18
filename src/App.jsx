@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import AdminUsersPage from './AdminUsersPage.jsx';
-import CompaniesPage from './CompaniesPage.jsx';
 
 import LoginPage from './LoginPage.jsx';
 import PaymentPage from './PaymentPage.jsx';
@@ -122,15 +121,10 @@ export default function App() {
   const [authScreen, setAuthScreen] = useState('login');
   const [selectedPlan, setSelectedPlan] = useState('Pro');
   const [activePage, setActivePage] = useState('planning');
-  const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
 
-  const activeCompanyId = session?.companyId || companies[0]?.id || '';
-  const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0] || { id: '', nom: '', secteur: '', plan: '' };
-  const availableCompanies = session
-    ? companies.filter((company) => session.companyIds.includes(company.id))
-    : [];
+  const activeCompanyId = session?.companyId || '';
   const isAdmin = session?.role === 'admin';
 
   const [theme, setTheme] = useState(() => {
@@ -219,8 +213,7 @@ export default function App() {
     if (!loadedRef.current || dataLoading) return;
     const el = scrollRef.current;
     if (!el) return;
-    const key = `scrollPos_${activeCompanyId}`;
-    const saved = (() => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } })();
+    const saved = (() => { try { return JSON.parse(localStorage.getItem('scrollPos')); } catch { return null; } })();
     if (saved) {
       el.scrollLeft = saved.left || 0;
       el.scrollTop = saved.top || 0;
@@ -277,16 +270,11 @@ export default function App() {
     let profile = null;
     const r1 = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
     if (!r1.error) profile = r1.data;
-    let companyIds = [];
-    const r2 = await supabase.from('user_companies').select('company_id').eq('user_id', user.id);
-    if (!r2.error) companyIds = r2.data?.map((l) => l.company_id) || [];
-    const preferred = user.user_metadata?.companyId;
     const meta = {
       email: user.email,
       nom: profile?.nom || user.email?.split('@')[0] || '',
       role: profile?.role || 'planning',
-      companyIds,
-      companyId: preferred && companyIds.includes(preferred) ? preferred : companyIds[0] || '',
+      companyId: user.user_metadata?.companyId || 'noree',
     };
     // Sync role to JWT so RLS policies can check it without recursion
     if (profile?.role && profile.role !== user.user_metadata?.role) {
@@ -298,14 +286,9 @@ export default function App() {
   async function loadAllData(sessionData) {
     setDataLoading(true);
     try {
-      const { data: companiesData } = await supabase
-        .from('companies')
-        .select('*')
-        .in('id', sessionData.companyIds);
-      setCompanies(companiesData || []);
       const enrichedUsers = await api.fetchUsers();
       setUsers(enrichedUsers);
-      const cid = sessionData.companyId || sessionData.companyIds?.[0];
+      const cid = sessionData.companyId || 'noree';
       if (cid) { await loadCompanyData(cid); }
       loadedRef.current = true;
     } catch (e) {
@@ -343,7 +326,6 @@ export default function App() {
         });
       } else if (event === 'SIGNED_OUT') {
         setSession(null);
-        setCompanies([]);
         setUsers([]);
         setTeams([]);
         setConducteurs([]);
@@ -370,14 +352,6 @@ export default function App() {
     }
   }
 
-  async function switchCompany(companyId) {
-    setSession((current) => ({ ...current, companyId }));
-    try { await supabase.auth.updateUser({ data: { companyId } }); } catch { /* ignore */ }
-    await loadCompanyData(companyId);
-    setActivePage('planning');
-    setSettingsOpen(false);
-  }
-
   async function saveUsers(nextUsers) {
     setUsers(nextUsers);
     if (!session) return;
@@ -387,25 +361,16 @@ export default function App() {
         await api.updateUserProfile(currentUser.id, {
           nom: currentUser.nom,
           role: currentUser.role,
-          companyIds: currentUser.companyIds,
         });
         setSession((cur) => ({
           ...cur,
           nom: currentUser.nom,
           role: currentUser.role,
-          companyIds: currentUser.companyIds,
-          companyId: currentUser.companyIds.includes(cur.companyId)
-            ? cur.companyId
-            : currentUser.companyIds[0],
         }));
         await supabase.auth.updateUser({
           data: {
             nom: currentUser.nom,
             role: currentUser.role,
-            companyIds: currentUser.companyIds,
-            companyId: currentUser.companyIds.includes(session.companyId)
-              ? session.companyId
-              : currentUser.companyIds[0],
           },
         });
       } catch (err) {
@@ -414,9 +379,9 @@ export default function App() {
     }
   }
 
-  async function addUser(email, password, nom, role, companyIds) {
+  async function addUser(email, password, nom, role) {
     try {
-      const newUser = await api.createUser(email, password, nom, role, companyIds);
+      const newUser = await api.createUser(email, password, nom, role);
       setUsers((prev) => [...prev, newUser]);
       return newUser;
     } catch (err) {
@@ -432,36 +397,6 @@ export default function App() {
     } catch (err) {
       console.error('Failed to delete user:', err);
     }
-  }
-
-  async function saveCompanies(nextCompanies) {
-    setCompanies(nextCompanies);
-    const companyIds = nextCompanies.map((c) => c.id);
-    try {
-      await api.saveCompanies(nextCompanies);
-    } catch (err) {
-      console.error('Failed to save companies:', err);
-    }
-    setUsers((currentUsers) =>
-      currentUsers.map((u) => ({
-        ...u,
-        companyIds:
-          u.role === 'admin'
-            ? companyIds
-            : u.companyIds.filter((id) => companyIds.includes(id)),
-      }))
-    );
-    setSession((current) =>
-      current
-        ? {
-            ...current,
-            companyIds:
-              current.role === 'admin'
-                ? companyIds
-                : current.companyIds.filter((id) => companyIds.includes(id)),
-          }
-        : current
-    );
   }
 
   async function logout() {
@@ -1025,10 +960,9 @@ export default function App() {
 
   function handleScroll(e) {
     const el = e.currentTarget;
-    const key = `scrollPos_${activeCompanyId}`;
 
     try {
-      localStorage.setItem(key, JSON.stringify({ left: el.scrollLeft, top: el.scrollTop }));
+      localStorage.setItem('scrollPos', JSON.stringify({ left: el.scrollLeft, top: el.scrollTop }));
     } catch { }
 
     if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
@@ -1193,24 +1127,9 @@ export default function App() {
             <rect x="14" y="14" width="7" height="7" rx="1" />
           </svg>
           Planning
-          <span>{activeCompany.nom}</span>
         </div>
 
         <div className="top-actions">
-          {availableCompanies.length > 1 && (
-            <select
-              className="company-select"
-              value={activeCompanyId}
-              onChange={(e) => switchCompany(e.target.value)}
-            >
-              {availableCompanies.map((company) => (
-                <option key={company.id} value={company.id}>
-                  {company.nom}
-                </option>
-              ))}
-            </select>
-          )}
-
           <div className="workspace-nav">
             <button
               className={activePage === 'planning' ? 'active-nav' : ''}
@@ -1219,20 +1138,12 @@ export default function App() {
               Planning
             </button>
             {isAdmin && (
-              <>
-                <button
-                  className={activePage === 'users' ? 'active-nav' : ''}
-                  onClick={() => setActivePage('users')}
-                >
-                  Utilisateurs
-                </button>
-                <button
-                  className={activePage === 'companies' ? 'active-nav' : ''}
-                  onClick={() => setActivePage('companies')}
-                >
-                  Entreprises
-                </button>
-              </>
+              <button
+                className={activePage === 'users' ? 'active-nav' : ''}
+                onClick={() => setActivePage('users')}
+              >
+                Utilisateurs
+              </button>
             )}
           </div>
 
@@ -1325,20 +1236,10 @@ export default function App() {
 
       {activePage === 'users' && isAdmin && (
         <AdminUsersPage
-          companies={companies}
           onSaveUsers={saveUsers}
           onAddUser={addUser}
           onRemoveUser={removeUser}
           users={users}
-        />
-      )}
-
-      {activePage === 'companies' && isAdmin && (
-        <CompaniesPage
-          activeCompanyId={activeCompanyId}
-          companies={companies}
-          onSaveCompanies={saveCompanies}
-          onSwitchCompany={switchCompany}
         />
       )}
 

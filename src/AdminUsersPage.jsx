@@ -1,30 +1,17 @@
 import { useState } from 'react';
 
-export default function AdminUsersPage({ companies, users, onSaveUsers, onAddUser, onRemoveUser }) {
-  const [form, setForm] = useState({ email: '', nom: '', password: '1234', role: 'planning', companyIds: companies[0] ? [companies[0].id] : [] });
+export default function AdminUsersPage({ users, onSaveUsers, onAddUser, onRemoveUser }) {
+  const [form, setForm] = useState({ email: '', nom: '', password: '1234', role: 'planning' });
   const [editingId, setEditingId] = useState(null);
 
-  function toggleCompany(companyId) {
-    setForm((current) => {
-      const exists = current.companyIds.includes(companyId);
-      return {
-        ...current,
-        companyIds: exists
-          ? current.companyIds.filter((id) => id !== companyId)
-          : [...current.companyIds, companyId],
-      };
-    });
-  }
-
   function resetForm() {
-    const defaultIds = companies[0] ? [companies[0].id] : [];
-    setForm({ email: '', nom: '', password: '1234', role: 'planning', companyIds: defaultIds });
+    setForm({ email: '', nom: '', password: '1234', role: 'planning' });
     setEditingId(null);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.email.trim() || !form.nom.trim() || !form.companyIds.length) return;
+    if (!form.email.trim() || !form.nom.trim()) return;
 
     if (editingId) {
       onSaveUsers(
@@ -36,7 +23,7 @@ export default function AdminUsersPage({ companies, users, onSaveUsers, onAddUse
       );
     } else {
       try {
-        await onAddUser(form.email.trim().toLowerCase(), form.password, form.nom, form.role, form.companyIds);
+        await onAddUser(form.email.trim().toLowerCase(), form.password, form.nom, form.role);
       } catch {
         alert('Erreur lors de la création. Vérifiez que l\'email n\'existe pas déjà.');
       }
@@ -50,7 +37,6 @@ export default function AdminUsersPage({ companies, users, onSaveUsers, onAddUse
       nom: user.nom,
       password: '',
       role: user.role,
-      companyIds: [...(user.companyIds || [])],
     });
     setEditingId(user.id);
   }
@@ -67,7 +53,7 @@ export default function AdminUsersPage({ companies, users, onSaveUsers, onAddUse
           <span>Administration</span>
           <h1>Utilisateurs</h1>
         </div>
-        <p>Gérez les accès des utilisateurs aux entreprises.</p>
+        <p>Gérez les accès des utilisateurs.</p>
       </div>
 
       <form className="admin-form" onSubmit={handleSubmit}>
@@ -97,18 +83,6 @@ export default function AdminUsersPage({ companies, users, onSaveUsers, onAddUse
           <option value="planning">Planning</option>
           <option value="lecture">Lecture seule</option>
         </select>
-        <div className="checkbox-list">
-          {companies.map((company) => (
-            <label key={company.id}>
-              <input
-                type="checkbox"
-                checked={form.companyIds.includes(company.id)}
-                onChange={() => toggleCompany(company.id)}
-              />
-              {company.nom}
-            </label>
-          ))}
-        </div>
         <button type="submit">
           {editingId ? 'Modifier utilisateur' : 'Ajouter utilisateur'}
         </button>
@@ -127,12 +101,6 @@ export default function AdminUsersPage({ companies, users, onSaveUsers, onAddUse
               <span>{user.email}</span>
             </div>
             <span>{user.role === 'admin' ? 'Admin' : user.role}</span>
-            <small>
-              {companies
-                .filter((company) => (user.companyIds || []).includes(company.id))
-                .map((company) => company.nom)
-                .join(', ') || 'Aucune entreprise'}
-            </small>
             <div className="admin-row-actions">
               <button className="edit-btn" onClick={() => editUser(user)}>Modifier</button>
               <button className="delete-btn" onClick={() => removeUser(user.id)}>Supprimer</button>

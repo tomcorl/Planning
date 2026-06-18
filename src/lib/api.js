@@ -5,34 +5,7 @@ import { supabase } from './supabase.js';
 export async function login(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
-
-  const session = data.session;
-  const user = data.user;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single();
-
-  const { data: companies } = await supabase
-    .from('user_companies')
-    .select('company_id')
-    .eq('user_id', user.id);
-
-  const companyIds = companies?.map((c) => c.company_id) || [];
-
-  const { data: companyInfos } = await supabase
-    .from('companies')
-    .select('*')
-    .in('id', companyIds);
-
-  return {
-    session,
-    profile,
-    companyIds,
-    companies: companyInfos || [],
-  };
+  return data;
 }
 
 export async function logout() {
@@ -245,44 +218,12 @@ export async function upsertCustomFeries(companyId, feries) {
   if (error) { console.error('replace_custom_feries error', error); throw error; }
 }
 
-// ─── ADMIN: COMPANIES & USERS ────────────────────────────
-
-export async function fetchCompanies() {
-  const { data, error } = await supabase.from('companies').select('*');
-  if (error) { console.error('fetch companies', error); throw error; }
-  return data;
-}
-
-export async function saveCompanies(companies) {
-  for (const c of companies) {
-    const { error } = await supabase.from('companies').upsert({
-      id: c.id, nom: c.nom, secteur: c.secteur || '', plan: c.plan || 'Starter', free: 1,
-    });
-    if (error) { console.error('save company', error); throw error; }
-  }
-}
+// ─── ADMIN: USERS ────────────────────────────────────────
 
 export async function fetchUsers() {
   const { data, error } = await supabase.from('profiles').select('*');
   if (error) { console.error('fetch users', error); throw error; }
-
-  const enriched = await Promise.all(
-    (data || []).map(async (p) => {
-      const { data: links } = await supabase
-        .from('user_companies')
-        .select('company_id')
-        .eq('user_id', p.id);
-      return {
-        id: p.id,
-        email: p.email,
-        nom: p.nom,
-        role: p.role,
-        companyIds: links?.map((l) => l.company_id) || [],
-      };
-    })
-  );
-
-  return enriched;
+  return (data || []).map((p) => ({ id: p.id, email: p.email, nom: p.nom, role: p.role }));
 }
 
 export async function updateUserProfile(userId, updates) {
@@ -291,32 +232,18 @@ export async function updateUserProfile(userId, updates) {
     .update({ nom: updates.nom, role: updates.role })
     .eq('id', userId);
   if (error) { console.error('update user profile', error); throw error; }
-
-  const { error: delErr } = await supabase
-    .from('user_companies')
-    .delete()
-    .eq('user_id', userId);
-  if (delErr) { console.error('delete user companies', delErr); throw delErr; }
-
-  for (const cid of updates.companyIds || []) {
-    const { error: linkErr } = await supabase
-      .from('user_companies')
-      .insert({ user_id: userId, company_id: cid });
-    if (linkErr) { console.error('insert user company link', linkErr); throw linkErr; }
-  }
 }
 
-export async function createUser(email, password, nom, role, companyIds) {
+export async function createUser(email, password, nom, role) {
   const { data, error } = await supabase.rpc('create_user', {
     p_email: email,
     p_password: password,
     p_nom: nom,
     p_role: role,
-    p_company_ids: companyIds,
+    p_company_ids: ['noree'],
   });
   if (!error) return data;
 
-  // Fallback direct (quand le RPC n'est pas encore créé en base)
   console.warn('RPC create_user not available, falling back to direct auth admin call');
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email, password, email_confirm: true,
@@ -329,14 +256,7 @@ export async function createUser(email, password, nom, role, companyIds) {
     .insert({ id: uid, email, nom, role });
   if (profileErr) { console.error('create user profile', profileErr); throw profileErr; }
 
-  for (const cid of companyIds || []) {
-    const { error: linkErr } = await supabase
-      .from('user_companies')
-      .insert({ user_id: uid, company_id: cid });
-    if (linkErr) { console.error('create user company link', linkErr); throw linkErr; }
-  }
-
-  return { id: uid, email, nom, role, companyIds };
+  return { id: uid, email, nom, role };
 }
 
 export async function deleteUser(userId) {
