@@ -268,7 +268,7 @@ button:active {
 }
 
 .main-grid {
-  grid-auto-rows: 78px;
+  grid-auto-rows: 56px;
 }
 
 /* ═══════════════════════════════════════════════
@@ -452,7 +452,9 @@ button:active {
   align-items: center;
   gap: 10px;
   padding: 0 12px;
-  height: 78px;
+  height: 56px;
+  box-shadow: 6px 0 16px var(--shadow);
+}
   box-shadow: 6px 0 16px var(--shadow);
 }
 
@@ -516,7 +518,7 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .cell {
-  height: 78px;
+  height: 56px;
   border-right: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
   position: relative;
@@ -526,6 +528,14 @@ button:active {
 
 .cell.odd {
   background: var(--surface-2);
+}
+
+.compact-cell {
+  height: 40px;
+}
+
+.mini-cell {
+  height: 28px;
 }
 
 .weekend {

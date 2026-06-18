@@ -1285,7 +1285,7 @@ export default function App() {
           {teams.map((team, equipeIndex) => {
             return (
               <React.Fragment key={equipeIndex}>
-                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''}`}>
+                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${cellWidth < 30 ? 'compact-cell' : ''} ${cellWidth < 20 ? 'mini-cell' : ''}`}>
                   <div className="avatar">{equipeIndex + 1}</div>
 
                   <input
@@ -1326,7 +1326,7 @@ export default function App() {
                         dragPreview?.date === day.date
                           ? 'drag-preview'
                           : ''
-                      }`}
+                      } ${cellWidth < 30 ? 'compact-cell' : ''} ${cellWidth < 20 ? 'mini-cell' : ''}`}
                       onMouseDown={(e) =>
                         startSelection(e, equipeIndex, day.date)
                       }
@@ -1348,9 +1348,9 @@ export default function App() {
                         const width = (seg.end - seg.start + 1) * cellWidth - 8;
                         const compact = segments.length > 1;
                         const height = compact
-                          ? Math.max(15, Math.min(22, 68 / segments.length))
-                          : 54;
-                        const top = compact ? 7 + stack * (height + 3) : 11;
+                          ? Math.max(15, Math.min(20, 48 / segments.length))
+                          : 36;
+                        const top = compact ? 5 + stack * (height + 2) : 8;
 
                         return (
                           <div
