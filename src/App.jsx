@@ -91,10 +91,14 @@ function generateDays(start, count) {
     const d = addDays(start, i);
     const date = formatDate(d);
 
+    const monthShort = d.toLocaleDateString('fr-FR', { month: 'short' });
+    const yearStr = String(d.getFullYear()).slice(-2);
     return {
       date,
       dayNumber: d.getDate(),
-      month: d.toLocaleDateString('fr-FR', { month: 'short' }),
+      month: monthShort,
+      monthLabel: monthShort.charAt(0).toUpperCase() + monthShort.slice(1).replace('.', '') + '-' + yearStr,
+      monthKey: `${d.getFullYear()}-${d.getMonth()}`,
       weekday: d.toLocaleDateString('fr-FR', { weekday: 'short' }),
       weekend: isWeekend(date),
       week: getIsoWeek(date),
@@ -169,12 +173,25 @@ export default function App() {
     return allDays.filter((d) => !d.weekend);
   }, [allDays]);
 
+  const monthGroups = useMemo(() => {
+    const groups = [];
+    visibleDays.forEach((day) => {
+      const last = groups[groups.length - 1];
+      if (!last || last.monthKey !== day.monthKey) {
+        groups.push({ monthLabel: day.monthLabel, monthKey: day.monthKey, count: 1 });
+      } else {
+        last.count += 1;
+      }
+    });
+    return groups;
+  }, [visibleDays]);
+
   const weekGroups = useMemo(() => {
     const groups = [];
     visibleDays.forEach((day) => {
       const last = groups[groups.length - 1];
-      if (!last || last.week !== day.week || last.month !== day.month) {
-        groups.push({ week: day.week, month: day.month, count: 1 });
+      if (!last || last.week !== day.week) {
+        groups.push({ week: day.week, count: 1 });
       } else {
         last.count += 1;
       }
@@ -1195,6 +1212,19 @@ export default function App() {
       {activePage === 'planning' && (
         <>
       <div className="planning-scroll" ref={scrollRef} onScroll={handleScroll}>
+        <div className="grid month-grid" style={{ gridTemplateColumns }}>
+          <div className="corner month-corner"></div>
+          {monthGroups.map((g, i) => (
+            <div
+              className={`month-cell ${i % 2 === 0 ? 'month-even' : 'month-odd'}`}
+              key={g.monthKey}
+              style={{ gridColumn: `span ${g.count}` }}
+            >
+              {g.monthLabel}
+            </div>
+          ))}
+        </div>
+
         <div className="grid week-grid" style={{ gridTemplateColumns }}>
             <div className="corner week-corner">
             <strong>Équipes</strong>
@@ -1207,7 +1237,7 @@ export default function App() {
               key={`${g.week}-${i}`}
               style={{ gridColumn: `span ${g.count}` }}
             >
-              S{g.week} <span>{g.month}</span>
+              S{g.week}
             </div>
           ))}
         </div>

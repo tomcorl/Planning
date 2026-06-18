@@ -199,16 +199,23 @@ button:active {
   min-width: max-content;
 }
 
-.week-grid {
+.month-grid {
   position: sticky;
   top: 0;
+  z-index: 40;
+  grid-auto-rows: 28px;
+}
+
+.week-grid {
+  position: sticky;
+  top: 28px;
   z-index: 30;
   grid-auto-rows: 30px;
 }
 
 .main-grid {
   grid-auto-rows: 78px;
-  margin-top: -30px;
+  margin-top: -58px;
 }
 
 /* ═══════════════════════════════════════════════
@@ -225,8 +232,14 @@ button:active {
   box-shadow: 6px 0 16px var(--shadow);
 }
 
-.week-corner {
+.month-corner {
   top: 0;
+  height: 28px;
+  z-index: 95;
+}
+
+.week-corner {
+  top: 28px;
   height: 30px;
   display: flex;
   align-items: center;
@@ -281,9 +294,35 @@ button:active {
 }
 
 .date-corner {
-  top: 30px;
+  top: 58px;
   height: 44px;
   z-index: 85;
+}
+
+/* ═══════════════════════════════════════════════
+   MONTH CELLS
+   ═══════════════════════════════════════════════ */
+
+.month-cell {
+  position: sticky;
+  top: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.month-even {
+  background: var(--surface-2);
+}
+
+.month-odd {
+  background: var(--surface);
 }
 
 /* ═══════════════════════════════════════════════
@@ -303,13 +342,6 @@ button:active {
   color: var(--text);
   font-size: 11px;
   font-weight: 800;
-}
-
-.week-cell span {
-  color: var(--muted);
-  margin-left: 4px;
-  font-weight: 600;
-  font-size: 10px;
 }
 
 /* ═══════════════════════════════════════════════
