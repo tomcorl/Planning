@@ -231,15 +231,16 @@ export default function App() {
     if (!loadedRef.current || dataLoading) return;
     const el = scrollRef.current;
     if (!el) return;
-    const saved = (() => { try { return JSON.parse(localStorage.getItem('scrollPos')); } catch { return null; } })();
-    if (saved) {
-      // Clamp scroll to avoid white space on the right (e.g., if calendarLength changed)
-      const max = Math.max(0, el.scrollWidth - el.clientWidth);
-      el.scrollLeft = Math.min(max, saved.left || 0);
-      el.scrollTop = Math.min(Math.max(0, saved.top || 0), el.scrollHeight - el.clientHeight);
-    } else {
-      goToday();
-    }
+    requestAnimationFrame(() => {
+      const saved = (() => { try { return JSON.parse(localStorage.getItem('scrollPos')); } catch { return null; } })();
+      if (saved) {
+        const max = Math.max(0, el.scrollWidth - el.clientWidth);
+        el.scrollLeft = Math.min(max, saved.left || 0);
+        el.scrollTop = Math.min(Math.max(0, saved.top || 0), el.scrollHeight - el.clientHeight);
+      } else {
+        goToday();
+      }
+    });
   }, [dataLoading]);
 
   useEffect(() => {
