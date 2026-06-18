@@ -242,7 +242,7 @@ export async function createUser(email, password, nom, role) {
     p_password: password,
     p_nom: nom,
     p_role: role,
-    p_company_ids: ['noree'],
+    p_company_ids: [COMPANY_ID],
   });
   if (!error) return data;
 
