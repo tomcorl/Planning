@@ -136,12 +136,8 @@ export default function App() {
   const [cellWidth, setCellWidth] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cellWidth')) || INITIAL_CELL_WIDTH; } catch { return INITIAL_CELL_WIDTH; }
   });
-  const [calendarStart, setCalendarStart] = useState(() => {
-    try { const s = JSON.parse(localStorage.getItem('calendarStart')); return s ? new Date(s) : addDays(new Date(), -30); } catch { return addDays(new Date(), -30); }
-  });
-  const [calendarLength, setCalendarLength] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('calendarLength')) || 40; } catch { return 40; }
-  });
+  const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -60));
+  const [calendarLength, setCalendarLength] = useState(200);
   const [jumpDate, setJumpDate] = useState(today);
 
   const [teams, setTeams] = useState([]);
@@ -223,8 +219,6 @@ export default function App() {
   // Persist UI preferences to localStorage (client-side only)
   useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
   useEffect(() => localStorage.setItem('cellWidth', JSON.stringify(cellWidth)), [cellWidth]);
-  useEffect(() => localStorage.setItem('calendarStart', calendarStart.toISOString()), [calendarStart]);
-  useEffect(() => localStorage.setItem('calendarLength', JSON.stringify(calendarLength)), [calendarLength]);
 
   // Restore scroll position or jump to today after data loads
   useEffect(() => {
