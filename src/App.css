@@ -413,20 +413,6 @@ button:active {
 
 .date-cell strong {
   color: var(--text);
-  font-size: 12px;
-}
-
-.compact-date {
-  gap: 0;
-  font-size: 8px;
-}
-
-.compact-date strong {
-  font-size: 9px;
-}
-
-.mini-date strong {
-  font-size: 7px;
 }
 
 /* ═══════════════════════════════════════════════

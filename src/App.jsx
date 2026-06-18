@@ -1269,12 +1269,11 @@ export default function App() {
               key={d.date}
               className={`date-cell ${d.weekend ? 'weekend' : ''} ${
                 isFerie(d.date) ? 'ferie' : ''
-              } ${d.date === today ? 'today' : ''}
-                ${cellWidth < 34 ? 'compact-date' : ''} ${cellWidth < 26 ? 'mini-date' : ''}`}
+              } ${d.date === today ? 'today' : ''}`}
               title={d.date}
             >
               {cellWidth >= 36 && <span>{d.weekday}</span>}
-              <strong>{d.dayNumber}</strong>
+              <strong style={{ fontSize: Math.max(8, Math.min(12, 8 + (cellWidth - 26) * 4 / 26)) }}>{d.dayNumber}</strong>
             </div>
           ))}
         </div>
@@ -1426,7 +1425,10 @@ export default function App() {
                         );
                       })}
 
-                      {congeItems.map(({ conge, seg }) => (
+                      {congeItems.map(({ conge, seg }) => {
+                        const cH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
+                        const cT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
+                        return (
                         <div
                           key={conge.id}
                           className={`bloc conge ${
@@ -1439,6 +1441,10 @@ export default function App() {
                           }`}
                           style={{
                             width: (seg.end - seg.start + 1) * cellWidth - 8,
+                            height: cH,
+                            top: cT,
+                            fontSize: Math.max(9, Math.min(11, 9 + (cellWidth - 26) * 2 / 26)),
+                            padding: `${Math.max(4, Math.round(6 + (cellWidth - 26) * 2 / 26))}px ${Math.max(4, Math.round(8 + (cellWidth - 26) * 2 / 26))}px`,
                           }}
                           onMouseDown={(e) => e.stopPropagation()}
                           onClick={() =>
@@ -1448,7 +1454,8 @@ export default function App() {
                         >
                           {conge.nom}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                 })}
