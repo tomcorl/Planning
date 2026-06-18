@@ -422,10 +422,15 @@ button:active {
 .compact-date {
   gap: 0;
   font-size: 8px;
+  height: 28px;
 }
 
 .compact-date strong {
   font-size: 9px;
+}
+
+.mini-date {
+  height: 20px;
 }
 
 .mini-date strong {
