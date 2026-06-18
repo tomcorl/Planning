@@ -455,8 +455,6 @@ button:active {
   height: 56px;
   box-shadow: 6px 0 16px var(--shadow);
 }
-  box-shadow: 6px 0 16px var(--shadow);
-}
 
 .team-cell.odd {
   background: var(--surface-2);
