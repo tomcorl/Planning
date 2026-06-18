@@ -600,9 +600,9 @@ button:active {
 }
 
 .chantier-content strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
-  line-height: 1.15;
+  line-height: 1.2;
   display: block;
   max-width: calc(100% - 30px);
   overflow: hidden;
