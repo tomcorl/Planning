@@ -1393,16 +1393,14 @@ export default function App() {
                             />
 
                             {chantier.note && cellWidth >= 34 && (
-                              <div className="note-icon" onMouseEnter={(e) => {
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                const tip = e.currentTarget.querySelector('.tooltip');
-                                tip.style.top = (rect.top - 10) + 'px';
-                                tip.style.left = (rect.right + 8) + 'px';
-                                tip.style.display = 'block';
-                              }} onMouseLeave={(e) => {
-                                const tip = e.currentTarget.querySelector('.tooltip');
-                                tip.style.display = 'none';
-                              }}>
+                              <div className="note-icon"
+                                onMouseEnter={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const tip = e.currentTarget.querySelector('.tooltip');
+                                  tip.style.left = (rect.left - 268) + 'px';
+                                  tip.style.top = (rect.top - 10) + 'px';
+                                }}
+                              >
                                 💬
                                 <div className="tooltip">{chantier.note}</div>
                               </div>

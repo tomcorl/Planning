@@ -543,6 +543,7 @@ button:active {
 
 .bloc:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 10000 !important;
 }
 
 .compact-bloc {
@@ -698,6 +699,10 @@ button:active {
   letter-spacing: 0.04em;
   color: var(--muted);
   margin-bottom: 4px;
+}
+
+.note-icon:hover .tooltip {
+  display: block;
 }
 
 .link-icon {
