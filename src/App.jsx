@@ -1269,10 +1269,11 @@ export default function App() {
               key={d.date}
               className={`date-cell ${d.weekend ? 'weekend' : ''} ${
                 isFerie(d.date) ? 'ferie' : ''
-              } ${d.date === today ? 'today' : ''}`}
+              } ${d.date === today ? 'today' : ''}
+                ${cellWidth < 28 ? 'compact-date' : ''} ${cellWidth < 20 ? 'mini-date' : ''}`}
               title={d.date}
             >
-              <span>{d.weekday}</span>
+              {cellWidth >= 28 && <span>{d.weekday}</span>}
               <strong>{d.dayNumber}</strong>
             </div>
           ))}

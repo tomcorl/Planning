@@ -419,6 +419,19 @@ button:active {
   font-size: 12px;
 }
 
+.compact-date {
+  gap: 0;
+  font-size: 8px;
+}
+
+.compact-date strong {
+  font-size: 9px;
+}
+
+.mini-date strong {
+  font-size: 7px;
+}
+
 /* ═══════════════════════════════════════════════
    TEAM CELLS
    ═══════════════════════════════════════════════ */
