@@ -1,5 +1,7 @@
 import { supabase } from './supabase.js';
 
+const COMPANY_ID = 'noree';
+
 // ─── AUTH ───────────────────────────────────────────────
 
 export async function login(email, password) {
@@ -25,13 +27,13 @@ export function onAuthChange(callback) {
 
 // ─── COMPANY DATA LOADING ──────────────────────────────
 
-export async function loadCompanyData(companyId) {
+export async function loadCompanyData() {
   const [equipes, conducteurs, chantiers, conges, customFeries] = await Promise.all([
-    supabase.from('equipes').select('*').eq('company_id', companyId).order('ordre'),
-    supabase.from('conducteurs').select('*').eq('company_id', companyId),
-    supabase.from('chantiers').select('*').eq('company_id', companyId),
-    supabase.from('conges').select('*').eq('company_id', companyId),
-    supabase.from('custom_feries').select('*').eq('company_id', companyId),
+    supabase.from('equipes').select('*').eq('company_id', COMPANY_ID).order('ordre'),
+    supabase.from('conducteurs').select('*').eq('company_id', COMPANY_ID),
+    supabase.from('chantiers').select('*').eq('company_id', COMPANY_ID),
+    supabase.from('conges').select('*').eq('company_id', COMPANY_ID),
+    supabase.from('custom_feries').select('*').eq('company_id', COMPANY_ID),
   ]);
 
   if (equipes.error) { console.error('load equipes', equipes.error); throw equipes.error; }
@@ -85,10 +87,10 @@ function normalizeChantier(c) {
 
 // ─── DATA MUTATIONS ─────────────────────────────────────
 
-export async function upsertChantiers(companyId, chantiers) {
+export async function upsertChantiers(chantiers) {
   const rows = chantiers.map((c) => {
     const row = {
-      company_id: companyId,
+      company_id: COMPANY_ID,
       equipe: c.equipe,
       start: c.start,
       duree: c.duree,
@@ -108,13 +110,13 @@ export async function upsertChantiers(companyId, chantiers) {
     const { error: delErr } = await supabase
       .from('chantiers')
       .delete()
-      .eq('company_id', companyId);
+      .eq('company_id', COMPANY_ID);
     if (delErr) { console.error('delete chantiers error', delErr); throw delErr; }
     return [];
   }
 
   const { data, error } = await supabase.rpc('replace_chantiers', {
-    p_company_id: companyId,
+    p_company_id: COMPANY_ID,
     p_chantiers: rows,
   });
 
@@ -122,10 +124,10 @@ export async function upsertChantiers(companyId, chantiers) {
   return data;
 }
 
-export async function upsertConges(companyId, conges) {
+export async function upsertConges(conges) {
   const rows = conges.map((c) => {
     const row = {
-      company_id: companyId,
+      company_id: COMPANY_ID,
       equipe: c.equipe,
       start: c.start,
       duree: c.duree,
@@ -140,22 +142,22 @@ export async function upsertConges(companyId, conges) {
     const { error: delErr } = await supabase
       .from('conges')
       .delete()
-      .eq('company_id', companyId);
+      .eq('company_id', COMPANY_ID);
     if (delErr) { console.error('delete conges', delErr); throw delErr; }
     return;
   }
 
   const { error } = await supabase.rpc('replace_conges', {
-    p_company_id: companyId,
+    p_company_id: COMPANY_ID,
     p_conges: rows,
   });
 
   if (error) { console.error('replace_conges error', error); throw error; }
 }
 
-export async function upsertEquipes(companyId, equipes) {
+export async function upsertEquipes(equipes) {
   const rows = equipes.map((nom, i) => ({
-    company_id: companyId,
+    company_id: COMPANY_ID,
     nom,
     ordre: i + 1,
   }));
@@ -164,20 +166,20 @@ export async function upsertEquipes(companyId, equipes) {
     const { error: delErr } = await supabase
       .from('equipes')
       .delete()
-      .eq('company_id', companyId);
+      .eq('company_id', COMPANY_ID);
     if (delErr) { console.error('delete equipes', delErr); throw delErr; }
     return;
   }
 
   const { error } = await supabase.rpc('replace_equipes', {
-    p_company_id: companyId,
+    p_company_id: COMPANY_ID,
     p_equipes: rows,
   });
 
   if (error) { console.error('replace_equipes error', error); throw error; }
 }
 
-export async function upsertConducteurs(companyId, conducteurs) {
+export async function upsertConducteurs(conducteurs) {
   const rows = conducteurs.map((c) => ({
     nom: c.nom,
     color: c.color,
@@ -186,7 +188,7 @@ export async function upsertConducteurs(companyId, conducteurs) {
   if (rows.length === 0) return;
 
   const { data, error } = await supabase.rpc('upsert_conducteurs', {
-    p_company_id: companyId,
+    p_company_id: COMPANY_ID,
     p_conducteurs: rows,
   });
 
@@ -194,9 +196,9 @@ export async function upsertConducteurs(companyId, conducteurs) {
   return data;
 }
 
-export async function upsertCustomFeries(companyId, feries) {
+export async function upsertCustomFeries(feries) {
   const rows = feries.map((f) => ({
-    company_id: companyId,
+    company_id: COMPANY_ID,
     nom: f.nom,
     date: f.date,
   }));
@@ -205,13 +207,13 @@ export async function upsertCustomFeries(companyId, feries) {
     const { error: delErr } = await supabase
       .from('custom_feries')
       .delete()
-      .eq('company_id', companyId);
+      .eq('company_id', COMPANY_ID);
     if (delErr) { console.error('delete custom_feries', delErr); throw delErr; }
     return;
   }
 
   const { error } = await supabase.rpc('replace_custom_feries', {
-    p_company_id: companyId,
+    p_company_id: COMPANY_ID,
     p_feries: rows,
   });
 

@@ -124,7 +124,6 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
 
-  const activeCompanyId = session?.companyId || '';
   const isAdmin = session?.role === 'admin';
 
   const [theme, setTheme] = useState(() => {
@@ -220,35 +219,35 @@ export default function App() {
     } else {
       goToday();
     }
-  }, [dataLoading, activeCompanyId]);
+  }, [dataLoading]);
 
   // Debounced persistence to Supabase (runs 800ms after data settles)
   useEffect(() => {
-    if (!loadedRef.current || !session || !activeCompanyId) return;
+    if (!loadedRef.current || !session) return;
     const timer = setTimeout(() => {
-      api.upsertChantiers(activeCompanyId, chantiers).catch(console.error);
-      api.upsertConges(activeCompanyId, conges).catch(console.error);
+      api.upsertChantiers(chantiers).catch(console.error);
+      api.upsertConges(conges).catch(console.error);
     }, 800);
     return () => clearTimeout(timer);
-  }, [chantiers, conges, session, activeCompanyId]);
+  }, [chantiers, conges, session]);
 
   useEffect(() => {
-    if (!loadedRef.current || !session || !activeCompanyId) return;
+    if (!loadedRef.current || !session) return;
     const timer = setTimeout(() => {
-      api.upsertEquipes(activeCompanyId, teams).catch(console.error);
-      api.upsertConducteurs(activeCompanyId, conducteurs).catch(console.error);
-      api.upsertCustomFeries(activeCompanyId, customFeries).catch(console.error);
+      api.upsertEquipes(teams).catch(console.error);
+      api.upsertConducteurs(conducteurs).catch(console.error);
+      api.upsertCustomFeries(customFeries).catch(console.error);
     }, 800);
     return () => clearTimeout(timer);
-  }, [teams, conducteurs, customFeries, session, activeCompanyId]);
+  }, [teams, conducteurs, customFeries, session]);
 
-  async function loadCompanyData(companyId) {
+  async function loadCompanyData() {
     setDataLoading(true);
     try {
-      const data = await api.loadCompanyData(companyId);
+      const data = await api.loadCompanyData();
       setTeams(data.equipes.length > 0 ? data.equipes : DEFAULT_TEAMS);
       if (data.equipes.length === 0) {
-        await api.upsertEquipes(companyId, DEFAULT_TEAMS);
+        await api.upsertEquipes(DEFAULT_TEAMS);
       }
       setConducteurs(data.conducteurs.length > 0 ? data.conducteurs : []);
       setChantiers(data.chantiers);
@@ -274,22 +273,19 @@ export default function App() {
       email: user.email,
       nom: profile?.nom || user.email?.split('@')[0] || '',
       role: profile?.role || 'planning',
-      companyId: user.user_metadata?.companyId || 'noree',
     };
-    // Sync role to JWT so RLS policies can check it without recursion
     if (profile?.role && profile.role !== user.user_metadata?.role) {
       await supabase.auth.updateUser({ data: { role: profile.role, nom: profile.nom } }).catch(() => {});
     }
     return meta;
   }
 
-  async function loadAllData(sessionData) {
+  async function loadAllData() {
     setDataLoading(true);
     try {
       const enrichedUsers = await api.fetchUsers();
       setUsers(enrichedUsers);
-      const cid = sessionData.companyId || 'noree';
-      if (cid) { await loadCompanyData(cid); }
+      await loadCompanyData();
       loadedRef.current = true;
     } catch (e) {
       console.error('Failed to load initial data:', e);
@@ -305,7 +301,7 @@ export default function App() {
         try {
           const meta = await buildSessionMeta(s.user);
           setSession(meta);
-          loadAllData(meta);
+          loadAllData();
         } catch (e) {
           console.error('Session restore failed:', e);
           setDataLoading(false);
@@ -319,7 +315,7 @@ export default function App() {
       if (event === 'SIGNED_IN' && s) {
         buildSessionMeta(s.user).then((meta) => {
           setSession(meta);
-          loadAllData(meta);
+          loadAllData();
         }).catch((e) => {
           console.error('Auth state change error:', e);
           setDataLoading(false);
