@@ -7,7 +7,9 @@ import PaymentPage from './PaymentPage.jsx';
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
-const INITIAL_CELL_WIDTH = 52;
+const INITIAL_CELL_WIDTH = 28;
+const MIN_CELL_WIDTH = 14;
+const MAX_CELL_WIDTH = 100;
 
 const CHANTIER_COLORS = [
   '#b7c6d8',
@@ -231,9 +233,6 @@ export default function App() {
       goToday();
     }
   }, [dataLoading]);
-
-  const MIN_CELL_WIDTH = 30;
-  const MAX_CELL_WIDTH = 150;
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -1230,6 +1229,7 @@ export default function App() {
 
       {activePage === 'planning' && (
         <>
+      <div className="planning-container">
       <div className="planning-scroll" ref={scrollRef} onScroll={handleScroll}>
         <div className="planning-header">
         <div className="grid month-grid" style={{ gridTemplateColumns }}>
@@ -1453,6 +1453,13 @@ export default function App() {
             );
           })}
         </div>
+      </div>
+      <div className="zoom-bar">
+        <span className="zoom-label">{(cellWidth / INITIAL_CELL_WIDTH * 100).toFixed(0)}%</span>
+        <button className="zoom-btn" onClick={() => setCellWidth(prev => Math.max(MIN_CELL_WIDTH, prev - 4))}>−</button>
+        <input type="range" className="zoom-slider" min={MIN_CELL_WIDTH} max={MAX_CELL_WIDTH} value={cellWidth} onChange={(e) => setCellWidth(Number(e.target.value))} />
+        <button className="zoom-btn" onClick={() => setCellWidth(prev => Math.min(MAX_CELL_WIDTH, prev + 4))}>+</button>
+      </div>
       </div>
 
       {holidayModalOpen && (
