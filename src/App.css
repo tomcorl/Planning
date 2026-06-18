@@ -318,7 +318,11 @@ button:active {
 }
 
 .month-even {
-  background: var(--surface-2);
+  background: #d4edda;
+}
+
+[data-theme='dark'] .month-even {
+  background: #1a3a1a;
 }
 
 .month-odd {
@@ -465,11 +469,11 @@ button:active {
 }
 
 .today {
-  background: rgba(59, 130, 246, 0.08) !important;
+  background: #eef3ff !important;
 }
 
 [data-theme='dark'] .today {
-  background: rgba(96, 165, 250, 0.12) !important;
+  background: #1a2640 !important;
 }
 
 .selected {

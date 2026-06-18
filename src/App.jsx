@@ -1149,7 +1149,7 @@ export default function App() {
             <rect x="14" y="14" width="7" height="7" rx="1" />
           </svg>
           Planning
-        </div>
+          <span>Noree Construction</span>
 
         {activePage === 'planning' && (
           <div className="date-nav">
