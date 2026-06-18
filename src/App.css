@@ -452,8 +452,8 @@ button:active {
 }
 
 .avatar {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   background: var(--green);
   color: white;
   border-radius: 10px;
@@ -544,9 +544,9 @@ button:active {
 
 .bloc {
   position: absolute;
-  top: 8px;
+  top: 11px;
   left: 3px;
-  height: 36px;
+  height: 54px;
   border-radius: 8px;
   z-index: 2;
   overflow: visible;
@@ -757,7 +757,7 @@ button:active {
     #64748b 8px
   );
   color: white;
-  padding: 6px 8px;
+  padding: 8px 10px;
   font-size: 11px;
   font-weight: 900;
   z-index: 1;

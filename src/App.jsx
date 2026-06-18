@@ -7,9 +7,9 @@ import PaymentPage from './PaymentPage.jsx';
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
-const INITIAL_CELL_WIDTH = 28;
-const MIN_CELL_WIDTH = 14;
-const MAX_CELL_WIDTH = 100;
+const INITIAL_CELL_WIDTH = 52;
+const MIN_CELL_WIDTH = 26;
+const MAX_CELL_WIDTH = 78;
 
 const CHANTIER_COLORS = [
   '#b7c6d8',
@@ -1262,7 +1262,7 @@ export default function App() {
           ))}
         </div>
 
-        <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: cellWidth < 30 ? (cellWidth < 20 ? 20 : 28) : 44 }}>
+        <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: Math.round(28 + (cellWidth - 26) * (44 - 28) / 26) }}>
           <div className="corner date-corner"></div>
           {visibleDays.map((d) => (
             <div
@@ -1270,17 +1270,17 @@ export default function App() {
               className={`date-cell ${d.weekend ? 'weekend' : ''} ${
                 isFerie(d.date) ? 'ferie' : ''
               } ${d.date === today ? 'today' : ''}
-                ${cellWidth < 28 ? 'compact-date' : ''} ${cellWidth < 20 ? 'mini-date' : ''}`}
+                ${cellWidth < 34 ? 'compact-date' : ''} ${cellWidth < 26 ? 'mini-date' : ''}`}
               title={d.date}
             >
-              {cellWidth >= 28 && <span>{d.weekday}</span>}
+              {cellWidth >= 36 && <span>{d.weekday}</span>}
               <strong>{d.dayNumber}</strong>
             </div>
           ))}
         </div>
         </div>
 
-        <div className="grid main-grid" style={{ gridTemplateColumns, gridAutoRows: cellWidth < 30 ? (cellWidth < 20 ? 28 : 40) : 56 }}>
+        <div className="grid main-grid" style={{ gridTemplateColumns, gridAutoRows: Math.round(56 + (cellWidth - 26) * (78 - 56) / 26) }}>
 
           {teams.map((team, equipeIndex) => {
             return (
@@ -1347,10 +1347,12 @@ export default function App() {
                         const conducteur = getConducteur(chantier.conducteurId);
                         const width = (seg.end - seg.start + 1) * cellWidth - 8;
                         const compact = segments.length > 1;
+                        const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
+                        const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
                         const height = compact
-                          ? Math.max(15, Math.min(20, 48 / segments.length))
-                          : 36;
-                        const top = compact ? 5 + stack * (height + 2) : 8;
+                          ? Math.max(15, Math.min(Math.round(20 + (cellWidth - 26) * (26 - 20) / 26), blocH / segments.length))
+                          : blocH;
+                        const top = compact ? Math.round(5 + (cellWidth - 26) * (7 - 5) / 26) + stack * (height + 2) : blocT;
 
                         return (
                           <div
@@ -1456,7 +1458,7 @@ export default function App() {
         </div>
       </div>
       <div className="zoom-bar">
-        <span className="zoom-label">{(cellWidth / INITIAL_CELL_WIDTH * 100).toFixed(0)}%</span>
+        <span className="zoom-label">{Math.round(cellWidth / 52 * 100)}%</span>
         <button className="zoom-btn" onClick={() => setCellWidth(prev => Math.max(MIN_CELL_WIDTH, prev - 4))}>−</button>
         <input type="range" className="zoom-slider" min={MIN_CELL_WIDTH} max={MAX_CELL_WIDTH} value={cellWidth} onChange={(e) => setCellWidth(Number(e.target.value))} />
         <button className="zoom-btn" onClick={() => setCellWidth(prev => Math.min(MAX_CELL_WIDTH, prev + 4))}>+</button>
