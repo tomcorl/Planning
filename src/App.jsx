@@ -1285,11 +1285,12 @@ export default function App() {
             return (
               <React.Fragment key={equipeIndex}>
                 <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''}`}>
-                  <div className="avatar">{equipeIndex + 1}</div>
+                  <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{equipeIndex + 1}</div>
 
                   <input
                     value={team}
                     onChange={(e) => updateTeam(equipeIndex, e.target.value)}
+                    style={{ fontSize: Math.round(11 + (cellWidth - 26) * 3 / 26) }}
                   />
 
                   <button
