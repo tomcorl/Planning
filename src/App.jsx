@@ -1391,61 +1391,54 @@ export default function App() {
             className="modal holiday-modal"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <h2>Jours fériés</h2>
-
-            <div className="holiday-form-row">
-              <input
-                value={ferieForm.nom}
-                placeholder="Nom du jour férié"
-                onChange={(e) =>
-                  setFerieForm({ ...ferieForm, nom: e.target.value })
-                }
-              />
-              <input
-                type="date"
-                value={ferieForm.date}
-                onChange={(e) =>
-                  setFerieForm({ ...ferieForm, date: e.target.value })
-                }
-              />
-              <button onClick={addCustomFerie}>Ajouter</button>
+            <div className="modal-header">
+              <h2>Jours fériés</h2>
+              <button className="modal-header-close" onClick={() => setHolidayModalOpen(false)}>×</button>
             </div>
 
-            <h3>Jours personnalisés</h3>
+            <div className="modal-body">
+              <div className="holiday-add-row">
+                <input
+                  value={ferieForm.date}
+                  type="date"
+                  onChange={(e) =>
+                    setFerieForm({ ...ferieForm, date: e.target.value })
+                  }
+                />
+                <input
+                  value={ferieForm.nom}
+                  placeholder="Nom du jour férié"
+                  onChange={(e) =>
+                    setFerieForm({ ...ferieForm, nom: e.target.value })
+                  }
+                />
+                <button className="modal-btn-primary" onClick={addCustomFerie}>Ajouter</button>
+              </div>
 
-            <div className="holiday-list">
-              {customFeries.length === 0 && (
-                <div className="holiday-empty">Aucun jour personnalisé.</div>
-              )}
+              <h3>Jours personnalisés</h3>
 
-              {customFeries.map((f) => (
-                <div key={f.id} className="holiday-item">
-                  <div className="holiday-item-info">
-                    <strong>{f.nom}</strong>
-                    <span>{f.date}</span>
-                  </div>
-                  <button
-                    onClick={() =>
-                      commit(() =>
-                        setCustomFeries((prev) =>
-                          prev.filter((x) => x.id !== f.id)
-                        )
-                      )
-                    }
-                  >
-                    Supprimer
-                  </button>
+              {customFeries.length === 0 ? (
+                <div className="holiday-empty">
+                  <span className="holiday-empty-icon">📅</span>
+                  <span>Aucun jour férié personnalisé</span>
                 </div>
-              ))}
+              ) : (
+                <div className="holiday-list">
+                  {customFeries.map((f) => (
+                    <div key={f.id} className="holiday-item">
+                      <div className="holiday-item-info">
+                        <strong>{f.nom}</strong>
+                        <span>{new Date(f.date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                      </div>
+                      <button className="modal-btn-danger" onClick={() => commit(() => setCustomFeries((prev) => prev.filter((x) => x.id !== f.id)))}>Supprimer</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div className="modal-actions">
-              <button
-                className="cancel"
-                onClick={() => setHolidayModalOpen(false)}
-              >
-                Fermer
-              </button>
+            <div className="modal-footer">
+              <button className="modal-btn-cancel" onClick={() => setHolidayModalOpen(false)}>Fermer</button>
             </div>
           </div>
         </div>
