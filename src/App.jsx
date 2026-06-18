@@ -122,9 +122,6 @@ export default function App() {
   const [authScreen, setAuthScreen] = useState('login');
   const [selectedPlan, setSelectedPlan] = useState('Pro');
   const [activePage, setActivePage] = useState('planning');
-  const [viewMode, setViewMode] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('viewMode')) || 'week'; } catch { return 'week'; }
-  });
   const [companies, setCompanies] = useState([]);
   const [users, setUsers] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
@@ -216,7 +213,6 @@ export default function App() {
   useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
   useEffect(() => localStorage.setItem('cellWidth', JSON.stringify(cellWidth)), [cellWidth]);
   useEffect(() => localStorage.setItem('showWeekends', JSON.stringify(showWeekends)), [showWeekends]);
-  useEffect(() => localStorage.setItem('viewMode', JSON.stringify(viewMode)), [viewMode]);
 
   // Restore scroll position or jump to today after data loads
   useEffect(() => {
@@ -1058,29 +1054,6 @@ export default function App() {
     }
   }
 
-  function changeViewMode(mode) {
-    const settings = {
-      day: { before: 3, length: 10, width: 84 },
-      week: { before: 14, length: 42, width: 58 },
-      month: { before: 30, length: 120, width: 42 },
-      year: { before: 45, length: 365, width: 32 },
-    };
-    const next = settings[mode] || settings.week;
-
-    setViewMode(mode);
-    setCalendarStart(addDays(new Date(), -next.before));
-    setCalendarLength(next.length);
-    setCellWidth(next.width);
-
-    setTimeout(() => {
-      const idx = dayIndex(today);
-      const el = scrollRef.current;
-      if (el && idx >= 0) {
-        el.scrollLeft = Math.max(0, idx * next.width - 360);
-      }
-    }, 0);
-  }
-
   function quickAdd() {
     setForm({
       id: null,
@@ -1262,25 +1235,6 @@ export default function App() {
               </>
             )}
           </div>
-
-          {activePage === 'planning' && (
-            <div className="view-switcher">
-              {[
-                ['day', 'Jour'],
-                ['week', 'Semaine'],
-                ['month', 'Mois'],
-                ['year', 'Annee'],
-              ].map(([mode, label]) => (
-                <button
-                  key={mode}
-                  className={viewMode === mode ? 'active-view' : ''}
-                  onClick={() => changeViewMode(mode)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
 
           {activePage === 'planning' && (
             <button onClick={goToday}>Aujourd'hui</button>

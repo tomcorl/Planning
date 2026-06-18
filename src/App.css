@@ -137,18 +137,7 @@ textarea {
 }
 
 .workspace-nav,
-.view-switcher {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-
-.workspace-nav button,
-.view-switcher button {
+.workspace-nav button {
   min-height: 28px;
   padding: 5px 10px;
   background: transparent;
@@ -157,8 +146,7 @@ textarea {
   transition: all 0.15s ease-out;
 }
 
-.workspace-nav .active-nav,
-.view-switcher .active-view {
+.workspace-nav .active-nav {
   background: var(--green);
   color: white;
   box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
