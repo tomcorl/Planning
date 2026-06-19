@@ -208,16 +208,14 @@ export default function App() {
       const companyTeams = teams
         .map((t, i) => ({ ...t, index: i }))
         .filter((t) => t.companyId === comp.id);
-      companyTeams.forEach((t) => {
-        rows.push({ type: 'team', teamIndex: t.index, name: t.nom });
+      companyTeams.forEach((t, idx) => {
+        rows.push({ type: 'team', teamIndex: t.index, name: t.nom, numInCompany: idx + 1 });
       });
-      if (c < companies.length - 1) {
-        const baseOffset = teams.length + c * 3;
-        rows.push({ type: 'pending', id: `p-${c}-0`, equipeIndex: baseOffset });
-        rows.push({ type: 'pending', id: `p-${c}-1`, equipeIndex: baseOffset + 1 });
-        rows.push({ type: 'pending', id: `p-${c}-2`, equipeIndex: baseOffset + 2 });
-        rows.push({ type: 'separator', id: `s-${c}` });
-      }
+      const baseOffset = teams.length + c * 3;
+      rows.push({ type: 'pending', id: `p-${c}-0`, equipeIndex: baseOffset });
+      rows.push({ type: 'pending', id: `p-${c}-1`, equipeIndex: baseOffset + 1 });
+      rows.push({ type: 'pending', id: `p-${c}-2`, equipeIndex: baseOffset + 2 });
+      rows.push({ type: 'separator', id: `s-${c}` });
     }
     return rows;
   }, [teams, companies]);
@@ -1447,7 +1445,7 @@ export default function App() {
                 <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
                   {isPending ? null : (
                     <>
-                      <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.teamIndex + 1}</div>
+                      <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.numInCompany}</div>
                       <input
                         value={row.name}
                         onChange={(e) => updateTeam(row.teamIndex, e.target.value)}

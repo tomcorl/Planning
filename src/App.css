@@ -309,13 +309,26 @@ button:active {
 
 .add-team-group {
   display: flex;
-  gap: 2px;
+  gap: 4px;
+  align-items: center;
 }
 
 .add-team-group button {
-  padding: 3px 6px;
+  padding: 2px 8px;
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.add-team-group button:hover {
+  background: var(--green);
+  color: white;
+  border-color: var(--green);
 }
 
 .date-nav {
@@ -436,7 +449,6 @@ button:active {
   z-index: 4;
   background: var(--surface);
   border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line-soft);
   display: flex;
   align-items: center;
   gap: 10px;
