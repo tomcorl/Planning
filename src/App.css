@@ -439,7 +439,7 @@ button:active {
 .team-cell {
   position: sticky;
   left: 0;
-  z-index: 4;
+  z-index: 10001;
   background: var(--surface);
   border-right: 1px solid var(--line);
   display: flex;

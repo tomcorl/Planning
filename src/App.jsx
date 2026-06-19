@@ -684,7 +684,7 @@ export default function App() {
     let segStart = null;
 
     for (const d of days) {
-      const isFerie = holidays.includes(d.date);
+      const blockedFerie = isFerie(d.date);
       const isConge = conges.some(
         (c) =>
           (c.equipe === chantier.equipe || c.allEquipes) &&
@@ -694,7 +694,7 @@ export default function App() {
           })()
       );
 
-      if (isFerie || isConge) {
+      if (blockedFerie || isConge) {
         if (segStart !== null) {
           segments.push({ start: segStart, end: d.i - 1 });
           segStart = null;
