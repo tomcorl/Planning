@@ -1234,9 +1234,11 @@ export default function App() {
       });
       rows.forEach((row) => {
         row.forEach(({ chantier, seg, stack }) => {
-          const key = `${chantier.equipe}-${seg.start}`;
-          if (!map.has(key)) map.set(key, []);
-          map.get(key).push({ chantier, seg, i: 0, stack });
+          for (let d = seg.start; d <= seg.end; d++) {
+            const key = `${chantier.equipe}-${d}`;
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push({ chantier, seg, i: 0, stack });
+          }
         });
       });
     });
