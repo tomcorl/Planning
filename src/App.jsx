@@ -680,7 +680,33 @@ export default function App() {
 
     if (days.length === 0) return [];
 
-    return [{ start: days[0].i, end: days[days.length - 1].i }];
+    const segments = [];
+    let segStart = null;
+
+    for (const d of days) {
+      const isFerie = holidays.includes(d.date);
+      const isConge = conges.some(
+        (c) =>
+          (c.equipe === chantier.equipe || c.allEquipes) &&
+          sameOrAfter(d.date, c.start) &&
+          sameOrBefore(d.date, c.end)
+      );
+
+      if (isFerie || isConge) {
+        if (segStart !== null) {
+          segments.push({ start: segStart, end: d.i - 1 });
+          segStart = null;
+        }
+      } else {
+        if (segStart === null) segStart = d.i;
+      }
+    }
+
+    if (segStart !== null) {
+      segments.push({ start: segStart, end: days[days.length - 1].i });
+    }
+
+    return segments;
   }
 
   function getCongeSegment(conge) {
@@ -1250,7 +1276,7 @@ export default function App() {
     });
 
     return map;
-  }, [chantiers, holidays, visibleDays]);
+  }, [chantiers, conges, holidays, visibleDays]);
 
   const gridTemplateColumns = `260px repeat(${visibleDays.length}, ${cellWidth}px)`;
 
