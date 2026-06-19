@@ -32,7 +32,9 @@ const CONDUCTEUR_COLORS = [
   '#be123c',
 ];
 
-const DEFAULT_TEAMS = Array.from({ length: 36 }, (_, i) => `Équipe ${i + 1}`);
+const COMPANIES = ['Noree', 'Entreprise 2', 'Entreprise 3'];
+
+const DEFAULT_TEAMS = Array.from({ length: 12 }, (_, i) => `Équipe ${i + 1}`);
 
 function toDate(value) {
   if (value instanceof Date) return value;
@@ -136,6 +138,7 @@ export default function App() {
   const [jumpDate, setJumpDate] = useState(today);
 
   const [teams, setTeams] = useState([]);
+  const [addCompany, setAddCompany] = useState(0);
   const [conducteurs, setConducteurs] = useState([]);
   const [customFeries, setCustomFeries] = useState([]);
   const [ferieForm, setFerieForm] = useState({ nom: '', date: today });
@@ -201,15 +204,19 @@ export default function App() {
 
   const gridRows = useMemo(() => {
     const rows = [];
-    const blockSize = 12;
-    for (let b = 0; b < teams.length; b += blockSize) {
-      for (let t = b; t < Math.min(b + blockSize, teams.length); t++) {
-        rows.push({ type: 'team', teamIndex: t, name: teams[t] });
+    const perCompany = Math.max(1, Math.ceil(teams.length / COMPANIES.length));
+    let idx = 0;
+    for (let c = 0; c < COMPANIES.length; c++) {
+      rows.push({ type: 'company-header', name: COMPANIES[c], id: `ch-${c}` });
+      const count = c < COMPANIES.length - 1 ? perCompany : teams.length - idx;
+      for (let t = 0; t < count && idx < teams.length; t++, idx++) {
+        rows.push({ type: 'team', teamIndex: idx, name: teams[idx] });
       }
-      if (b + blockSize < teams.length) {
-        const lastTeamInBlock = Math.min(b + blockSize, teams.length) - 1;
-        for (let p = 0; p < 3; p++) rows.push({ type: 'pending', id: `p-${b}-${p}`, teamIndex: lastTeamInBlock });
-        rows.push({ type: 'separator', id: `s-${b}` });
+      if (c < COMPANIES.length - 1) {
+        rows.push({ type: 'pending', id: `p-${c}-0`, equipeIndex: teams.length + c * 3 + 0 });
+        rows.push({ type: 'pending', id: `p-${c}-1`, equipeIndex: teams.length + c * 3 + 1 });
+        rows.push({ type: 'pending', id: `p-${c}-2`, equipeIndex: teams.length + c * 3 + 2 });
+        rows.push({ type: 'separator', id: `s-${c}` });
       }
     }
     return rows;
@@ -661,6 +668,19 @@ export default function App() {
 
   function addTeam() {
     commit(() => setTeams((prev) => [...prev, `Équipe ${prev.length + 1}`]));
+  }
+
+  function addTeamToCompany(companyIdx) {
+    const perCompany = Math.max(1, Math.ceil(teams.length / COMPANIES.length));
+    const insertAt = Math.min(companyIdx * perCompany + perCompany, teams.length);
+    const name = `Équipe ${teams.length + 1}`;
+    commit(() => {
+      setTeams((prev) => {
+        const next = [...prev];
+        next.splice(insertAt, 0, name);
+        return next;
+      });
+    });
   }
 
   function deleteTeam(index) {
@@ -1338,7 +1358,11 @@ export default function App() {
         <div className="grid week-grid" style={{ gridTemplateColumns }}>
             <div className="corner week-corner">
             <strong>Équipes</strong>
-            <button onClick={addTeam}>+ Ajouter</button>
+            <div className="add-team-group">
+              <button onClick={() => addTeamToCompany(0)} title="Ajouter à Noree">+ N</button>
+              <button onClick={() => addTeamToCompany(1)} title="Ajouter à Entreprise 2">+ E2</button>
+              <button onClick={() => addTeamToCompany(2)} title="Ajouter à Entreprise 3">+ E3</button>
+            </div>
           </div>
 
           {weekGroups.map((g, i) => (
@@ -1383,15 +1407,24 @@ export default function App() {
               );
             }
 
-            const equipeIndex = row.type === 'pending' ? -(row.id || 0) : row.teamIndex;
+            if (row.type === 'company-header') {
+              return (
+                <React.Fragment key={row.id}>
+                  <div className="team-cell company-header-cell">{row.name}</div>
+                  {visibleDays.map((day) => (
+                    <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
+                  ))}
+                </React.Fragment>
+              );
+            }
+
+            const equipeIndex = row.type === 'pending' ? row.equipeIndex : row.teamIndex;
             const isPending = row.type === 'pending';
 
             return (
-              <React.Fragment key={row.type === 'team' ? row.name : row.id}>
+              <React.Fragment key={isPending ? row.id : `team-${row.teamIndex}`}>
                 <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
-                  {isPending ? (
-                    <span className="pending-label">En attente</span>
-                  ) : (
+                  {isPending ? null : (
                     <>
                       <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.teamIndex + 1}</div>
                       <input
@@ -1408,9 +1441,9 @@ export default function App() {
                 </div>
 
                 {visibleDays.map((day) => {
-                  const segments = isPending ? [] : (chantiersParCellule.get(`${row.teamIndex}-${dayIndex(day.date)}`) || []);
-                  const congeItems = isPending ? [] : conges
-                    .filter((c) => c.equipe === row.teamIndex || c.allEquipes)
+                  const segments = chantiersParCellule.get(`${equipeIndex}-${dayIndex(day.date)}`) || [];
+                  const congeItems = conges
+                    .filter((c) => c.equipe === equipeIndex || c.allEquipes)
                     .map((c) => ({ conge: c, seg: getCongeSegment(c) }))
                     .filter((x) => x.seg && x.seg.start === dayIndex(day.date));
 

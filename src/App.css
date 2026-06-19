@@ -307,6 +307,17 @@ button:active {
   border-radius: 6px;
 }
 
+.add-team-group {
+  display: flex;
+  gap: 2px;
+}
+
+.add-team-group button {
+  padding: 3px 6px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .date-nav {
   display: flex;
   align-items: center;
@@ -439,20 +450,29 @@ button:active {
 
 .pending-team {
   background: var(--surface) !important;
-  border-left: 3px solid var(--line);
   box-shadow: none !important;
-}
-
-.pending-label {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  font-style: italic;
-  padding: 0 12px;
 }
 
 .pending-cell {
   background: var(--surface) !important;
+}
+
+.company-header-cell {
+  background: var(--surface-3) !important;
+  font-weight: 900;
+  font-size: 13px;
+  color: var(--text);
+  border-bottom: 2px solid var(--line);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  box-shadow: none !important;
+  z-index: 3;
+}
+
+.company-header-day {
+  background: var(--surface-3) !important;
+  border-bottom: 2px solid var(--line);
 }
 
 .separator-row {
