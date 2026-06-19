@@ -158,14 +158,8 @@ export default function App() {
   });
   const [form, setForm] = useState(null);
 
-  const [chantierColors, setChantierColors] = useState(() => {
-    try { const s = JSON.parse(localStorage.getItem('chantierColors')); if (s && s.length) return s; } catch(e) {}
-    return [...CHANTIER_COLORS];
-  });
-  const [conducteurColors, setConducteurColors] = useState(() => {
-    try { const s = JSON.parse(localStorage.getItem('conducteurColors')); if (s && s.length) return s; } catch(e) {}
-    return [...CONDUCTEUR_COLORS];
-  });
+  const [chantierColors, setChantierColors] = useState([...CHANTIER_COLORS]);
+  const [conducteurColors, setConducteurColors] = useState([...CONDUCTEUR_COLORS]);
   const [colorManager, setColorManager] = useState(null);
 
   const allDays = useMemo(
@@ -247,8 +241,6 @@ export default function App() {
   // Persist UI preferences to localStorage (client-side only)
   useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
   useEffect(() => localStorage.setItem('cellWidth', JSON.stringify(cellWidth)), [cellWidth]);
-  useEffect(() => localStorage.setItem('chantierColors', JSON.stringify(chantierColors)), [chantierColors]);
-  useEffect(() => localStorage.setItem('conducteurColors', JSON.stringify(conducteurColors)), [conducteurColors]);
 
   // Restore scroll position or jump to today after data loads
   useEffect(() => {
@@ -317,6 +309,15 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [teams, conducteurs, customFeries, session, companies]);
 
+  useEffect(() => {
+    if (!loadedRef.current || !session || !companies.length) return;
+    const timer = setTimeout(() => {
+      const comp = companies[0];
+      if (comp) api.updateCompanyColors(comp.id, chantierColors, conducteurColors).catch(console.error);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [chantierColors, conducteurColors, session, companies]);
+
   async function loadAllCompanyData() {
     setDataLoading(true);
     try {
@@ -343,6 +344,13 @@ export default function App() {
       setChantiers(allData.chantiers);
       setConges(allData.conges);
       setCustomFeries(allData.customFeries);
+
+      if (allData.companies.length > 0) {
+        const first = allData.companies[0];
+        if (first.chantier_colors?.length) setChantierColors(first.chantier_colors);
+        if (first.conducteur_colors?.length) setConducteurColors(first.conducteur_colors);
+      }
+
       setHistory({ past: [], future: [] });
       setSelection(null);
       setSelectedItem(null);

@@ -58,6 +58,14 @@ export async function loadPlanningData() {
   };
 }
 
+export async function updateCompanyColors(companyId, chantierColors, conducteurColors) {
+  const { error } = await supabase
+    .from('companies')
+    .update({ chantier_colors: chantierColors, conducteur_colors: conducteurColors })
+    .eq('id', companyId);
+  if (error) { console.error('update colors', error); throw error; }
+}
+
 function normalizeChantier(c) {
   return {
     id: c.id,

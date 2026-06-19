@@ -374,13 +374,13 @@ DECLARE
 BEGIN
   SELECT jsonb_build_object(
     'companies', (
-      SELECT jsonb_agg(jsonb_build_object('id', c.id, 'nom', c.nom))
+      SELECT jsonb_agg(jsonb_build_object('id', c.id, 'nom', c.nom, 'chantier_colors', COALESCE(c.chantier_colors, ARRAY['#2563eb','#93c5fd','#eab308','#15803d','#6b7280','#f97316','#7dd3fc']::TEXT[]), 'conducteur_colors', COALESCE(c.conducteur_colors, ARRAY['#2563eb','#16a34a','#dc2626','#9333ea','#ea580c','#0891b2','#ca8a04','#be123c']::TEXT[])))
       FROM (
-        SELECT id, nom FROM companies WHERE id = 'noree'
+        SELECT id, nom, chantier_colors, conducteur_colors FROM companies WHERE id = 'noree'
         UNION ALL
-        SELECT id, nom FROM companies WHERE id = 'couvran'
+        SELECT id, nom, chantier_colors, conducteur_colors FROM companies WHERE id = 'couvran'
         UNION ALL
-        SELECT id, nom FROM companies WHERE id = 'rat'
+        SELECT id, nom, chantier_colors, conducteur_colors FROM companies WHERE id = 'rat'
       ) c
     ),
     'equipes', (
