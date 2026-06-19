@@ -373,8 +373,30 @@ DECLARE
   result JSONB;
 BEGIN
   SELECT jsonb_build_object(
-    'companies', (SELECT jsonb_agg(jsonb_build_object('id', c.id, 'nom', c.nom) ORDER BY c.id) FROM companies c),
-    'equipes', (SELECT jsonb_agg(jsonb_build_object('nom', e.nom, 'company_id', e.company_id, 'ordre', e.ordre) ORDER BY e.company_id, e.ordre) FROM equipes e),
+    'companies', (
+      SELECT jsonb_agg(jsonb_build_object('id', c.id, 'nom', c.nom))
+      FROM (
+        SELECT id, nom FROM companies WHERE id = 'noree'
+        UNION ALL
+        SELECT id, nom FROM companies WHERE id = 'couvran'
+        UNION ALL
+        SELECT id, nom FROM companies WHERE id = 'rat'
+      ) c
+    ),
+    'equipes', (
+      SELECT jsonb_agg(jsonb_build_object('nom', e.nom, 'company_id', e.company_id, 'ordre', e.ordre))
+      FROM (
+        SELECT nom, company_id, ordre
+        FROM equipes
+        ORDER BY
+          CASE company_id
+            WHEN 'noree' THEN 1
+            WHEN 'couvran' THEN 2
+            WHEN 'rat' THEN 3
+            ELSE 4
+          END, ordre
+      ) e
+    ),
     'chantiers', (SELECT jsonb_agg(to_jsonb(ch)) FROM chantiers ch),
     'conges', (SELECT jsonb_agg(to_jsonb(co)) FROM conges co),
     'conducteurs', (SELECT jsonb_agg(to_jsonb(cd)) FROM conducteurs cd),
