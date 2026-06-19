@@ -32,7 +32,7 @@ const CONDUCTEUR_COLORS = [
   '#be123c',
 ];
 
-const COMPANIES = ['Noree', 'Entreprise 2', 'Entreprise 3'];
+const COMPANIES = ['Noree', 'Couvrant', 'Le Rat'];
 
 const DEFAULT_TEAMS = Array.from({ length: 12 }, (_, i) => `Équipe ${i + 1}`);
 
@@ -672,7 +672,8 @@ export default function App() {
 
   function addTeamToCompany(companyIdx) {
     const perCompany = Math.max(1, Math.ceil(teams.length / COMPANIES.length));
-    const insertAt = Math.min(companyIdx * perCompany + perCompany, teams.length);
+    const targetEnd = Math.min((companyIdx + 1) * perCompany, teams.length);
+    const insertAt = Math.max(0, targetEnd);
     const name = `Équipe ${teams.length + 1}`;
     commit(() => {
       setTeams((prev) => {
