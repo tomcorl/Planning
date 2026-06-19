@@ -688,8 +688,10 @@ export default function App() {
       const isConge = conges.some(
         (c) =>
           (c.equipe === chantier.equipe || c.allEquipes) &&
-          sameOrAfter(d.date, c.start) &&
-          sameOrBefore(d.date, c.end)
+          (() => {
+            const realEnd = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
+            return sameOrAfter(d.date, c.start) && sameOrBefore(d.date, realEnd);
+          })()
       );
 
       if (isFerie || isConge) {
