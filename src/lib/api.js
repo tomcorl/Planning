@@ -46,7 +46,7 @@ export async function loadPlanningData() {
     if (seenConge.has(key)) return false;
     seenConge.add(key);
     return true;
-  }).map((c) => ({ id: c.id, equipe: c.equipe, start: c.start, duree: c.duree, nom: c.nom, allEquipes: !!c.all_equipes, companyId: c.company_id }));
+  }).map((c) => ({ id: c.id, equipe: c.equipe, start: (c.start || '').split(' ')[0], duree: c.duree, nom: c.nom, allEquipes: !!c.all_equipes, companyId: c.company_id }));
 
   return {
     companies: data.companies || [],
@@ -71,7 +71,7 @@ function normalizeChantier(c) {
     id: c.id,
     company_id: c.company_id,
     equipe: c.equipe,
-    start: c.start,
+    start: (c.start || '').split(' ')[0],
     duree: c.duree,
     nom: c.nom,
     conducteurId: c.conducteurId,
