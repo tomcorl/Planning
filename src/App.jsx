@@ -674,25 +674,7 @@ export default function App() {
 
     if (days.length === 0) return [];
 
-    const segments = [];
-    let segStart = null;
-
-    for (const d of days) {
-      if (isBlockedDay(chantier.equipe, d.date)) {
-        if (segStart !== null) {
-          segments.push({ start: segStart, end: d.i - 1 });
-          segStart = null;
-        }
-      } else {
-        if (segStart === null) segStart = d.i;
-      }
-    }
-
-    if (segStart !== null) {
-      segments.push({ start: segStart, end: days[days.length - 1].i });
-    }
-
-    return segments;
+    return [{ start: days[0].i, end: days[days.length - 1].i }];
   }
 
   function getCongeSegment(conge) {
