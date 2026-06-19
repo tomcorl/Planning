@@ -12,17 +12,6 @@ export async function logout() {
   await supabase.auth.signOut();
 }
 
-export async function getSession() {
-  const { data } = await supabase.auth.getSession();
-  return data.session;
-}
-
-export function onAuthChange(callback) {
-  return supabase.auth.onAuthStateChange((event, session) => {
-    callback(event, session);
-  });
-}
-
 // ─── COMPANY DATA LOADING ──────────────────────────────
 
 export async function loadPlanningData() {

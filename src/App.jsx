@@ -228,7 +228,6 @@ export default function App() {
     [theme]
   );
 
-  // Restore or jump to today after data loads
   // ── Supabase Auth + Data Loading ──
   const loadedRef = useRef(false);
   const localIdRef = useRef(0);
@@ -541,6 +540,11 @@ export default function App() {
     });
   }
 
+  const keyRef = useRef({ selectedItem: null, modalOpen: false, clipboard: null });
+  useEffect(() => {
+    keyRef.current = { selectedItem, modalOpen: modal.open, clipboard };
+  });
+
   useEffect(() => {
     function onKeyDown(e) {
       const z = e.key.toLowerCase() === 'z';
@@ -556,20 +560,22 @@ export default function App() {
         redo();
       }
 
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItem && !modal.open) {
+      const { selectedItem: sel, modalOpen, clipboard: clip } = keyRef.current;
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && sel && !modalOpen) {
         e.preventDefault();
         deleteSelectedItem();
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selectedItem && !modal.open) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && sel && !modalOpen) {
         e.preventDefault();
-        const item = selectedItem.type === 'chantier'
-          ? chantiers.find((c) => c.id === selectedItem.id)
-          : conges.find((c) => c.id === selectedItem.id);
-        if (item) setClipboard({ ...item, sourceType: selectedItem.type });
+        const item = sel.type === 'chantier'
+          ? chantiers.find((c) => c.id === sel.id)
+          : conges.find((c) => c.id === sel.id);
+        if (item) setClipboard({ ...item, sourceType: sel.type });
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clipboard && !modal.open) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clip && !modalOpen) {
         e.preventDefault();
         pasteClipboard();
       }
@@ -577,7 +583,7 @@ export default function App() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  });
+  }, []);
 
   function dayIndex(date) {
     return visibleDays.findIndex((d) => d.date === date);
@@ -1244,7 +1250,7 @@ export default function App() {
     });
 
     return map;
-  }, [chantiers, conges, holidays, visibleDays]);
+  }, [chantiers, holidays, visibleDays]);
 
   const gridTemplateColumns = `260px repeat(${visibleDays.length}, ${cellWidth}px)`;
 
@@ -1500,7 +1506,6 @@ export default function App() {
                       }}
                       onDrop={(e) => {
                         e.preventDefault();
-                        setDragPreview(null);
                         onDrop(e, row.teamIndex || equipeIndex, day.date);
                       }}
                     >
