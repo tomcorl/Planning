@@ -25,29 +25,13 @@ export function onAuthChange(callback) {
 
 // ─── COMPANY DATA LOADING ──────────────────────────────
 
-export async function loadCompanies() {
-  const { data, error } = await supabase.from('companies').select('*').order('id');
+export async function loadPlanningData() {
+  const { data, error } = await supabase.rpc('get_planning_data');
   if (error) throw error;
-  return data || [];
-}
-
-export async function loadAllData() {
-  const [equipes, conducteurs, chantiers, conges, customFeries] = await Promise.all([
-    supabase.from('equipes').select('*').order('ordre'),
-    supabase.from('conducteurs').select('*'),
-    supabase.from('chantiers').select('*'),
-    supabase.from('conges').select('*'),
-    supabase.from('custom_feries').select('*'),
-  ]);
-
-  if (equipes.error) { console.error('load equipes', equipes.error); throw equipes.error; }
-  if (conducteurs.error) { console.error('load conducteurs', conducteurs.error); throw conducteurs.error; }
-  if (chantiers.error) { console.error('load chantiers', chantiers.error); throw chantiers.error; }
-  if (conges.error) { console.error('load conges', conges.error); throw conges.error; }
-  if (customFeries.error) { console.error('load custom_feries', customFeries.error); throw customFeries.error; }
+  if (!data) return { companies: [], equipes: [], conducteurs: [], chantiers: [], conges: [], customFeries: [] };
 
   const seenChantier = new Set();
-  const dedupedChantiers = chantiers.data
+  const dedupedChantiers = (data.chantiers || [])
     .filter((c) => {
       const key = `${c.equipe}|${c.start}|${c.nom}`;
       if (seenChantier.has(key)) return false;
@@ -57,7 +41,7 @@ export async function loadAllData() {
     .map(normalizeChantier);
 
   const seenConge = new Set();
-  const dedupedConges = conges.data.filter((c) => {
+  const dedupedConges = (data.conges || []).filter((c) => {
     const key = `${c.equipe}|${c.start}|${c.nom}`;
     if (seenConge.has(key)) return false;
     seenConge.add(key);
@@ -65,11 +49,12 @@ export async function loadAllData() {
   }).map((c) => ({ id: c.id, equipe: c.equipe, start: c.start, duree: c.duree, nom: c.nom, allEquipes: !!c.all_equipes, companyId: c.company_id }));
 
   return {
-    equipes: equipes.data.map((e) => ({ nom: e.nom, companyId: e.company_id, ordre: e.ordre })),
-    conducteurs: conducteurs.data.map((c) => ({ id: c.id, nom: c.nom, color: c.color, companyId: c.company_id })),
+    companies: data.companies || [],
+    equipes: (data.equipes || []).map((e) => ({ nom: e.nom, companyId: e.company_id, ordre: e.ordre })),
+    conducteurs: (data.conducteurs || []).map((c) => ({ id: c.id, nom: c.nom, color: c.color, companyId: c.company_id })),
     chantiers: dedupedChantiers,
     conges: dedupedConges,
-    customFeries: customFeries.data.map((f) => ({ ...f, companyId: f.company_id })),
+    customFeries: (data.custom_feries || []).map((f) => ({ ...f, companyId: f.company_id })),
   };
 }
 

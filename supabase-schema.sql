@@ -365,3 +365,21 @@ BEGIN
   RETURN v_result;
 END;
 $$;
+
+-- RPC pour charger toutes les données planning (bypass RLS pour l'affichage toutes entreprises)
+CREATE OR REPLACE FUNCTION get_planning_data()
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  result JSONB;
+BEGIN
+  SELECT jsonb_build_object(
+    'companies', (SELECT jsonb_agg(jsonb_build_object('id', c.id, 'nom', c.nom) ORDER BY c.id) FROM companies c),
+    'equipes', (SELECT jsonb_agg(jsonb_build_object('nom', e.nom, 'company_id', e.company_id, 'ordre', e.ordre) ORDER BY e.company_id, e.ordre) FROM equipes e),
+    'chantiers', (SELECT jsonb_agg(to_jsonb(ch)) FROM chantiers ch),
+    'conges', (SELECT jsonb_agg(to_jsonb(co)) FROM conges co),
+    'conducteurs', (SELECT jsonb_agg(to_jsonb(cd)) FROM conducteurs cd),
+    'custom_feries', (SELECT jsonb_agg(to_jsonb(cf)) FROM custom_feries cf)
+  ) INTO result;
+  RETURN result;
+END;
+$$;

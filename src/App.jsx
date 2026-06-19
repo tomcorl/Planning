@@ -310,23 +310,20 @@ export default function App() {
   async function loadAllCompanyData() {
     setDataLoading(true);
     try {
-      const [comps, allData] = await Promise.all([
-        api.loadCompanies(),
-        api.loadAllData(),
-      ]);
-      setCompanies(comps);
+      const allData = await api.loadPlanningData();
+      setCompanies(allData.companies);
 
       if (allData.equipes.length > 0) {
         setTeams(allData.equipes);
       } else {
         const defaultTeams = [];
-        for (const comp of comps) {
+        for (const comp of allData.companies) {
           for (let i = 0; i < DEFAULT_TEAMS_COUNT; i++) {
             defaultTeams.push({ nom: `Équipe ${i + 1}`, companyId: comp.id });
           }
         }
         setTeams(defaultTeams);
-        for (const comp of comps) {
+        for (const comp of allData.companies) {
           const names = defaultTeams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
           await api.upsertEquipes(names, comp.id);
         }
