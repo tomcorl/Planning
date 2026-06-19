@@ -1682,10 +1682,10 @@ export default function App() {
       )}
 
       {colorManager && (
-        <div className="modal-bg" onMouseDown={() => setColorManager(null)}>
+        <div className="modal-bg modal-bg-top" onMouseDown={() => setColorManager(null)}>
           <div className="modal color-manager-modal" onMouseDown={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Modifier la couleur</h2>
+              <h2>{colorManager.index === -1 ? 'Ajouter une couleur' : 'Modifier la couleur'}</h2>
               <button className="modal-header-close" onClick={() => setColorManager(null)}>×</button>
             </div>
             <div className="modal-body">
@@ -1709,10 +1709,15 @@ export default function App() {
             </div>
             <div className="modal-footer">
               <button className="modal-btn-primary" onClick={() => {
-                const setter = colorManager.type === 'chantier' ? setChantierColors : setConducteurColors;
-                setter((prev) => prev.map((c, i) => i === colorManager.index ? colorManager.color : c));
+                if (colorManager.index === -1) {
+                  const setter = colorManager.type === 'chantier' ? setChantierColors : setConducteurColors;
+                  setter((prev) => [...prev, colorManager.color]);
+                } else {
+                  const setter = colorManager.type === 'chantier' ? setChantierColors : setConducteurColors;
+                  setter((prev) => prev.map((c, i) => i === colorManager.index ? colorManager.color : c));
+                }
                 setColorManager(null);
-              }}>Valider</button>
+              }}>{colorManager.index === -1 ? 'Ajouter' : 'Valider'}</button>
               <button className="modal-btn-cancel" onClick={() => setColorManager(null)}>Annuler</button>
             </div>
           </div>
@@ -1938,17 +1943,11 @@ export default function App() {
                           >×</button>
                         </div>
                       ))}
-                      <label className="color-dot-wrapper" title="Ajouter une couleur">
-                        <input
-                          type="color"
-                          className="color-add-input"
-                          value="#2563eb"
-                          onChange={(e) => {
-                            setChantierColors((prev) => [...prev, e.target.value]);
-                          }}
-                        />
-                        <span className="color-dot color-add">+</span>
-                      </label>
+                      <button
+                        className="color-dot color-add"
+                        title="Ajouter une couleur"
+                        onClick={() => setColorManager({ type: 'chantier', index: -1, color: '#2563eb' })}
+                      >+</button>
                     </div>
                   </div>
 
@@ -2033,15 +2032,11 @@ export default function App() {
                             >×</button>
                           </div>
                         ))}
-                        <label className="color-dot-wrapper mini" title="Ajouter une couleur">
-                          <input
-                            type="color"
-                            className="color-add-input"
-                            value="#2563eb"
-                            onChange={(e) => setConducteurColors((prev) => [...prev, e.target.value])}
-                          />
-                          <span className="color-dot color-add mini-add">+</span>
-                        </label>
+                        <button
+                          className="color-dot color-add mini-add"
+                          title="Ajouter une couleur"
+                          onClick={() => setColorManager({ type: 'conducteur', index: -1, color: '#2563eb' })}
+                        >+</button>
                       </div>
                     </div>
                   ))}
