@@ -685,6 +685,7 @@ export default function App() {
 
     for (const d of days) {
       const blockedFerie = isFerie(d.date);
+      const blockedAout = !chantier.force_aout && isAugustClosure(d.date);
       const isConge = conges.some(
         (c) =>
           (c.equipe === chantier.equipe || c.allEquipes) &&
@@ -694,7 +695,7 @@ export default function App() {
           })()
       );
 
-      if (blockedFerie || isConge) {
+      if (blockedFerie || blockedAout || isConge) {
         if (segStart !== null) {
           segments.push({ start: segStart, end: d.i - 1 });
           segStart = null;
@@ -1932,6 +1933,17 @@ export default function App() {
                         />
                         <span className="toggle-track" />
                         <span className="toggle-label">Toutes les équipes (congé simultané)</span>
+                      </label>
+                    )}
+                    {modal.type === 'chantier' && (
+                      <label className="toggle-switch">
+                        <input
+                          type="checkbox"
+                          checked={form.force_aout || false}
+                          onChange={(e) => setForm({ ...form, force_aout: e.target.checked })}
+                        />
+                        <span className="toggle-track" />
+                        <span className="toggle-label">Forcer en août (traverser la fermeture)</span>
                       </label>
                     )}
                   </div>

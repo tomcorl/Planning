@@ -69,6 +69,7 @@ function normalizeChantier(c) {
     termine: !!c.termine,
     linked: !!c.linked,
     detail: c.detail || '',
+    force_aout: !!c.force_aout,
   };
 }
 
@@ -88,6 +89,7 @@ export async function upsertChantiers(chantiers, companyId) {
       termine: c.termine ? 1 : 0,
       linked: c.linked ? 1 : 0,
       detail: c.detail || '',
+      force_aout: c.force_aout ? 1 : 0,
     };
     if (c.id && c.id > 0 && c.id <= 2147483647) row.id = c.id;
     return row;
