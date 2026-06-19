@@ -1504,7 +1504,7 @@ export default function App() {
                         onDrop(e, row.teamIndex || equipeIndex, day.date);
                       }}
                     >
-                      {segments.map(({ chantier, seg, i, stack }) => {
+                      {segments.filter(({ seg }) => dayIndex(day.date) === seg.start).map(({ chantier, seg, i, stack }) => {
                         const conducteur = getConducteur(chantier.conducteurId);
                         const width = (seg.end - seg.start + 1) * cellWidth - 8;
                         const compact = segments.length > 1;
