@@ -158,6 +158,16 @@ export default function App() {
   });
   const [form, setForm] = useState(null);
 
+  const [chantierColors, setChantierColors] = useState(() => {
+    try { const s = JSON.parse(localStorage.getItem('chantierColors')); if (s && s.length) return s; } catch(e) {}
+    return [...CHANTIER_COLORS];
+  });
+  const [conducteurColors, setConducteurColors] = useState(() => {
+    try { const s = JSON.parse(localStorage.getItem('conducteurColors')); if (s && s.length) return s; } catch(e) {}
+    return [...CONDUCTEUR_COLORS];
+  });
+  const [colorManager, setColorManager] = useState(null);
+
   const allDays = useMemo(
     () => generateDays(calendarStart, calendarLength),
     [calendarStart, calendarLength]
@@ -237,6 +247,8 @@ export default function App() {
   // Persist UI preferences to localStorage (client-side only)
   useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
   useEffect(() => localStorage.setItem('cellWidth', JSON.stringify(cellWidth)), [cellWidth]);
+  useEffect(() => localStorage.setItem('chantierColors', JSON.stringify(chantierColors)), [chantierColors]);
+  useEffect(() => localStorage.setItem('conducteurColors', JSON.stringify(conducteurColors)), [conducteurColors]);
 
   // Restore scroll position or jump to today after data loads
   useEffect(() => {
@@ -1669,6 +1681,44 @@ export default function App() {
         </div>
       )}
 
+      {colorManager && (
+        <div className="modal-bg" onMouseDown={() => setColorManager(null)}>
+          <div className="modal color-manager-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Modifier la couleur</h2>
+              <button className="modal-header-close" onClick={() => setColorManager(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="color-manager-preview">
+                <div className="color-manager-swatch" style={{ background: colorManager.color }} />
+                <input
+                  type="color"
+                  value={colorManager.color}
+                  onChange={(e) => setColorManager({ ...colorManager, color: e.target.value })}
+                />
+              </div>
+              <input
+                type="text"
+                value={colorManager.color}
+                className="color-manager-hex"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setColorManager({ ...colorManager, color: v });
+                }}
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="modal-btn-primary" onClick={() => {
+                const setter = colorManager.type === 'chantier' ? setChantierColors : setConducteurColors;
+                setter((prev) => prev.map((c, i) => i === colorManager.index ? colorManager.color : c));
+                setColorManager(null);
+              }}>Valider</button>
+              <button className="modal-btn-cancel" onClick={() => setColorManager(null)}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {holidayModalOpen && (
         <div
           className="modal-bg"
@@ -1862,24 +1912,42 @@ export default function App() {
                 <>
                   <div className="modal-field">
                     <label>Couleur du chantier</label>
-                    <div className="color-grid">
-                      {CHANTIER_COLORS.map((c) => (
-                        <button
-                          key={c}
-                          className={`color-dot ${
-                            form.color === c ? 'selected-color' : ''
-                          }`}
-                          style={{ background: c }}
-                          onClick={() => setForm({ ...form, color: c })}
-                        />
+                    <div className="color-grid editable-colors">
+                      {chantierColors.map((c, ci) => (
+                        <div key={ci} className="color-dot-wrapper">
+                          <button
+                            className={`color-dot ${
+                              form.color === c ? 'selected-color' : ''
+                            }`}
+                            style={{ background: c }}
+                            onClick={() => setForm({ ...form, color: c })}
+                          />
+                          <button
+                            className="color-dot-edit"
+                            onClick={() => setColorManager({ type: 'chantier', index: ci, color: c })}
+                            title="Modifier"
+                          >✎</button>
+                          <button
+                            className="color-dot-delete"
+                            onClick={() => {
+                              const next = chantierColors.filter((_, i) => i !== ci);
+                              setChantierColors(next.length > 0 ? next : [...CHANTIER_COLORS]);
+                              if (form.color === c) setForm({ ...form, color: next[0] || CHANTIER_COLORS[0] });
+                            }}
+                            title="Supprimer"
+                          >×</button>
+                        </div>
                       ))}
-                      <label className="color-picker-label" title="Couleur personnalisée">
+                      <label className="color-dot-wrapper" title="Ajouter une couleur">
                         <input
                           type="color"
-                          value={form.color || '#2563eb'}
-                          onChange={(e) => setForm({ ...form, color: e.target.value })}
+                          className="color-add-input"
+                          value="#2563eb"
+                          onChange={(e) => {
+                            setChantierColors((prev) => [...prev, e.target.value]);
+                          }}
                         />
-                        <span className="color-picker-icon">🎨</span>
+                        <span className="color-dot color-add">+</span>
                       </label>
                     </div>
                   </div>
@@ -1935,21 +2003,45 @@ export default function App() {
                           )
                         }
                       />
-                      <div className="mini-color-grid">
-                        {CONDUCTEUR_COLORS.map((color) => (
-                          <button
-                            key={color}
-                            style={{ background: color }}
-                            className={c.color === color ? 'selected-color' : ''}
-                            onClick={() =>
-                              setConducteurs((prev) =>
-                                prev.map((x, idx) =>
-                                  idx === i ? { ...x, color } : x
+                      <div className="mini-color-grid editable-colors">
+                        {conducteurColors.map((color, ci) => (
+                          <div key={ci} className="color-dot-wrapper mini">
+                            <button
+                              style={{ background: color }}
+                              className={c.color === color ? 'selected-color' : ''}
+                              onClick={() =>
+                                setConducteurs((prev) =>
+                                  prev.map((x, idx) =>
+                                    idx === i ? { ...x, color } : x
+                                  )
                                 )
-                              )
-                            }
-                          />
+                              }
+                            />
+                            <button
+                              className="color-dot-edit mini-edit"
+                              onClick={() => setColorManager({ type: 'conducteur', index: ci, color })}
+                              title="Modifier"
+                            >✎</button>
+                            <button
+                              className="color-dot-delete mini-delete"
+                              onClick={() => {
+                                const next = conducteurColors.filter((_, k) => k !== ci);
+                                setConducteurColors(next.length > 0 ? next : [...CONDUCTEUR_COLORS]);
+                                if (c.color === color) setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, color: next[0] || CONDUCTEUR_COLORS[0] } : x));
+                              }}
+                              title="Supprimer"
+                            >×</button>
+                          </div>
                         ))}
+                        <label className="color-dot-wrapper mini" title="Ajouter une couleur">
+                          <input
+                            type="color"
+                            className="color-add-input"
+                            value="#2563eb"
+                            onChange={(e) => setConducteurColors((prev) => [...prev, e.target.value])}
+                          />
+                          <span className="color-dot color-add mini-add">+</span>
+                        </label>
                       </div>
                     </div>
                   ))}
@@ -1959,7 +2051,7 @@ export default function App() {
                       {
                         id: nextLocalId(),
                         nom: `Conducteur ${prev.length + 1}`,
-                        color: CONDUCTEUR_COLORS[prev.length % CONDUCTEUR_COLORS.length],
+                        color: conducteurColors[prev.length % conducteurColors.length] || conducteurColors[0] || '#2563eb',
                       },
                     ])
                   }>
