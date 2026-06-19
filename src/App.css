@@ -309,19 +309,20 @@ button:active {
 
 .add-team-group {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   align-items: center;
 }
 
 .add-team-group button {
-  padding: 2px 8px;
-  font-size: 10px;
+  padding: 1px 6px;
+  font-size: 9px;
   font-weight: 700;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--surface-2);
   color: var(--text);
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.15s;
 }
 

@@ -1376,11 +1376,14 @@ export default function App() {
             <div className="corner week-corner">
             <strong>Équipes</strong>
             <div className="add-team-group">
-              {companies.map((comp) => (
-                <button key={comp.id} onClick={() => addTeamToCompany(comp.id)} title={`Ajouter à ${comp.nom}`}>
-                  + {comp.nom}
-                </button>
-              ))}
+              {companies.map((comp) => {
+                const short = comp.nom.length > 8 ? comp.nom.split(' ')[0].slice(0, 8) : comp.nom;
+                return (
+                  <button key={comp.id} onClick={() => addTeamToCompany(comp.id)} title={`Ajouter à ${comp.nom}`}>
+                    + {short}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
