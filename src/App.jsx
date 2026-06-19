@@ -32,9 +32,7 @@ const CONDUCTEUR_COLORS = [
   '#be123c',
 ];
 
-const COMPANIES = ['Noree', 'Couvrant', 'Le Rat'];
-
-const DEFAULT_TEAMS = Array.from({ length: 12 }, (_, i) => `Équipe ${i + 1}`);
+const DEFAULT_TEAMS_COUNT = 12;
 
 function toDate(value) {
   if (value instanceof Date) return value;
@@ -137,8 +135,8 @@ export default function App() {
   const [calendarLength, setCalendarLength] = useState(200);
   const [jumpDate, setJumpDate] = useState(today);
 
+  const [companies, setCompanies] = useState([]);
   const [teams, setTeams] = useState([]);
-  const [addCompany, setAddCompany] = useState(0);
   const [conducteurs, setConducteurs] = useState([]);
   const [customFeries, setCustomFeries] = useState([]);
   const [ferieForm, setFerieForm] = useState({ nom: '', date: today });
@@ -204,23 +202,25 @@ export default function App() {
 
   const gridRows = useMemo(() => {
     const rows = [];
-    const perCompany = Math.max(1, Math.ceil(teams.length / COMPANIES.length));
-    let idx = 0;
-    for (let c = 0; c < COMPANIES.length; c++) {
-      rows.push({ type: 'company-header', name: COMPANIES[c], id: `ch-${c}` });
-      const count = c < COMPANIES.length - 1 ? perCompany : teams.length - idx;
-      for (let t = 0; t < count && idx < teams.length; t++, idx++) {
-        rows.push({ type: 'team', teamIndex: idx, name: teams[idx] });
-      }
-      if (c < COMPANIES.length - 1) {
-        rows.push({ type: 'pending', id: `p-${c}-0`, equipeIndex: teams.length + c * 3 + 0 });
-        rows.push({ type: 'pending', id: `p-${c}-1`, equipeIndex: teams.length + c * 3 + 1 });
-        rows.push({ type: 'pending', id: `p-${c}-2`, equipeIndex: teams.length + c * 3 + 2 });
+    for (let c = 0; c < companies.length; c++) {
+      const comp = companies[c];
+      rows.push({ type: 'company-header', name: comp.nom, id: `ch-${comp.id}` });
+      const companyTeams = teams
+        .map((t, i) => ({ ...t, index: i }))
+        .filter((t) => t.companyId === comp.id);
+      companyTeams.forEach((t) => {
+        rows.push({ type: 'team', teamIndex: t.index, name: t.nom });
+      });
+      if (c < companies.length - 1) {
+        const baseOffset = teams.length + c * 3;
+        rows.push({ type: 'pending', id: `p-${c}-0`, equipeIndex: baseOffset });
+        rows.push({ type: 'pending', id: `p-${c}-1`, equipeIndex: baseOffset + 1 });
+        rows.push({ type: 'pending', id: `p-${c}-2`, equipeIndex: baseOffset + 2 });
         rows.push({ type: 'separator', id: `s-${c}` });
       }
     }
     return rows;
-  }, [teams]);
+  }, [teams, companies]);
   useEffect(
     () => document.documentElement.setAttribute('data-theme', theme),
     [theme]
@@ -274,36 +274,68 @@ export default function App() {
 
   // Debounced persistence to Supabase (runs 800ms after data settles)
   useEffect(() => {
-    if (!loadedRef.current || !session) return;
+    if (!loadedRef.current || !session || !companies.length) return;
     const timer = setTimeout(() => {
-      api.upsertChantiers(chantiers).catch(console.error);
-      api.upsertConges(conges).catch(console.error);
+      for (const comp of companies) {
+        const compChantiers = chantiers.filter((c) => {
+          const t = teams[c.equipe];
+          return t && t.companyId === comp.id;
+        });
+        api.upsertChantiers(compChantiers, comp.id).catch(console.error);
+        const compConges = conges.filter((c) => {
+          const t = teams[c.equipe];
+          return t && t.companyId === comp.id;
+        });
+        api.upsertConges(compConges, comp.id).catch(console.error);
+      }
     }, 800);
     return () => clearTimeout(timer);
-  }, [chantiers, conges, session]);
+  }, [chantiers, conges, session, companies, teams]);
 
   useEffect(() => {
-    if (!loadedRef.current || !session) return;
+    if (!loadedRef.current || !session || !companies.length) return;
     const timer = setTimeout(() => {
-      api.upsertEquipes(teams).catch(console.error);
-      api.upsertConducteurs(conducteurs).catch(console.error);
-      api.upsertCustomFeries(customFeries).catch(console.error);
+      for (const comp of companies) {
+        const compNames = teams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
+        api.upsertEquipes(compNames, comp.id).catch(console.error);
+        const compConducteurs = conducteurs.filter((c) => c.companyId === comp.id);
+        api.upsertConducteurs(compConducteurs, comp.id).catch(console.error);
+      }
+      // Save custom feries to first company (current UI limitation)
+      api.upsertCustomFeries(customFeries, companies[0].id).catch(console.error);
     }, 800);
     return () => clearTimeout(timer);
-  }, [teams, conducteurs, customFeries, session]);
+  }, [teams, conducteurs, customFeries, session, companies]);
 
-  async function loadCompanyData() {
+  async function loadAllCompanyData() {
     setDataLoading(true);
     try {
-      const data = await api.loadCompanyData();
-      setTeams(data.equipes.length > 0 ? data.equipes : DEFAULT_TEAMS);
-      if (data.equipes.length === 0) {
-        await api.upsertEquipes(DEFAULT_TEAMS);
+      const [comps, allData] = await Promise.all([
+        api.loadCompanies(),
+        api.loadAllData(),
+      ]);
+      setCompanies(comps);
+
+      if (allData.equipes.length > 0) {
+        setTeams(allData.equipes);
+      } else {
+        const defaultTeams = [];
+        for (const comp of comps) {
+          for (let i = 0; i < DEFAULT_TEAMS_COUNT; i++) {
+            defaultTeams.push({ nom: `Équipe ${i + 1}`, companyId: comp.id });
+          }
+        }
+        setTeams(defaultTeams);
+        for (const comp of comps) {
+          const names = defaultTeams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
+          await api.upsertEquipes(names, comp.id);
+        }
       }
-      setConducteurs(data.conducteurs.length > 0 ? data.conducteurs : []);
-      setChantiers(data.chantiers);
-      setConges(data.conges);
-      setCustomFeries(data.customFeries);
+
+      setConducteurs(allData.conducteurs.length > 0 ? allData.conducteurs : []);
+      setChantiers(allData.chantiers);
+      setConges(allData.conges);
+      setCustomFeries(allData.customFeries);
       setHistory({ past: [], future: [] });
       setSelection(null);
       setSelectedItem(null);
@@ -335,7 +367,7 @@ export default function App() {
     try {
       const enrichedUsers = await api.fetchUsers();
       setUsers(enrichedUsers);
-      await loadCompanyData();
+      await loadAllCompanyData();
       loadedRef.current = true;
     } catch (e) {
       console.error('Failed to load initial data:', e);
@@ -662,25 +694,14 @@ export default function App() {
 
   function updateTeam(index, value) {
     commit(() => {
-      setTeams((prev) => prev.map((t, i) => (i === index ? value : t)));
+      setTeams((prev) => prev.map((t, i) => (i === index ? { ...t, nom: value } : t)));
     });
   }
 
-  function addTeam() {
-    commit(() => setTeams((prev) => [...prev, `Équipe ${prev.length + 1}`]));
-  }
-
-  function addTeamToCompany(companyIdx) {
-    const perCompany = Math.max(1, Math.ceil(teams.length / COMPANIES.length));
-    const targetEnd = Math.min((companyIdx + 1) * perCompany, teams.length);
-    const insertAt = Math.max(0, targetEnd);
+  function addTeamToCompany(companyId) {
     const name = `Équipe ${teams.length + 1}`;
     commit(() => {
-      setTeams((prev) => {
-        const next = [...prev];
-        next.splice(insertAt, 0, name);
-        return next;
-      });
+      setTeams((prev) => [...prev, { nom: name, companyId }]);
     });
   }
 
@@ -1277,7 +1298,7 @@ export default function App() {
             <rect x="14" y="14" width="7" height="7" rx="1" />
           </svg>
           Planning
-          <span>Noree Construction</span>
+          <span>{companies.length > 0 ? `${companies[0].nom} + ${companies.length - 1}` : 'Planning'}</span>
         </div>
 
         {activePage === 'planning' && (
@@ -1360,9 +1381,11 @@ export default function App() {
             <div className="corner week-corner">
             <strong>Équipes</strong>
             <div className="add-team-group">
-              <button onClick={() => addTeamToCompany(0)} title="Ajouter à Noree">+ N</button>
-              <button onClick={() => addTeamToCompany(1)} title="Ajouter à Entreprise 2">+ E2</button>
-              <button onClick={() => addTeamToCompany(2)} title="Ajouter à Entreprise 3">+ E3</button>
+              {companies.map((comp) => (
+                <button key={comp.id} onClick={() => addTeamToCompany(comp.id)} title={`Ajouter à ${comp.nom}`}>
+                  + {comp.nom}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1806,11 +1829,21 @@ export default function App() {
                       onChange={(e) => setForm({ ...form, equipe: e.target.value })}
                       disabled={form.allEquipes}
                     >
-                      {teams.map((team, i) => (
-                        <option key={i} value={i}>
-                          {team}
-                        </option>
-                      ))}
+                      {companies.map((comp) => {
+                        const compTeams = teams
+                          .map((t, i) => ({ ...t, index: i }))
+                          .filter((t) => t.companyId === comp.id);
+                        if (compTeams.length === 0) return null;
+                        return (
+                          <optgroup key={comp.id} label={comp.nom}>
+                            {compTeams.map((t) => (
+                              <option key={t.index} value={t.index}>
+                                {t.nom}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
                     </select>
                     {modal.type === 'conge' && (
                       <label className="toggle-switch">
