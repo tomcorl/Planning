@@ -493,7 +493,7 @@ button:active {
   height: 8px !important;
   min-height: 8px;
   box-shadow: none !important;
-  border-right: none;
+  border: none !important;
   z-index: 1;
   cursor: default;
 }
@@ -504,7 +504,7 @@ button:active {
 
 .separator-cell {
   background: #374151 !important;
-  border-bottom: none;
+  border: none !important;
   height: 8px !important;
   min-height: 8px;
 }
