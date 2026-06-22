@@ -1593,8 +1593,8 @@ export default function App() {
                                 onMouseEnter={(e) => {
                                   const rect = e.currentTarget.getBoundingClientRect();
                                   const tip = e.currentTarget.querySelector('.tooltip');
-                                  tip.style.left = (rect.left + 10) + 'px';
-                                  tip.style.top = (rect.top - 120) + 'px';
+                                  tip.style.left = (rect.left - 260) + 'px';
+                                  tip.style.top = (rect.top - 10) + 'px';
                                 }}
                               >
                                 💬

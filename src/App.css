@@ -652,10 +652,10 @@ button:active {
 .compact-bloc .note-icon {
   display: flex !important;
   font-size: 8px;
-  width: 14px;
-  height: 14px;
-  top: 1px;
-  right: 3px;
+  width: 16px;
+  height: 16px;
+  top: -3px;
+  right: -3px;
 }
 
 .chantier {
@@ -752,14 +752,14 @@ button:active {
 
 .note-icon {
   position: absolute;
-  top: 2px;
-  right: 6px;
-  width: 18px;
-  height: 18px;
+  top: -4px;
+  right: -4px;
+  width: 20px;
+  height: 20px;
   background: var(--surface);
   border-radius: 50%;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  font-size: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
