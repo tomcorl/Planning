@@ -1588,7 +1588,7 @@ export default function App() {
                               }
                             />
 
-                            {chantier.note && cellWidth >= 34 && (
+                            {chantier.note && cellWidth >= 22 && (
                               <div className="note-icon"
                                 onMouseEnter={(e) => {
                                   const rect = e.currentTarget.getBoundingClientRect();
@@ -1602,7 +1602,7 @@ export default function App() {
                               </div>
                             )}
 
-                            {chantier.linked && cellWidth >= 34 && (
+                            {chantier.linked && cellWidth >= 22 && (
                               <div className="link-icon">🔗</div>
                             )}
 

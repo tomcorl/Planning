@@ -640,7 +640,6 @@ button:active {
 
 .compact-bloc .chantier-content em,
 .compact-bloc .chantier-content small,
-.compact-bloc .note-icon,
 .compact-bloc .conducteur-bar {
   display: none;
 }
@@ -651,6 +650,13 @@ button:active {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.compact-bloc .note-icon {
+  display: flex !important;
+  font-size: 8px;
+  bottom: 2px;
+  right: 2px;
 }
 
 .chantier {
