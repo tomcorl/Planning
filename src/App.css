@@ -632,24 +632,21 @@ button:active {
   padding: 2px 6px;
 }
 
-.compact-bloc .chantier-content strong {
+.compact-bloc .chantier-title-row strong {
   max-width: calc(100% - 16px);
   font-size: 11px;
   line-height: 1.2;
 }
 
-.compact-bloc .chantier-content em,
+.compact-bloc .chantier-title-row em,
 .compact-bloc .chantier-content small,
 .compact-bloc .conducteur-bar {
   display: none;
 }
 
-.compact-bloc .chantier-content em {
-  display: block;
+.compact-bloc .chantier-title-row em {
+  display: inline;
   font-size: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .compact-bloc .note-icon {
