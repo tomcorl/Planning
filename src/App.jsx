@@ -1588,20 +1588,6 @@ export default function App() {
                               }
                             />
 
-                            {chantier.note && cellWidth >= 22 && (
-                              <div className="note-icon"
-                                onMouseEnter={(e) => {
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  const tip = e.currentTarget.querySelector('.tooltip');
-                                  tip.style.left = (rect.left - 268) + 'px';
-                                  tip.style.top = (rect.top - 10) + 'px';
-                                }}
-                              >
-                                💬
-                                <div className="tooltip">{chantier.note}</div>
-                              </div>
-                            )}
-
                             {chantier.linked && cellWidth >= 22 && (
                               <div className="link-icon">🔗</div>
                             )}
@@ -1609,6 +1595,7 @@ export default function App() {
                             <div className="chantier-content">
                               <strong>{chantier.nom}</strong>
                               {chantier.detail && <em>{chantier.detail}</em>}
+                              {chantier.note && <span className="note-text">{chantier.note}</span>}
                               <small>{chantier.duree} j</small>
                             </div>
 

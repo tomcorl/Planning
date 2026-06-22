@@ -640,6 +640,7 @@ button:active {
 
 .compact-bloc .chantier-content em,
 .compact-bloc .chantier-content small,
+.compact-bloc .chantier-content .note-text,
 .compact-bloc .conducteur-bar {
   display: none;
 }
@@ -652,11 +653,12 @@ button:active {
   white-space: nowrap;
 }
 
-.compact-bloc .note-icon {
-  display: flex !important;
-  font-size: 8px;
-  bottom: 2px;
-  right: 2px;
+.compact-bloc .chantier-content .note-text {
+  display: block;
+  font-size: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chantier {
@@ -683,6 +685,19 @@ button:active {
   font-style: normal;
   font-weight: 600;
   color: rgba(23, 32, 51, 0.65);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+  line-height: 1.2;
+}
+
+.chantier-content .note-text {
+  display: block;
+  font-size: 9px;
+  font-style: italic;
+  color: rgba(23, 32, 51, 0.55);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
