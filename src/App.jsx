@@ -1593,8 +1593,8 @@ export default function App() {
                                 onMouseEnter={(e) => {
                                   const rect = e.currentTarget.getBoundingClientRect();
                                   const tip = e.currentTarget.querySelector('.tooltip');
-                                  tip.style.left = (rect.left - 268) + 'px';
-                                  tip.style.top = (rect.top - 10) + 'px';
+                                  tip.style.left = (rect.left - 280) + 'px';
+                                  tip.style.top = (rect.top - 40) + 'px';
                                 }}
                               >
                                 💬
@@ -1607,8 +1607,10 @@ export default function App() {
                             )}
 
                             <div className="chantier-content">
-                              <strong>{chantier.nom}</strong>
-                              {chantier.detail && <em>{chantier.detail}</em>}
+                              <div className="chantier-title-row">
+                                <strong>{chantier.nom}</strong>
+                                {chantier.detail && <em>{chantier.detail}</em>}
+                              </div>
                               <small>{chantier.duree} j</small>
                             </div>
 
