@@ -366,6 +366,20 @@ BEGIN
 END;
 $$;
 
+-- Ajout colonnes couleurs pour companies (si pas déjà présentes)
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS chantier_colors TEXT[] DEFAULT ARRAY['#2563eb','#93c5fd','#eab308','#15803d','#6b7280','#f97316','#7dd3fc']::TEXT[];
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS conducteur_colors TEXT[] DEFAULT ARRAY['#2563eb','#16a34a','#dc2626','#9333ea','#ea580c','#0891b2','#ca8a04','#be123c']::TEXT[];
+
+-- RPC pour mettre à jour les couleurs (bypass RLS)
+CREATE OR REPLACE FUNCTION update_company_colors(p_company_id TEXT, p_chantier_colors TEXT[], p_conducteur_colors TEXT[])
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE companies
+  SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors
+  WHERE id = p_company_id;
+END;
+$$;
+
 -- RPC pour charger toutes les données planning (bypass RLS pour l'affichage toutes entreprises)
 CREATE OR REPLACE FUNCTION get_planning_data()
 RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$

@@ -49,9 +49,11 @@ export async function loadPlanningData() {
 
 export async function updateCompanyColors(companyId, chantierColors, conducteurColors) {
   const { error } = await supabase
-    .from('companies')
-    .update({ chantier_colors: chantierColors, conducteur_colors: conducteurColors })
-    .eq('id', companyId);
+    .rpc('update_company_colors', {
+      p_company_id: companyId,
+      p_chantier_colors: chantierColors,
+      p_conducteur_colors: conducteurColors,
+    });
   if (error) { console.error('update colors', error); throw error; }
 }
 

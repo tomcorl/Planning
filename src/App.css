@@ -766,23 +766,25 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .conge {
-  background: #334155;
+  background: #000;
   color: white;
   padding: 8px 10px;
   font-size: 11px;
   font-weight: 900;
   z-index: 1;
-  border-left: 3px solid #1e293b;
+  border-left: 3px solid #222;
   text-transform: uppercase;
   letter-spacing: 0.02em;
   display: flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   cursor: grab;
 }
 
 [data-theme='dark'] .conge {
-  background: #1e293b;
-  border-left-color: #475569;
+  background: #000;
+  border-left-color: #333;
 }
 
 .conge:active {
@@ -790,13 +792,13 @@ button:active {
 }
 
 .conge-entreprise {
-  background: #475569;
-  border-left-color: #1e293b;
+  background: #111;
+  border-left-color: #222;
 }
 
 [data-theme='dark'] .conge-entreprise {
-  background: #334155;
-  border-left-color: #1e293b;
+  background: #111;
+  border-left-color: #333;
 }
 
 /* ═══════════════════════════════════════════════
