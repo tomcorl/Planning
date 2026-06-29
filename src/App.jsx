@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import AdminUsersPage from './AdminUsersPage.jsx';
-import { CongeBloc } from './Blocs.jsx';
 
 import LoginPage from './LoginPage.jsx';
 import PaymentPage from './PaymentPage.jsx';
@@ -148,7 +147,6 @@ export default function App() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [dragPreview, setDragPreview] = useState(null);
   const dragThrottle = useRef(null);
-  const gridRef = useRef(null);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
 
@@ -935,7 +933,29 @@ export default function App() {
     e.dataTransfer.effectAllowed = 'move';
   }
 
-  // onDrop is now inlined on each cell (see grid rendering)
+  function onDrop(e, equipe, date) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragPreview(null);
+    const id = Number(e.dataTransfer.getData('itemId'));
+    const type = e.dataTransfer.getData('itemType') || 'chantier';
+    if (type === 'conge') {
+      const item = conges.find((c) => c.id === id);
+      if (!item) return;
+      commit(() => {
+        setConges((prev) =>
+          prev.map((c) => c.id === id ? { ...c, equipe, start: date } : c)
+        );
+      });
+      return;
+    }
+    const item = chantiers.find((c) => c.id === id);
+    if (!item) return;
+    const start = nextWorkingDay(date, equipe);
+    commit(() => {
+      setChantiers((prev) => applyInsertion(prev, item, equipe, start));
+    });
+  }
 
   function startResize(e, chantier, side) {
     e.preventDefault();
@@ -1419,7 +1439,7 @@ export default function App() {
         </div>
         </div>
 
-        <div ref={gridRef} className="grid main-grid" style={{ gridTemplateColumns, gridAutoRows: Math.round(56 + (cellWidth - 26) * (78 - 56) / 26) }}>
+        <div className="grid main-grid" style={{ gridTemplateColumns, gridAutoRows: Math.round(56 + (cellWidth - 26) * (78 - 56) / 26) }}>
 
           {gridRows.map((row) => {
             if (row.type === 'separator') {
@@ -1483,25 +1503,21 @@ export default function App() {
                     .map((c) => ({ conge: c, seg: getCongeSegment(c) }))
                     .filter((x) => x.seg && x.seg.start === dayIndex(day.date));
 
-                  const cellClasses = `cell ${equipeIndex % 2 ? 'odd' : ''} ${
-                    day.weekend ? 'weekend' : ''
-                  } ${isFerie(day.date) ? 'ferie' : ''} ${
-                    isAugustClosure(day.date) ? 'august-closure' : ''
-                  } ${day.date === today ? 'today' : ''} ${
-                    isSelected(equipeIndex, day.date) ? 'selected' : ''
-                  } ${
-                    dragPreview?.equipe === equipeIndex &&
-                    dragPreview?.date === day.date
-                      ? 'drag-preview'
-                      : ''
-                  } ${isPending ? 'pending-cell' : ''}`;
-
                   return (
                     <div
                       key={`${equipeIndex}-${day.date}`}
-                      data-equipe={equipeIndex}
-                      data-date={day.date}
-                      className={cellClasses}
+                      className={`cell ${equipeIndex % 2 ? 'odd' : ''} ${
+                        day.weekend ? 'weekend' : ''
+                      } ${isFerie(day.date) ? 'ferie' : ''} ${
+                        isAugustClosure(day.date) ? 'august-closure' : ''
+                      } ${day.date === today ? 'today' : ''} ${
+                        isSelected(equipeIndex, day.date) ? 'selected' : ''
+                      } ${
+                        dragPreview?.equipe === equipeIndex &&
+                        dragPreview?.date === day.date
+                          ? 'drag-preview'
+                          : ''
+                      } ${isPending ? 'pending-cell' : ''}`}
                       onMouseDown={(e) =>
                         startSelection(e, equipeIndex, day.date)
                       }
@@ -1518,21 +1534,8 @@ export default function App() {
                         }
                       }}
                       onDrop={(e) => {
-                        if (!canEdit) return;
                         e.preventDefault();
-                        setDragPreview(null);
-                        const id = Number(e.dataTransfer.getData('itemId'));
-                        const type = e.dataTransfer.getData('itemType') || 'chantier';
-                        if (type === 'conge') {
-                          const item = conges.find((c) => c.id === id);
-                          if (!item) return;
-                          commit(() => setConges((prev) => prev.map((c) => c.id === id ? { ...c, equipe: equipeIndex, start: date } : c)));
-                          return;
-                        }
-                        const item = chantiers.find((c) => c.id === id);
-                        if (!item) return;
-                        const start = nextWorkingDay(date, equipeIndex);
-                        commit(() => setChantiers((prev) => applyInsertion(prev, item, equipeIndex, start)));
+                        onDrop(e, row.teamIndex || equipeIndex, day.date);
                       }}
                     >
                       {segments.filter(({ seg }) => dayIndex(day.date) === seg.start).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
@@ -1635,23 +1638,35 @@ export default function App() {
                       {congeItems.map(({ conge, seg }) => {
                         const cH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                         const cT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
-                        const isCongeSelected = selectedItem?.type === 'conge' && selectedItem.id === conge.id;
                         return (
-                          <CongeBloc
-                            key={conge.id}
-                            conge={conge}
-                            seg={seg}
-                            cellWidth={cellWidth}
-                            cH={cH}
-                            cT={cT}
-                            isSelected={isCongeSelected}
-                            canEdit={canEdit}
-                            resize={resize}
-                            onDragStart={(e) => onDragStart(e, conge.id, 'conge')}
-                            onClick={() => setSelectedItem({ type: 'conge', id: conge.id })}
-                            onDoubleClick={() => openEditConge(conge)}
-                            onContextMenu={(e) => handleContextMenu(e, 'conge', conge.id)}
-                          />
+                        <div
+                          key={conge.id}
+                          className={`bloc conge ${
+                            conge.allEquipes ? 'conge-entreprise' : ''
+                          } ${
+                            selectedItem?.type === 'conge' &&
+                            selectedItem.id === conge.id
+                              ? 'active-item'
+                              : ''
+                          }`}
+                           draggable={!resize && canEdit}
+                           onDragStart={(e) => onDragStart(e, conge.id, 'conge')}
+                          style={{
+                            width: (seg.end - seg.start + 1) * cellWidth - 8,
+                            height: cH,
+                            top: cT,
+                            fontSize: Math.max(9, Math.min(11, 9 + (cellWidth - 26) * 2 / 26)),
+                            padding: `${Math.max(4, Math.round(6 + (cellWidth - 26) * 2 / 26))}px ${Math.max(4, Math.round(8 + (cellWidth - 26) * 2 / 26))}px`,
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() =>
+                            setSelectedItem({ type: 'conge', id: conge.id })
+                          }
+                          onDoubleClick={() => openEditConge(conge)}
+                          onContextMenu={(e) => handleContextMenu(e, 'conge', conge.id)}
+                        >
+                          {conge.nom}
+                        </div>
                         );
                       })}
                     </div>
