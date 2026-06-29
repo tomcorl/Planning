@@ -490,6 +490,30 @@ button:active {
   border-radius: 4px;
 }
 
+.toggle-aout {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  transition: all 0.15s ease-out;
+  flex-shrink: 0;
+  opacity: 0.4;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+}
+.toggle-aout.active {
+  opacity: 1;
+}
+.team-cell:hover .toggle-aout {
+  opacity: 0.8;
+}
+.team-cell:hover .toggle-aout.active {
+  opacity: 1;
+}
+
 .delete-team {
   opacity: 0;
   width: 22px;
@@ -609,7 +633,7 @@ button:active {
   width: 16px;
   height: 16px;
   top: -3px;
-  right: -3px;
+  left: -3px;
 }
 
 .chantier {
@@ -707,7 +731,7 @@ button:active {
 .note-icon {
   position: absolute;
   top: -3px;
-  right: -3px;
+  left: -3px;
   width: 14px;
   height: 14px;
   background: var(--surface);
@@ -769,7 +793,7 @@ button:active {
   background: #000;
   color: white;
   padding: 8px 10px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 900;
   z-index: 1;
   border-left: 3px solid #222;
@@ -939,11 +963,12 @@ button:active {
   resize: vertical;
 }
 
-.toggle-switch {
+.toggle-switch,
+.modal-field .toggle-switch {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 10px;
   cursor: pointer;
   user-select: none;
 }
@@ -1247,6 +1272,65 @@ button:active {
   background: var(--surface);
   color: var(--text);
   font-size: 14px;
+}
+
+.color-picker-wrap {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+.color-picker-wrap input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+}
+.color-swatch {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 2px solid var(--line);
+  cursor: pointer;
+}
+
+.delete-conducteur {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #ef4444;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.delete-conducteur:hover {
+  background: #fecaca;
+}
+
+.conducteur-colors-manager {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.conducteur-colors-manager > label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  margin-bottom: 6px;
 }
 
 .add-conducteur-btn {

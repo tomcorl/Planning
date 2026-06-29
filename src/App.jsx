@@ -122,6 +122,7 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState(true);
 
   const isAdmin = session?.role === 'admin';
+  const canEdit = session?.role !== 'lecture';
 
   const [theme, setTheme] = useState(() => {
     try { return JSON.parse(localStorage.getItem('theme')) || 'light'; } catch { return 'light'; }
@@ -135,6 +136,7 @@ export default function App() {
   const [teams, setTeams] = useState([]);
   const [conducteurs, setConducteurs] = useState([]);
   const [customFeries, setCustomFeries] = useState([]);
+  const [aoûtOverride, setAoûtOverride] = useState(new Set());
   const [ferieForm, setFerieForm] = useState({ nom: '', date: today });
   const [chantiers, setChantiers] = useState([]);
   const [conges, setConges] = useState([]);
@@ -144,6 +146,7 @@ export default function App() {
   const [resize, setResize] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [dragPreview, setDragPreview] = useState(null);
+  const dragThrottle = useRef(null);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
 
@@ -665,7 +668,7 @@ export default function App() {
 
     for (const d of days) {
       const blockedFerie = isFerie(d.date);
-      const blockedAout = !chantier.force_aout && isAugustClosure(d.date);
+      const blockedAout = !aoûtOverride.has(chantier.equipe) && isAugustClosure(d.date);
       const isConge = conges.some(
         (c) =>
           (c.equipe === chantier.equipe || c.allEquipes) &&
@@ -906,10 +909,11 @@ export default function App() {
       )
       .sort((a, b) => toDate(a.start) - toDate(b.start));
 
+    const movedEarlier = toDate(targetStart) < toDate(movedItem.start);
     const changed = new Map();
 
     affected.forEach((c) => {
-      if (toDate(c.start) >= toDate(cursor)) return;
+      if (!movedEarlier && toDate(c.start) >= toDate(cursor)) return;
       const newStart = nextWorkingDay(cursor, targetEquipe);
       changed.set(c.id, { ...c, start: newStart });
 
@@ -1223,42 +1227,44 @@ export default function App() {
 
     chantiers.forEach((chantier) => {
       const segments = splitChantier(chantier).filter(Boolean);
+      const segLens = segments.map(s => s.end - s.start + 1);
+      const maxSegLen = segLens.length ? Math.max(...segLens) : 0;
       segments.forEach((seg, si) => {
         if (!byEquipe[chantier.equipe]) byEquipe[chantier.equipe] = [];
-        byEquipe[chantier.equipe].push({ chantier, seg, segIndex: si, segCount: segments.length });
+        byEquipe[chantier.equipe].push({ chantier, seg, segIndex: si, segCount: segments.length, longestLen: maxSegLen });
       });
     });
 
     Object.values(byEquipe).forEach((items) => {
       items.sort((a, b) => a.seg.start - b.seg.start);
       const rows = [];
-      items.forEach(({ chantier, seg, segIndex, segCount }) => {
+      items.forEach(({ chantier, seg, segIndex, segCount, longestLen }) => {
         let placed = false;
         for (let r = 0; r < rows.length; r++) {
           const lastInRow = rows[r][rows[r].length - 1];
           if (seg.start > lastInRow.seg.end) {
-            rows[r].push({ chantier, seg, stack: r, segIndex, segCount });
+            rows[r].push({ chantier, seg, stack: r, segIndex, segCount, longestLen });
             placed = true;
             break;
           }
         }
         if (!placed) {
-          rows.push([{ chantier, seg, stack: rows.length, segIndex, segCount }]);
+          rows.push([{ chantier, seg, stack: rows.length, segIndex, segCount, longestLen }]);
         }
       });
       rows.forEach((row) => {
-        row.forEach(({ chantier, seg, stack, segIndex, segCount }) => {
+        row.forEach(({ chantier, seg, stack, segIndex, segCount, longestLen }) => {
           for (let d = seg.start; d <= seg.end; d++) {
             const key = `${chantier.equipe}-${d}`;
             if (!map.has(key)) map.set(key, []);
-            map.get(key).push({ chantier, seg, i: 0, stack, segIndex, segCount });
+            map.get(key).push({ chantier, seg, i: 0, stack, segIndex, segCount, longestLen });
           }
         });
       });
     });
 
     return map;
-  }, [chantiers, conges, holidays, visibleDays]);
+  }, [chantiers, conges, holidays, visibleDays, aoûtOverride]);
 
   const gridTemplateColumns = `260px repeat(${visibleDays.length}, ${cellWidth}px)`;
 
@@ -1473,6 +1479,16 @@ export default function App() {
                         style={{ fontSize: Math.round(11 + (cellWidth - 26) * 3 / 26) }}
                       />
                       <button
+                        className={`toggle-aout ${aoûtOverride.has(equipeIndex) ? 'active' : ''}`}
+                        title={aoûtOverride.has(equipeIndex) ? 'Travail en août' : 'Août fermé'}
+                        onClick={() => setAoûtOverride(prev => {
+                          const next = new Set(prev);
+                          if (next.has(equipeIndex)) next.delete(equipeIndex);
+                          else next.add(equipeIndex);
+                          return next;
+                        })}
+                      >{aoûtOverride.has(equipeIndex) ? '🌞' : '❄️'}</button>
+                      <button
                         className="delete-team"
                         onClick={() => deleteTeam(row.teamIndex)}
                       >×</button>
@@ -1510,19 +1526,26 @@ export default function App() {
                       }
                       onDragOver={(e) => {
                         e.preventDefault();
-                        setDragPreview({ equipe: equipeIndex, date: day.date });
+                        if (!dragThrottle.current) {
+                          dragThrottle.current = requestAnimationFrame(() => {
+                            setDragPreview({ equipe: equipeIndex, date: day.date });
+                            dragThrottle.current = null;
+                          });
+                        }
                       }}
                       onDrop={(e) => {
                         e.preventDefault();
                         onDrop(e, row.teamIndex || equipeIndex, day.date);
                       }}
                     >
-                      {segments.filter(({ seg }) => dayIndex(day.date) === seg.start).map(({ chantier, seg, i, stack, segIndex, segCount }) => {
+                      {segments.filter(({ seg }) => dayIndex(day.date) === seg.start).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
                         const conducteur = getConducteur(chantier.conducteurId);
-                        const width = (seg.end - seg.start + 1) * cellWidth - 8;
+                        const segLen = seg.end - seg.start + 1;
+                        const width = segLen * cellWidth - 8;
                         const compact = segments.length > 1;
                         const isFirstSegment = segIndex === 0;
                         const isLastSegment = segIndex === segCount - 1;
+                        const isLongestSeg = segLen === longestLen;
                         const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                         const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
                         const height = compact
@@ -1543,7 +1566,7 @@ export default function App() {
                                 ? 'active-item'
                                 : ''
                             }`}
-                            draggable={!resize}
+                            draggable={!resize && canEdit}
                             onMouseDown={(e) => e.stopPropagation()}
                             onClick={() =>
                               setSelectedItem({
@@ -1590,7 +1613,7 @@ export default function App() {
                             <div className="chantier-content">
                               <div className="chantier-title-row">
                                 <strong>{chantier.nom}</strong>
-                                {isFirstSegment && chantier.detail && <em>{chantier.detail}</em>}
+                                {(isLongestSeg || segLen > 15) && chantier.detail && <em>{chantier.detail}</em>}
                               </div>
                               {isLastSegment && <small>{chantier.duree} j</small>}
                             </div>
@@ -1626,8 +1649,8 @@ export default function App() {
                               ? 'active-item'
                               : ''
                           }`}
-                          draggable={!resize}
-                          onDragStart={(e) => onDragStart(e, conge.id, 'conge')}
+                           draggable={!resize && canEdit}
+                           onDragStart={(e) => onDragStart(e, conge.id, 'conge')}
                           style={{
                             width: (seg.end - seg.start + 1) * cellWidth - 8,
                             height: cH,
@@ -2006,6 +2029,20 @@ export default function App() {
                 <div className="conducteurs-editor">
                   {conducteurs.map((c, i) => (
                     <div className="conducteur-edit-row" key={c.id}>
+                      <div className="color-picker-wrap">
+                        <input
+                          type="color"
+                          value={c.color}
+                          onChange={(e) =>
+                            setConducteurs((prev) =>
+                              prev.map((x, idx) =>
+                                idx === i ? { ...x, color: e.target.value } : x
+                              )
+                            )
+                          }
+                        />
+                        <span className="color-swatch" style={{ background: c.color }} />
+                      </div>
                       <input
                         value={c.nom}
                         onChange={(e) =>
@@ -2016,42 +2053,14 @@ export default function App() {
                           )
                         }
                       />
-                      <div className="mini-color-grid editable-colors">
-                        {conducteurColors.map((color, ci) => (
-                          <div key={ci} className="color-dot-wrapper mini">
-                            <button
-                              style={{ background: color }}
-                              className={c.color === color ? 'selected-color' : ''}
-                              onClick={() =>
-                                setConducteurs((prev) =>
-                                  prev.map((x, idx) =>
-                                    idx === i ? { ...x, color } : x
-                                  )
-                                )
-                              }
-                            />
-                            <button
-                              className="color-dot-edit mini-edit"
-                              onClick={() => setColorManager({ type: 'conducteur', index: ci, color })}
-                              title="Modifier"
-                            >✎</button>
-                            <button
-                              className="color-dot-delete mini-delete"
-                              onClick={() => {
-                                const next = conducteurColors.filter((_, k) => k !== ci);
-                                setConducteurColors(next.length > 0 ? next : [...CONDUCTEUR_COLORS]);
-                                if (c.color === color) setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, color: next[0] || CONDUCTEUR_COLORS[0] } : x));
-                              }}
-                              title="Supprimer"
-                            >×</button>
-                          </div>
-                        ))}
-                        <button
-                          className="color-dot color-add mini-add"
-                          title="Ajouter une couleur"
-                          onClick={() => setColorManager({ type: 'conducteur', index: -1, color: '#2563eb' })}
-                        >+</button>
-                      </div>
+                      <button
+                        className="delete-conducteur"
+                        title="Supprimer ce conducteur"
+                        onClick={() => {
+                          if (window.confirm(`Supprimer ${c.nom} ?`))
+                            setConducteurs((prev) => prev.filter((_, idx) => idx !== i));
+                        }}
+                      >×</button>
                     </div>
                   ))}
                   <button className="add-conducteur-btn" onClick={() =>
@@ -2066,6 +2075,34 @@ export default function App() {
                   }>
                     + Ajouter un conducteur
                   </button>
+                  <div className="conducteur-colors-manager">
+                    <label>Couleurs disponibles</label>
+                    <div className="color-grid editable-colors">
+                      {conducteurColors.map((color, ci) => (
+                        <div key={ci} className="color-dot-wrapper">
+                          <button
+                            className="color-dot"
+                            style={{ background: color }}
+                            title="Modifier"
+                            onClick={() => setColorManager({ type: 'conducteur', index: ci, color })}
+                          />
+                          <button
+                            className="color-dot-delete"
+                            onClick={() => {
+                              const next = conducteurColors.filter((_, k) => k !== ci);
+                              setConducteurColors(next.length > 0 ? next : [...CONDUCTEUR_COLORS]);
+                            }}
+                            title="Supprimer cette couleur"
+                          >×</button>
+                        </div>
+                      ))}
+                      <button
+                        className="color-dot color-add"
+                        title="Ajouter une couleur"
+                        onClick={() => setColorManager({ type: 'conducteur', index: -1, color: '#2563eb' })}
+                      >+</button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -2077,7 +2114,7 @@ export default function App() {
                 </button>
               )}
               {modal.type !== 'conducteur' && (
-                <button className="modal-btn-primary" onClick={saveModal}>
+                <button className="modal-btn-primary" onClick={saveModal} disabled={!canEdit}>
                   {modal.mode === 'modification' ? 'Modifier' : 'Créer'}
                 </button>
               )}

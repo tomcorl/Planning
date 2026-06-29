@@ -370,6 +370,54 @@ $$;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS chantier_colors TEXT[] DEFAULT ARRAY['#2563eb','#93c5fd','#eab308','#15803d','#6b7280','#f97316','#7dd3fc']::TEXT[];
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS conducteur_colors TEXT[] DEFAULT ARRAY['#2563eb','#16a34a','#dc2626','#9333ea','#ea580c','#0891b2','#ca8a04','#be123c']::TEXT[];
 
+-- RPC pour créer un utilisateur (admin seulement)
+CREATE OR REPLACE FUNCTION create_user(p_email TEXT, p_password TEXT, p_nom TEXT, p_role TEXT, p_company_ids TEXT[])
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_user_id UUID;
+  v_result JSONB;
+  cid TEXT;
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
+  ) THEN
+    RAISE EXCEPTION 'Seuls les admins peuvent créer des utilisateurs';
+  END IF;
+
+  SELECT id INTO v_user_id FROM auth.users WHERE email = p_email;
+
+  IF v_user_id IS NULL THEN
+    v_user_id := extensions.uuid_generate_v4();
+    INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data)
+    VALUES (v_user_id, p_email, crypt(p_password, gen_salt('bf')), NOW(), jsonb_build_object('role', p_role, 'nom', p_nom));
+  END IF;
+
+  INSERT INTO profiles (id, email, nom, role)
+  VALUES (v_user_id, p_email, p_nom, p_role)
+  ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, nom = EXCLUDED.nom, role = EXCLUDED.role;
+
+  FOREACH cid IN ARRAY p_company_ids LOOP
+    INSERT INTO user_companies (user_id, company_id) VALUES (v_user_id, cid) ON CONFLICT DO NOTHING;
+  END LOOP;
+
+  v_result := jsonb_build_object('id', v_user_id, 'email', p_email, 'nom', p_nom, 'role', p_role, 'companyIds', to_jsonb(p_company_ids));
+  RETURN v_result;
+END;
+$$;
+
+-- RPC pour supprimer un utilisateur (admin seulement)
+CREATE OR REPLACE FUNCTION delete_user(p_user_id UUID)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin') THEN
+    RAISE EXCEPTION 'Seuls les admins peuvent supprimer des utilisateurs';
+  END IF;
+  DELETE FROM user_companies WHERE user_id = p_user_id;
+  DELETE FROM profiles WHERE id = p_user_id;
+  DELETE FROM auth.users WHERE id = p_user_id;
+END;
+$$;
+
 -- RPC pour mettre à jour les couleurs (bypass RLS)
 CREATE OR REPLACE FUNCTION update_company_colors(p_company_id TEXT, p_chantier_colors TEXT[], p_conducteur_colors TEXT[])
 RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$

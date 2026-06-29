@@ -233,32 +233,15 @@ export async function createUser(email, password, nom, role) {
     p_password: password,
     p_nom: nom,
     p_role: role,
-    p_company_ids: [],
+    p_company_ids: ['noree'],
   });
-  if (!error) return data;
-
-  console.warn('RPC create_user not available, falling back to direct auth admin call');
-  const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-    email, password, email_confirm: true,
-  });
-  if (authError) { console.error('create auth user', authError); throw authError; }
-  const uid = authData.user.id;
-
-  const { error: profileErr } = await supabase
-    .from('profiles')
-    .insert({ id: uid, email, nom, role });
-  if (profileErr) { console.error('create user profile', profileErr); throw profileErr; }
-
-  return { id: uid, email, nom, role };
+  if (error) { console.error('create_user RPC', error); throw error; }
+  return data;
 }
 
 export async function deleteUser(userId) {
-  const { error: profileErr } = await supabase
-    .from('profiles')
-    .delete()
-    .eq('id', userId);
-  if (profileErr) { console.error('delete user profile', profileErr); throw profileErr; }
-
-  const { error: authErr } = await supabase.auth.admin.deleteUser(userId);
-  if (authErr) { console.error('delete auth user', authErr); throw authErr; }
+  const { error } = await supabase.rpc('delete_user', {
+    p_user_id: userId,
+  });
+  if (error) { console.error('delete_user RPC', error); throw error; }
 }
