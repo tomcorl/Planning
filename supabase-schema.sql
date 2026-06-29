@@ -261,10 +261,10 @@ RETURNS SETOF chantiers LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   DELETE FROM chantiers WHERE company_id = p_company_id;
   RETURN QUERY
-  INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail)
+  INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
   SELECT COALESCE((x->>'id')::INT, nextval('chantiers_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT, (x->>'start')::TEXT, (x->>'duree')::INT,
          (x->>'nom')::TEXT, (x->>'conducteurId')::INT, (x->>'color')::TEXT, (x->>'note')::TEXT,
-         (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT
+         (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT, COALESCE((x->>'force_aout')::BOOLEAN, false)
   FROM jsonb_array_elements(p_chantiers) AS x
   RETURNING *;
 END;
