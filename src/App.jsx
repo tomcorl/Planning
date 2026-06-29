@@ -136,7 +136,7 @@ export default function App() {
   const [teams, setTeams] = useState([]);
   const [conducteurs, setConducteurs] = useState([]);
   const [customFeries, setCustomFeries] = useState([]);
-  const [aoûtOverride, setAoûtOverride] = useState(new Set());
+
   const [ferieForm, setFerieForm] = useState({ nom: '', date: today });
   const [chantiers, setChantiers] = useState([]);
   const [conges, setConges] = useState([]);
@@ -591,14 +591,15 @@ export default function App() {
   }
 
   function addWorkingDays(start, workingDays, equipe, options = {}) {
+    const { force_aout = false, countConges = false } = options;
     let date = start;
     let count = 0;
     let safety = 0;
 
     while (count < Number(workingDays) && safety < 1200) {
-      const blocked = options.countConges
+      const blocked = countConges
         ? isWeekend(date) || isFerie(date)
-        : isBlockedDay(equipe, date);
+        : isBlockedDay(equipe, date, { force_aout });
 
       if (!blocked) count += 1;
       if (count >= Number(workingDays)) break;
@@ -623,20 +624,20 @@ export default function App() {
   }
 
   function isBlockedDay(equipe, date, options = {}) {
+    const { force_aout = false, ignoreConges = false } = options;
     const blockWeekend = isWeekend(date);
     const blockFerie = isFerie(date);
-    const blockConge = options.ignoreConges
-      ? false
-      : isCongeForTeam(equipe, date);
+    const blockConge = ignoreConges ? false : isCongeForTeam(equipe, date);
+    const blockAout = !force_aout && isAugustClosure(date);
 
-    return blockWeekend || blockFerie || blockConge;
+    return blockWeekend || blockFerie || blockConge || blockAout;
   }
 
-  function nextWorkingDay(date, equipe) {
+  function nextWorkingDay(date, equipe, force_aout = false) {
     let d = date;
     let safety = 0;
 
-    while (isBlockedDay(equipe, d) && safety < 366) {
+    while (isBlockedDay(equipe, d, { force_aout }) && safety < 366) {
       d = formatDate(addDays(toDate(d), 1));
       safety += 1;
     }
@@ -645,7 +646,7 @@ export default function App() {
   }
 
   function getEndDateForChantier(c) {
-    return addWorkingDays(c.start, c.duree, c.equipe);
+    return addWorkingDays(c.start, c.duree, c.equipe, { force_aout: c.force_aout });
   }
 
   function getConducteur(id) {
@@ -668,7 +669,7 @@ export default function App() {
 
     for (const d of days) {
       const blockedFerie = isFerie(d.date);
-      const blockedAout = !aoûtOverride.has(chantier.equipe) && isAugustClosure(d.date);
+      const blockedAout = !chantier.force_aout && isAugustClosure(d.date);
       const isConge = conges.some(
         (c) =>
           (c.equipe === chantier.equipe || c.allEquipes) &&
@@ -790,6 +791,7 @@ export default function App() {
       note: '',
       termine: false,
       linked: false,
+      force_aout: false,
     });
 
     setModal({ open: true, mode: 'creation', type: 'chantier' });
@@ -951,7 +953,7 @@ export default function App() {
     }
     const item = chantiers.find((c) => c.id === id);
     if (!item) return;
-    const start = nextWorkingDay(date, equipe);
+    const start = nextWorkingDay(date, equipe, item.force_aout);
     commit(() => {
       setChantiers((prev) => applyInsertion(prev, item, equipe, start));
     });
@@ -968,15 +970,16 @@ export default function App() {
       originalStart: chantier.start,
       originalDuree: chantier.duree,
       originalEquipe: chantier.equipe,
+      originalForceAout: chantier.force_aout,
     });
   }
-  function countWorkingDays(start, end, equipe) {
+  function countWorkingDays(start, end, equipe, force_aout = false) {
     let count = 0;
     let current = start;
     let safety = 0;
 
     while (sameOrBefore(current, end) && safety < 1200) {
-      if (!isBlockedDay(equipe, current)) {
+      if (!isBlockedDay(equipe, current, { force_aout })) {
         count += 1;
       }
 
@@ -1006,7 +1009,7 @@ export default function App() {
           const updatedEnd = getEndDateForChantier(updated);
 
           let cursor = formatDate(addDays(toDate(updatedEnd), 1));
-          cursor = nextWorkingDay(cursor, resize.originalEquipe);
+          cursor = nextWorkingDay(cursor, resize.originalEquipe, resize.originalForceAout);
 
           const changed = new Map();
 
@@ -1022,7 +1025,7 @@ export default function App() {
           for (const c of sorted) {
             if (toDate(c.start) >= toDate(cursor)) break;
 
-            const newStart = nextWorkingDay(cursor, resize.originalEquipe);
+            const newStart = nextWorkingDay(cursor, resize.originalEquipe, resize.originalForceAout);
             changed.set(c.id, { ...c, start: newStart });
             cursor = formatDate(
               addDays(
@@ -1030,7 +1033,7 @@ export default function App() {
                 1
               )
             );
-            cursor = nextWorkingDay(cursor, resize.originalEquipe);
+            cursor = nextWorkingDay(cursor, resize.originalEquipe, resize.originalForceAout);
           }
 
           return next.map((c) => changed.get(c.id) || c);
@@ -1043,19 +1046,21 @@ export default function App() {
             const originalEnd = addWorkingDays(
               resize.originalStart,
               resize.originalDuree,
-              resize.originalEquipe
+              resize.originalEquipe,
+              { force_aout: resize.originalForceAout }
             );
 
             const rawNewStart = formatDate(
               addDays(toDate(resize.originalStart), delta)
             );
 
-            const newStart = nextWorkingDay(rawNewStart, resize.originalEquipe);
+            const newStart = nextWorkingDay(rawNewStart, resize.originalEquipe, resize.originalForceAout);
 
             const newDuree = countWorkingDays(
               newStart,
               originalEnd,
-              resize.originalEquipe
+              resize.originalEquipe,
+              resize.originalForceAout
             );
 
             if (newDuree < 1) return c;
@@ -1264,7 +1269,7 @@ export default function App() {
     });
 
     return map;
-  }, [chantiers, conges, holidays, visibleDays, aoûtOverride]);
+  }, [chantiers, conges, holidays, visibleDays]);
 
   const gridTemplateColumns = `260px repeat(${visibleDays.length}, ${cellWidth}px)`;
 
@@ -1478,16 +1483,6 @@ export default function App() {
                         onChange={(e) => updateTeam(row.teamIndex, e.target.value)}
                         style={{ fontSize: Math.round(11 + (cellWidth - 26) * 3 / 26) }}
                       />
-                      <button
-                        className={`toggle-aout ${aoûtOverride.has(equipeIndex) ? 'active' : ''}`}
-                        title={aoûtOverride.has(equipeIndex) ? 'Travail en août' : 'Août fermé'}
-                        onClick={() => setAoûtOverride(prev => {
-                          const next = new Set(prev);
-                          if (next.has(equipeIndex)) next.delete(equipeIndex);
-                          else next.add(equipeIndex);
-                          return next;
-                        })}
-                      >{aoûtOverride.has(equipeIndex) ? '🌞' : '❄️'}</button>
                       <button
                         className="delete-team"
                         onClick={() => deleteTeam(row.teamIndex)}
@@ -1874,7 +1869,8 @@ export default function App() {
                             ? addWorkingDays(
                                 form.start,
                                 Number(form.duree || 1),
-                                Number(form.equipe || 0)
+                                Number(form.equipe || 0),
+                                { force_aout: form.force_aout }
                               )
                             : addWorkingDays(
                                 form.start,
@@ -1943,7 +1939,7 @@ export default function App() {
                           onChange={(e) => setForm({ ...form, force_aout: e.target.checked })}
                         />
                         <span className="toggle-track" />
-                        <span className="toggle-label">Forcer en août (traverser la fermeture)</span>
+                        <span className="toggle-label">Traverser août (chantier visible en août)</span>
                       </label>
                     )}
                   </div>

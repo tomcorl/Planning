@@ -490,30 +490,6 @@ button:active {
   border-radius: 4px;
 }
 
-.toggle-aout {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border-radius: 6px;
-  background: transparent;
-  font-size: 13px;
-  transition: all 0.15s ease-out;
-  flex-shrink: 0;
-  opacity: 0.4;
-  border: none;
-  cursor: pointer;
-  line-height: 1;
-}
-.toggle-aout.active {
-  opacity: 1;
-}
-.team-cell:hover .toggle-aout {
-  opacity: 0.8;
-}
-.team-cell:hover .toggle-aout.active {
-  opacity: 1;
-}
-
 .delete-team {
   opacity: 0;
   width: 22px;
