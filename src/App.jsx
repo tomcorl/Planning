@@ -935,78 +935,7 @@ export default function App() {
     e.dataTransfer.effectAllowed = 'move';
   }
 
-  function onDrop(e, equipe, date) {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragPreview(null);
-    const id = Number(e.dataTransfer.getData('itemId'));
-    const type = e.dataTransfer.getData('itemType') || 'chantier';
-    if (type === 'conge') {
-      const item = conges.find((c) => c.id === id);
-      if (!item) return;
-      commit(() => {
-        setConges((prev) =>
-          prev.map((c) => c.id === id ? { ...c, equipe, start: date } : c)
-        );
-      });
-      return;
-    }
-    const item = chantiers.find((c) => c.id === id);
-    if (!item) return;
-    const start = nextWorkingDay(date, equipe);
-    commit(() => {
-      setChantiers((prev) => applyInsertion(prev, item, equipe, start));
-    });
-  }
-
-  const dragRefs = useRef({});
-  dragRefs.current = { conges, chantiers, commit, nextWorkingDay, applyInsertion, canEdit };
-
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el) return;
-
-    function onDragOver(e) {
-      const cell = e.target.closest('[data-equipe]');
-      if (!cell || !dragRefs.current.canEdit) return;
-      e.preventDefault();
-      if (!dragThrottle.current) {
-        dragThrottle.current = requestAnimationFrame(() => {
-          setDragPreview({ equipe: +cell.dataset.equipe, date: cell.dataset.date });
-          dragThrottle.current = null;
-        });
-      }
-    }
-
-    function onDrop(e) {
-      const cell = e.target.closest('[data-equipe]');
-      if (!cell || !dragRefs.current.canEdit) return;
-      e.preventDefault();
-      const { conges, chantiers, commit, nextWorkingDay, applyInsertion } = dragRefs.current;
-      const equipe = +cell.dataset.equipe;
-      const date = cell.dataset.date;
-      setDragPreview(null);
-      const id = Number(e.dataTransfer.getData('itemId'));
-      const type = e.dataTransfer.getData('itemType') || 'chantier';
-      if (type === 'conge') {
-        const item = conges.find((c) => c.id === id);
-        if (!item) return;
-        commit(() => setConges((prev) => prev.map((c) => c.id === id ? { ...c, equipe, start: date } : c)));
-        return;
-      }
-      const item = chantiers.find((c) => c.id === id);
-      if (!item) return;
-      const start = nextWorkingDay(date, equipe);
-      commit(() => setChantiers((prev) => applyInsertion(prev, item, equipe, start)));
-    }
-
-    el.addEventListener('dragover', onDragOver);
-    el.addEventListener('drop', onDrop);
-    return () => {
-      el.removeEventListener('dragover', onDragOver);
-      el.removeEventListener('drop', onDrop);
-    };
-  }, []);
+  // onDrop is now inlined on each cell (see grid rendering)
 
   function startResize(e, chantier, side) {
     e.preventDefault();
@@ -1579,6 +1508,32 @@ export default function App() {
                       onMouseEnter={() =>
                         updateSelection(equipeIndex, day.date)
                       }
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (!dragThrottle.current) {
+                          dragThrottle.current = requestAnimationFrame(() => {
+                            setDragPreview({ equipe: equipeIndex, date: day.date });
+                            dragThrottle.current = null;
+                          });
+                        }
+                      }}
+                      onDrop={(e) => {
+                        if (!canEdit) return;
+                        e.preventDefault();
+                        setDragPreview(null);
+                        const id = Number(e.dataTransfer.getData('itemId'));
+                        const type = e.dataTransfer.getData('itemType') || 'chantier';
+                        if (type === 'conge') {
+                          const item = conges.find((c) => c.id === id);
+                          if (!item) return;
+                          commit(() => setConges((prev) => prev.map((c) => c.id === id ? { ...c, equipe: equipeIndex, start: date } : c)));
+                          return;
+                        }
+                        const item = chantiers.find((c) => c.id === id);
+                        if (!item) return;
+                        const start = nextWorkingDay(date, equipeIndex);
+                        commit(() => setChantiers((prev) => applyInsertion(prev, item, equipeIndex, start)));
+                      }}
                     >
                       {segments.filter(({ seg }) => dayIndex(day.date) === seg.start).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
                         const conducteur = getConducteur(chantier.conducteurId);
