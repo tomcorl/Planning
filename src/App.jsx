@@ -7,9 +7,7 @@ import PaymentPage from './PaymentPage.jsx';
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
-const INITIAL_CELL_WIDTH = 52;
-const MIN_CELL_WIDTH = 26;
-const MAX_CELL_WIDTH = 78;
+const CELL_WIDTH = 26;
 
 const CHANTIER_COLORS = [
   '#2563eb', // bleu foncé
@@ -128,9 +126,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => {
     try { return JSON.parse(localStorage.getItem('theme')) || 'light'; } catch { return 'light'; }
   });
-  const [cellWidth, setCellWidth] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('cellWidth')) || INITIAL_CELL_WIDTH; } catch { return INITIAL_CELL_WIDTH; }
-  });
+  const cellWidth = CELL_WIDTH;
   const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -60));
   const [calendarLength, setCalendarLength] = useState(200);
   const [jumpDate, setJumpDate] = useState(today);
@@ -239,7 +235,6 @@ export default function App() {
 
   // Persist UI preferences to localStorage (client-side only)
   useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
-  useEffect(() => localStorage.setItem('cellWidth', JSON.stringify(cellWidth)), [cellWidth]);
 
   // Restore scroll position or jump to today after data loads
   useEffect(() => {
@@ -257,21 +252,6 @@ export default function App() {
       }
     });
   }, [dataLoading]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const handler = (e) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      setCellWidth((prev) => {
-        const delta = e.deltaY > 0 ? -4 : 4;
-        return Math.min(MAX_CELL_WIDTH, Math.max(MIN_CELL_WIDTH, prev + delta));
-      });
-    };
-    el.addEventListener('wheel', handler, { passive: false });
-    return () => el.removeEventListener('wheel', handler);
-  }, []);
 
   // Debounced persistence to Supabase (runs 800ms after data settles)
   useEffect(() => {
@@ -1243,36 +1223,39 @@ export default function App() {
 
     chantiers.forEach((chantier) => {
       const segments = splitChantier(chantier);
+      const byChantier = {};
       segments.forEach((seg) => {
         if (!seg) return;
         if (!byEquipe[chantier.equipe]) byEquipe[chantier.equipe] = [];
-        byEquipe[chantier.equipe].push({ chantier, seg });
+        if (!byChantier[chantier.id]) byChantier[chantier.id] = 0;
+        const si = byChantier[chantier.id]++;
+        byEquipe[chantier.equipe].push({ chantier, seg, segIndex: si });
       });
     });
 
     Object.values(byEquipe).forEach((items) => {
       items.sort((a, b) => a.seg.start - b.seg.start);
       const rows = [];
-      items.forEach(({ chantier, seg }) => {
+      items.forEach(({ chantier, seg, segIndex }) => {
         let placed = false;
         for (let r = 0; r < rows.length; r++) {
           const lastInRow = rows[r][rows[r].length - 1];
           if (seg.start > lastInRow.seg.end) {
-            rows[r].push({ chantier, seg, stack: r });
+            rows[r].push({ chantier, seg, stack: r, segIndex });
             placed = true;
             break;
           }
         }
         if (!placed) {
-          rows.push([{ chantier, seg, stack: rows.length }]);
+          rows.push([{ chantier, seg, stack: rows.length, segIndex }]);
         }
       });
       rows.forEach((row) => {
-        row.forEach(({ chantier, seg, stack }) => {
+        row.forEach(({ chantier, seg, stack, segIndex }) => {
           for (let d = seg.start; d <= seg.end; d++) {
             const key = `${chantier.equipe}-${d}`;
             if (!map.has(key)) map.set(key, []);
-            map.get(key).push({ chantier, seg, i: 0, stack });
+            map.get(key).push({ chantier, seg, i: 0, stack, segIndex });
           }
         });
       });
@@ -1538,10 +1521,11 @@ export default function App() {
                         onDrop(e, row.teamIndex || equipeIndex, day.date);
                       }}
                     >
-                      {segments.filter(({ seg }) => dayIndex(day.date) === seg.start).map(({ chantier, seg, i, stack }) => {
+                      {segments.filter(({ seg }) => dayIndex(day.date) === seg.start).map(({ chantier, seg, i, stack, segIndex }) => {
                         const conducteur = getConducteur(chantier.conducteurId);
                         const width = (seg.end - seg.start + 1) * cellWidth - 8;
                         const compact = segments.length > 1;
+                        const isFirstSegment = segIndex === 0;
                         const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                         const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
                         const height = compact
@@ -1588,7 +1572,7 @@ export default function App() {
                               }
                             />
 
-                            {chantier.note && (
+                            {chantier.note && isFirstSegment && (
                               <div className="note-icon"
                                 onMouseEnter={(e) => {
                                   const rect = e.currentTarget.getBoundingClientRect();
@@ -1609,9 +1593,9 @@ export default function App() {
                             <div className="chantier-content">
                               <div className="chantier-title-row">
                                 <strong>{chantier.nom}</strong>
-                                {chantier.detail && <em>{chantier.detail}</em>}
+                                {isFirstSegment && chantier.detail && <em>{chantier.detail}</em>}
                               </div>
-                              <small>{chantier.duree} j</small>
+                              {isFirstSegment && <small>{chantier.duree} j</small>}
                             </div>
 
                             <div
@@ -1672,12 +1656,6 @@ export default function App() {
             );
           })}
         </div>
-      </div>
-      <div className="zoom-bar">
-        <span className="zoom-label">{Math.round(cellWidth / 52 * 100)}%</span>
-        <button className="zoom-btn" onClick={() => setCellWidth(prev => Math.max(MIN_CELL_WIDTH, prev - 4))}>−</button>
-        <input type="range" className="zoom-slider" min={MIN_CELL_WIDTH} max={MAX_CELL_WIDTH} value={cellWidth} onChange={(e) => setCellWidth(Number(e.target.value))} />
-        <button className="zoom-btn" onClick={() => setCellWidth(prev => Math.min(MAX_CELL_WIDTH, prev + 4))}>+</button>
       </div>
       </div>
 
