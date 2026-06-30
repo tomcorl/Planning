@@ -903,12 +903,13 @@ export default function App() {
     let cursor = formatDate(addDays(toDate(movedEnd), 1));
     cursor = nextWorkingDay(cursor, targetEquipe);
 
+    // include items that overlap with the moved item (end on or after targetStart)
     const affected = next
       .filter(
         (c) =>
           c.id !== moved.id &&
           c.equipe === targetEquipe &&
-          sameOrAfter(c.start, targetStart)
+          sameOrAfter(getEndDateForChantier(c), targetStart)
       )
       .sort((a, b) => toDate(a.start) - toDate(b.start));
 
