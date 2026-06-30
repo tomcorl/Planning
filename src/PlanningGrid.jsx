@@ -45,7 +45,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   }
 
   function isFerie(date) {
-    return holidays.includes(date);
+    return holidays.some((h) => h.date === date);
   }
 
   function isSelected(equipe, date) {
