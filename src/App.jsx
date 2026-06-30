@@ -2075,34 +2075,6 @@ export default function App() {
                   }>
                     + Ajouter un conducteur
                   </button>
-                  <div className="conducteur-colors-manager">
-                    <label>Couleurs disponibles</label>
-                    <div className="color-grid editable-colors">
-                      {conducteurColors.map((color, ci) => (
-                        <div key={ci} className="color-dot-wrapper">
-                          <button
-                            className="color-dot"
-                            style={{ background: color }}
-                            title="Modifier"
-                            onClick={() => setColorManager({ type: 'conducteur', index: ci, color })}
-                          />
-                          <button
-                            className="color-dot-delete"
-                            onClick={() => {
-                              const next = conducteurColors.filter((_, k) => k !== ci);
-                              setConducteurColors(next.length > 0 ? next : [...CONDUCTEUR_COLORS]);
-                            }}
-                            title="Supprimer cette couleur"
-                          >×</button>
-                        </div>
-                      ))}
-                      <button
-                        className="color-dot color-add"
-                        title="Ajouter une couleur"
-                        onClick={() => setColorManager({ type: 'conducteur', index: -1, color: '#2563eb' })}
-                      >+</button>
-                    </div>
-                  </div>
                 </div>
               )}
             </div>
