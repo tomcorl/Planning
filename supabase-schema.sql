@@ -165,9 +165,9 @@ CREATE OR REPLACE FUNCTION get_users()
 RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin') THEN
-    RAISE EXCEPTION 'Accès refusé';
+    RETURN '[]'::JSONB;
   END IF;
-  RETURN (SELECT jsonb_agg(jsonb_build_object('id', id, 'email', email, 'nom', nom, 'role', role)) FROM profiles);
+  RETURN COALESCE((SELECT jsonb_agg(jsonb_build_object('id', id, 'email', email, 'nom', nom, 'role', role)) FROM profiles), '[]'::JSONB);
 END;
 $$;
 
