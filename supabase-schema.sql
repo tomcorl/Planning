@@ -312,62 +312,6 @@ BEGIN
 END;
 $$;
 
--- RPC pour créer un utilisateur (admin seulement, exécuté avec SECURITY DEFINER)
-CREATE OR REPLACE FUNCTION create_user(p_email TEXT, p_password TEXT, p_nom TEXT, p_role TEXT, p_company_ids TEXT[])
-RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
-DECLARE
-  v_user_id UUID;
-  v_result JSONB;
-  cid TEXT;
-BEGIN
-  -- Vérifier que l'appelant est admin
-  IF NOT EXISTS (
-    SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
-  ) THEN
-    RAISE EXCEPTION 'Seuls les admins peuvent créer des utilisateurs';
-  END IF;
-
-  -- Créer l'utilisateur auth via l'API Supabase
-  SELECT id INTO v_user_id
-  FROM auth.users
-  WHERE email = p_email;
-
-  IF v_user_id IS NULL THEN
-    v_user_id := extensions.uuid_generate_v4();
-    INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data)
-    VALUES (
-      v_user_id,
-      p_email,
-      crypt(p_password, gen_salt('bf')),
-      NOW(),
-      jsonb_build_object('role', p_role, 'nom', p_nom)
-    );
-  END IF;
-
-  -- Insérer dans profiles
-  INSERT INTO profiles (id, email, nom, role)
-  VALUES (v_user_id, p_email, p_nom, p_role)
-  ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, nom = EXCLUDED.nom, role = EXCLUDED.role;
-
-  -- Lier aux entreprises
-  FOREACH cid IN ARRAY p_company_ids LOOP
-    INSERT INTO user_companies (user_id, company_id)
-    VALUES (v_user_id, cid)
-    ON CONFLICT DO NOTHING;
-  END LOOP;
-
-  v_result := jsonb_build_object(
-    'id', v_user_id,
-    'email', p_email,
-    'nom', p_nom,
-    'role', p_role,
-    'companyIds', to_jsonb(p_company_ids)
-  );
-
-  RETURN v_result;
-END;
-$$;
-
 -- Ajout colonnes couleurs pour companies (si pas déjà présentes)
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS chantier_colors TEXT[] DEFAULT ARRAY['#2563eb','#93c5fd','#eab308','#15803d','#6b7280','#f97316','#7dd3fc']::TEXT[];
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS conducteur_colors TEXT[] DEFAULT ARRAY['#2563eb','#16a34a','#dc2626','#9333ea','#ea580c','#0891b2','#ca8a04','#be123c']::TEXT[];
@@ -379,6 +323,7 @@ DECLARE
   v_user_id UUID;
   v_result JSONB;
   cid TEXT;
+  v_now TIMESTAMPTZ := NOW();
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'
@@ -390,8 +335,33 @@ BEGIN
 
   IF v_user_id IS NULL THEN
     v_user_id := extensions.uuid_generate_v4();
-    INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data)
-    VALUES (v_user_id, p_email, crypt(p_password, gen_salt('bf')), NOW(), jsonb_build_object('role', p_role, 'nom', p_nom));
+    INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_sent_at, is_sso_user, is_anonymous)
+    VALUES (
+      v_user_id,
+      '00000000-0000-0000-0000-000000000000',
+      'authenticated',
+      'authenticated',
+      p_email,
+      crypt(p_password, gen_salt('bf')),
+      v_now,
+      jsonb_build_object('provider', 'email', 'providers', ARRAY['email']),
+      jsonb_build_object('role', p_role, 'nom', p_nom),
+      v_now,
+      v_now,
+      v_now,
+      false,
+      false
+    );
+    INSERT INTO auth.identities (id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    VALUES (
+      v_user_id,
+      v_user_id,
+      jsonb_build_object('sub', v_user_id, 'email', p_email),
+      'email',
+      v_now,
+      v_now,
+      v_now
+    );
   END IF;
 
   INSERT INTO profiles (id, email, nom, role)
