@@ -849,6 +849,7 @@ export default function App() {
           detail: form.detail || '',
           termine: !!form.termine,
           linked: !!form.linked,
+          force_aout: !!form.force_aout,
         };
 
         setChantiers((prev) =>
