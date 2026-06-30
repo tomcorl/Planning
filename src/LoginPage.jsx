@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function LoginPage({
   loginForm,
@@ -7,9 +7,7 @@ export default function LoginPage({
   onSubmit,
   loggingIn,
 }) {
-  const rootRef = useRef(null);
   const [loaded, setLoaded] = useState(false);
-  const hasPhoto = false; // mets true quand tu as mis ta photo dans public/chantier.jpg
 
   useEffect(() => {
     setLoaded(true);
@@ -21,7 +19,7 @@ export default function LoginPage({
   };
 
   return (
-    <div className="login-root" ref={rootRef}>
+    <div className="login-root">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Serif+Display:ital@0;1&display=swap');
 
@@ -48,16 +46,6 @@ export default function LoginPage({
           overflow: hidden;
           background:
             linear-gradient(135deg, #1a2e1a 0%, #2d4a2d 25%, #4a6b3a 50%, #5a7a4a 75%, #3d5a30 100%);
-        }
-
-        .login-image.has-photo {
-          background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.2) 50%, transparent 100%);
-        }
-
-        .login-image.has-photo .photo-placeholder {
-          background-image: url('/chantier.jpg');
-          background-size: cover;
-          background-position: center;
         }
 
         .login-image::before {
@@ -184,14 +172,6 @@ export default function LoginPage({
 
         .has-photo .photo-placeholder {
           background: url('/chantier.jpg') center / cover no-repeat;
-        }
-
-        .has-photo::before,
-        .has-photo .field-shapes { display: none; }
-
-        .has-photo::after {
-          height: 70%;
-          background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.2) 50%, transparent 100%);
         }
 
         /* ── RIGHT PANEL (form side) ── */
@@ -476,7 +456,7 @@ export default function LoginPage({
       `}</style>
 
       {/* ── LEFT: Image side ── */}
-      <div className={`login-image ${hasPhoto ? 'has-photo' : ''}`}>
+      <div className="login-image">
         <div className="photo-placeholder" />
         <div className="field-shapes">
           <span style={{top:'15%',left:'10%',width:'35%',height:'28%',borderRadius:'4px'}} />

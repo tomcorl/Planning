@@ -4,7 +4,6 @@ import AdminUsersPage from './AdminUsersPage.jsx';
 
 import LoginPage from './LoginPage.jsx';
 import PasswordChangePage from './PasswordChangePage.jsx';
-import PaymentPage from './PaymentPage.jsx';
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
@@ -117,8 +116,6 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
-  const [authScreen, setAuthScreen] = useState('login');
-  const [selectedPlan, setSelectedPlan] = useState('Pro');
   const [activePage, setActivePage] = useState('planning');
   const [users, setUsers] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
@@ -1280,15 +1277,6 @@ export default function App() {
 
   const gridTemplateColumns = `260px repeat(${visibleDays.length}, ${cellWidth}px)`;
 
-  function handleSelectPlan(planName) {
-    setSelectedPlan(planName);
-    setAuthScreen('payment');
-  }
-
-  function handlePaymentComplete() {
-    setAuthScreen('login');
-  }
-
   if (dataLoading && session) {
     return <div className="loading-screen"><div className="loading-spinner"/><p>Chargement...</p></div>;
   }
@@ -1298,22 +1286,11 @@ export default function App() {
   }
 
   if (!session) {
-    if (authScreen === 'payment') {
-      return (
-        <PaymentPage
-          planName={selectedPlan}
-          onBack={() => setAuthScreen('login')}
-          onComplete={handlePaymentComplete}
-        />
-      );
-    }
-
     return (
       <LoginPage
         loginError={loginError}
         loginForm={loginForm}
         loggingIn={loggingIn}
-        onBack={() => setAuthScreen('login')}
         onChange={setLoginForm}
         onSubmit={handleLogin}
       />

@@ -1005,8 +1005,7 @@ button:active {
    COLOR PICKER
    ═══════════════════════════════════════════════ */
 
-.color-grid,
-.mini-color-grid {
+.color-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -1075,18 +1074,6 @@ button:active {
   display: flex;
 }
 
-.mini-edit {
-  width: 11px !important;
-  height: 11px !important;
-  font-size: 7px !important;
-}
-
-.mini-delete {
-  width: 11px !important;
-  height: 11px !important;
-  font-size: 7px !important;
-}
-
 .color-dot-wrapper.mini .color-dot {
   width: 22px;
   height: 22px;
@@ -1110,34 +1097,6 @@ button:active {
 .color-add:hover {
   border-color: var(--green);
   color: var(--green);
-}
-
-.mini-add {
-  width: 22px;
-  height: 22px;
-  font-size: 12px;
-}
-
-.color-add-input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-
-.color-picker-label input[type="color"] {
-  width: 0;
-  height: 0;
-  padding: 0;
-  border: none;
-  opacity: 0;
-  position: absolute;
-}
-
-.color-picker-icon {
-  font-size: 18px;
-  line-height: 1;
 }
 
 /* ═══════════════════════════════════════════════
@@ -1567,25 +1526,6 @@ button:active {
   justify-content: center;
   background: var(--green);
   color: white;
-}
-
-.checkbox-list {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.checkbox-list label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  background: var(--surface-2);
-  border: 1px solid var(--line-soft);
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 800;
 }
 
 .admin-table {
