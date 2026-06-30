@@ -2108,12 +2108,10 @@ export default function App() {
             </div>
 
             <div className="modal-footer">
-              {modal.mode === 'modification' && modal.type !== 'conducteur' && (
-                {canEdit && (
-                  <button className="modal-btn-danger" onClick={deleteSelectedItem}>
-                    Supprimer
-                  </button>
-                )}
+              {modal.mode === 'modification' && modal.type !== 'conducteur' && canEdit && (
+                <button className="modal-btn-danger" onClick={deleteSelectedItem}>
+                  Supprimer
+                </button>
               )}
               {modal.type !== 'conducteur' && (
                 <button className="modal-btn-primary" onClick={saveModal} disabled={!canEdit}>
