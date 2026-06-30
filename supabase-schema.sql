@@ -370,12 +370,13 @@ BEGIN
 
   -- créer auth.identities si manquant (indispensable pour la connexion)
   IF NOT EXISTS (SELECT 1 FROM auth.identities WHERE user_id = v_user_id AND provider = 'email') THEN
-    INSERT INTO auth.identities (id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
     VALUES (
       v_user_id,
       v_user_id,
       jsonb_build_object('sub', v_user_id, 'email', p_email),
       'email',
+      p_email,
       v_now,
       v_now,
       v_now
