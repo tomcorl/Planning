@@ -346,22 +346,16 @@ BEGIN
 
   IF v_user_id IS NULL THEN
     v_user_id := extensions.uuid_generate_v4();
-    INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_sent_at, is_sso_user, is_anonymous)
+    INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
     VALUES (
       v_user_id,
-      '00000000-0000-0000-0000-000000000000',
-      'authenticated',
-      'authenticated',
       p_email,
       crypt(p_password, gen_salt('bf')),
       v_now,
       jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
       jsonb_build_object('role', p_role, 'nom', p_nom),
       v_now,
-      v_now,
-      v_now,
-      false,
-      false
+      v_now
     );
   ELSE
     -- mettre à jour le mot de passe si l'utilisateur existe déjà
