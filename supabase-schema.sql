@@ -346,36 +346,25 @@ BEGIN
 
   IF v_user_id IS NULL THEN
     v_user_id := extensions.uuid_generate_v4();
-    INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-    VALUES (
-      v_user_id,
-      p_email,
-      crypt(p_password, gen_salt('bf')),
-      v_now,
-      jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
-      jsonb_build_object('role', p_role, 'nom', p_nom),
-      v_now,
-      v_now
-    );
+    INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, recovery_sent_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token, is_sso_user, is_anonymous)
+    VALUES ('00000000-0000-0000-0000-000000000000', v_user_id, 'authenticated', 'authenticated', p_email, crypt(p_password, gen_salt('bf')), v_now, v_now, v_now, jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')), jsonb_build_object('role', p_role, 'nom', p_nom), v_now, v_now, '', '', '', '', false, false);
   ELSE
-    -- mettre à jour le mot de passe si l'utilisateur existe déjà
     UPDATE auth.users SET encrypted_password = crypt(p_password, gen_salt('bf')), updated_at = v_now, email_confirmed_at = v_now WHERE id = v_user_id;
   END IF;
 
-  -- créer auth.identities si manquant (indispensable pour la connexion)
-  IF NOT EXISTS (SELECT 1 FROM auth.identities WHERE user_id = v_user_id AND provider = 'email') THEN
-    INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
-    VALUES (
-      v_user_id,
-      v_user_id,
-      jsonb_build_object('sub', v_user_id, 'email', p_email),
-      'email',
-      p_email,
-      v_now,
-      v_now,
-      v_now
-    );
-  END IF;
+  -- supprime puis recrée auth.identities (évite conflit de clé primaire)
+  DELETE FROM auth.identities WHERE provider = 'email' AND provider_id = p_email;
+  INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
+  VALUES (
+    v_user_id,
+    v_user_id,
+    jsonb_build_object('sub', v_user_id, 'email', p_email),
+    'email',
+    p_email,
+    v_now,
+    v_now,
+    v_now
+  );
 
   INSERT INTO profiles (id, email, nom, role)
   VALUES (v_user_id, p_email, p_nom, p_role)
@@ -397,6 +386,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin') THEN
     RAISE EXCEPTION 'Seuls les admins peuvent supprimer des utilisateurs';
   END IF;
+  DELETE FROM auth.identities WHERE user_id = p_user_id;
   DELETE FROM user_companies WHERE user_id = p_user_id;
   DELETE FROM profiles WHERE id = p_user_id;
   DELETE FROM auth.users WHERE id = p_user_id;
