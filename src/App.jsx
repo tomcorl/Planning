@@ -115,6 +115,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
+  const [loggingIn, setLoggingIn] = useState(false);
   const [authScreen, setAuthScreen] = useState('login');
   const [selectedPlan, setSelectedPlan] = useState('Pro');
   const [activePage, setActivePage] = useState('planning');
@@ -417,6 +418,7 @@ export default function App() {
   async function handleLogin(e) {
     e.preventDefault();
     setLoginError('');
+    setLoggingIn(true);
 
     try {
       await api.login(loginForm.email.trim(), loginForm.password);
@@ -424,6 +426,8 @@ export default function App() {
       // Auth listener handles the rest (session + data loading)
     } catch {
       setLoginError('Email ou mot de passe incorrect.');
+    } finally {
+      setLoggingIn(false);
     }
   }
 
@@ -1303,6 +1307,7 @@ export default function App() {
       <LoginPage
         loginError={loginError}
         loginForm={loginForm}
+        loggingIn={loggingIn}
         onBack={() => setAuthScreen('login')}
         onChange={setLoginForm}
         onSubmit={handleLogin}

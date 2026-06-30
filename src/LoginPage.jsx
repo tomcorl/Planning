@@ -5,6 +5,7 @@ export default function LoginPage({
   loginError,
   onChange,
   onSubmit,
+  loggingIn,
 }) {
   const rootRef = useRef(null);
   const [loaded, setLoaded] = useState(false);
@@ -16,11 +17,6 @@ export default function LoginPage({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const btn = e.currentTarget.querySelector('.submit-btn');
-    if (btn) {
-      btn.classList.add('loading');
-      btn.textContent = 'Connexion\u2026';
-    }
     onSubmit(e);
   };
 
@@ -447,7 +443,8 @@ export default function LoginPage({
           transform: scale(0.97);
         }
 
-        .submit-btn.loading {
+        .submit-btn.loading,
+        .submit-btn:disabled {
           opacity: 0.7;
           pointer-events: none;
         }
@@ -557,8 +554,8 @@ export default function LoginPage({
               />
             </div>
             {loginError && <div className="login-error">{loginError}</div>}
-            <button type="submit" className="submit-btn">
-              Se connecter
+            <button type="submit" className="submit-btn" disabled={loggingIn}>
+              {loggingIn ? 'Connexion\u2026' : 'Se connecter'}
             </button>
           </form>
 
