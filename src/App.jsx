@@ -263,10 +263,7 @@ export default function App() {
     if (!loadedRef.current || !session || !companies.length) return;
     const timer = setTimeout(() => {
       for (const comp of companies) {
-        const compChantiers = chantiers.filter((c) => {
-          const t = teams[c.equipe];
-          return t && t.companyId === comp.id;
-        });
+        const compChantiers = chantiers.filter((c) => c.company_id === comp.id);
         api.upsertChantiers(compChantiers, comp.id).catch(console.error);
         const compConges = conges.filter((c) => {
           const t = teams[c.equipe];
@@ -792,6 +789,7 @@ export default function App() {
 
     setForm({
       id: null,
+      company_id: teams[selection.equipe]?.companyId || companies[0]?.id,
       equipe: selection.equipe,
       start: nextWorkingDay(start, selection.equipe),
       duree: workingCount,
@@ -850,6 +848,7 @@ export default function App() {
       if (modal.type === 'chantier') {
         const item = {
           id: form.id || nextLocalId(),
+          company_id: form.company_id || teams[Number(form.equipe)]?.companyId || companies[0]?.id,
           equipe: Number(form.equipe),
           start: nextWorkingDay(form.start, Number(form.equipe)),
           duree: Number(form.duree),

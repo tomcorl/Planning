@@ -280,13 +280,33 @@ BEGIN
   IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
     RAISE EXCEPTION 'Accès refusé : rôle lecture';
   END IF;
-  DELETE FROM chantiers WHERE company_id = p_company_id;
+  -- Delete rows that exist in DB but NOT in the incoming array
+  DELETE FROM chantiers
+  WHERE company_id = p_company_id
+  AND id NOT IN (
+    SELECT (x->>'id')::INT FROM jsonb_array_elements(p_chantiers) AS x
+    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^[0-9]+$'
+  );
+  -- Upsert all incoming rows (non-destructive)
   RETURN QUERY
   INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
   SELECT COALESCE((x->>'id')::INT, nextval('chantiers_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT, (x->>'start')::TEXT, (x->>'duree')::INT,
          (x->>'nom')::TEXT, (x->>'conducteurId')::INT, (x->>'color')::TEXT, (x->>'note')::TEXT,
          (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT, COALESCE((x->>'force_aout')::BOOLEAN, false)
   FROM jsonb_array_elements(p_chantiers) AS x
+  ON CONFLICT (id) DO UPDATE SET
+    company_id = EXCLUDED.company_id,
+    equipe = EXCLUDED.equipe,
+    start = EXCLUDED.start,
+    duree = EXCLUDED.duree,
+    nom = EXCLUDED.nom,
+    "conducteurId" = EXCLUDED."conducteurId",
+    color = EXCLUDED.color,
+    note = EXCLUDED.note,
+    termine = EXCLUDED.termine,
+    linked = EXCLUDED.linked,
+    detail = EXCLUDED.detail,
+    force_aout = EXCLUDED.force_aout
   RETURNING *;
 END;
 $$;
