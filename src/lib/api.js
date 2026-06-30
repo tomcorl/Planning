@@ -214,12 +214,13 @@ export async function upsertCustomFeries(feries, companyId) {
 // ─── ADMIN: USERS ────────────────────────────────────────
 
 export async function fetchUsers() {
-  // try RPC first (bypass RLS), fallback to direct SELECT
+  // RPC get_users bypasses RLS (requires running the SQL in DB)
+  // fallback: direct SELECT (sujet à RLS, ne voit que soi-même)
   const { data, error } = await supabase.rpc('get_users');
-  if (!error && data) return data;
-  const { data: fallback, error: fallbackError } = await supabase.from('profiles').select('*');
-  if (fallbackError) { console.error('fetch users RPC+fallback', error, fallbackError); throw fallbackError; }
-  return (fallback || []).map((p) => ({ id: p.id, email: p.email, nom: p.nom, role: p.role }));
+  if (!error) return data || [];
+  const { data: fb, error: fbErr } = await supabase.from('profiles').select('*');
+  if (fbErr) throw fbErr;
+  return (fb || []).map((p) => ({ id: p.id, email: p.email, nom: p.nom, role: p.role }));
 }
 
 export async function updateUserProfile(userId, updates) {
