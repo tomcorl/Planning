@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   email TEXT NOT NULL UNIQUE,
   nom TEXT NOT NULL DEFAULT '',
   role TEXT NOT NULL DEFAULT 'planning',
+  must_change_password INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -145,6 +146,7 @@ ALTER TABLE user_companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE equipes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conducteurs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chantiers ADD COLUMN IF NOT EXISTS force_aout INTEGER DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS must_change_password INTEGER DEFAULT 0;
 ALTER TABLE chantiers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE conges ENABLE ROW LEVEL SECURITY;
 ALTER TABLE custom_feries ENABLE ROW LEVEL SECURITY;
@@ -260,6 +262,9 @@ RETURNS SETOF conducteurs LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   r JSONB;
 BEGIN
+  IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
+    RAISE EXCEPTION 'Accès refusé : rôle lecture';
+  END IF;
   FOR r IN SELECT * FROM jsonb_array_elements(p_conducteurs) LOOP
     INSERT INTO conducteurs (company_id, nom, color)
     VALUES (p_company_id, r->>'nom', r->>'color')
@@ -272,6 +277,9 @@ $$;
 CREATE OR REPLACE FUNCTION replace_chantiers(p_company_id TEXT, p_chantiers JSONB)
 RETURNS SETOF chantiers LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
+  IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
+    RAISE EXCEPTION 'Accès refusé : rôle lecture';
+  END IF;
   DELETE FROM chantiers WHERE company_id = p_company_id;
   RETURN QUERY
   INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
@@ -288,6 +296,9 @@ ALTER TABLE conges ADD COLUMN IF NOT EXISTS all_equipes INTEGER DEFAULT 0;
 CREATE OR REPLACE FUNCTION replace_conges(p_company_id TEXT, p_conges JSONB)
 RETURNS SETOF conges LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
+  IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
+    RAISE EXCEPTION 'Accès refusé : rôle lecture';
+  END IF;
   DELETE FROM conges WHERE company_id = p_company_id;
   RETURN QUERY
   INSERT INTO conges (id, company_id, equipe, start, duree, nom, all_equipes)
@@ -302,6 +313,9 @@ $$;
 CREATE OR REPLACE FUNCTION replace_equipes(p_company_id TEXT, p_equipes JSONB)
 RETURNS SETOF equipes LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
+  IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
+    RAISE EXCEPTION 'Accès refusé : rôle lecture';
+  END IF;
   DELETE FROM equipes WHERE company_id = p_company_id;
   RETURN QUERY
   INSERT INTO equipes (company_id, nom, ordre)
@@ -314,6 +328,9 @@ $$;
 CREATE OR REPLACE FUNCTION replace_custom_feries(p_company_id TEXT, p_feries JSONB)
 RETURNS SETOF custom_feries LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
+  IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
+    RAISE EXCEPTION 'Accès refusé : rôle lecture';
+  END IF;
   DELETE FROM custom_feries WHERE company_id = p_company_id;
   RETURN QUERY
   INSERT INTO custom_feries (company_id, nom, date)
@@ -366,15 +383,15 @@ BEGIN
     v_now
   );
 
-  INSERT INTO profiles (id, email, nom, role)
-  VALUES (v_user_id, p_email, p_nom, p_role)
+  INSERT INTO profiles (id, email, nom, role, must_change_password)
+  VALUES (v_user_id, p_email, p_nom, p_role, 1)
   ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, nom = EXCLUDED.nom, role = EXCLUDED.role;
 
   FOREACH cid IN ARRAY p_company_ids LOOP
     INSERT INTO user_companies (user_id, company_id) VALUES (v_user_id, cid) ON CONFLICT DO NOTHING;
   END LOOP;
 
-  v_result := jsonb_build_object('id', v_user_id, 'email', p_email, 'nom', p_nom, 'role', p_role, 'companyIds', to_jsonb(p_company_ids));
+  v_result := jsonb_build_object('id', v_user_id, 'email', p_email, 'nom', p_nom, 'role', p_role, 'must_change_password', 1, 'companyIds', to_jsonb(p_company_ids));
   RETURN v_result;
 END;
 $$;
@@ -393,10 +410,33 @@ BEGIN
 END;
 $$;
 
+-- RPC pour changer le mot de passe (l'utilisateur lui-même, efface must_change_password)
+CREATE OR REPLACE FUNCTION update_password(p_new_password TEXT)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE auth.users SET encrypted_password = crypt(p_new_password, gen_salt('bf')), updated_at = NOW() WHERE id = auth.uid();
+  UPDATE profiles SET must_change_password = 0 WHERE id = auth.uid();
+END;
+$$;
+
+-- RPC pour mettre à jour le profil d'un utilisateur (admin seulement)
+CREATE OR REPLACE FUNCTION update_user_profile(p_user_id UUID, p_nom TEXT, p_role TEXT)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin') THEN
+    RAISE EXCEPTION 'Accès refusé';
+  END IF;
+  UPDATE profiles SET nom = p_nom, role = p_role WHERE id = p_user_id;
+END;
+$$;
+
 -- RPC pour mettre à jour les couleurs (bypass RLS)
 CREATE OR REPLACE FUNCTION update_company_colors(p_company_id TEXT, p_chantier_colors TEXT[], p_conducteur_colors TEXT[])
 RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
+  IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
+    RAISE EXCEPTION 'Accès refusé : rôle lecture';
+  END IF;
   UPDATE companies
   SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors
   WHERE id = p_company_id;

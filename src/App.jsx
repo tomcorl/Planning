@@ -3,6 +3,7 @@ import './App.css';
 import AdminUsersPage from './AdminUsersPage.jsx';
 
 import LoginPage from './LoginPage.jsx';
+import PasswordChangePage from './PasswordChangePage.jsx';
 import PaymentPage from './PaymentPage.jsx';
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
@@ -350,9 +351,11 @@ export default function App() {
     const r1 = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
     if (!r1.error) profile = r1.data;
     const meta = {
+      id: user.id,
       email: user.email,
       nom: profile?.nom || user.email?.split('@')[0] || '',
       role: profile?.role || 'planning',
+      mustChangePassword: !!profile?.must_change_password,
     };
     if (profile?.role && profile.role !== user.user_metadata?.role) {
       await supabase.auth.updateUser({ data: { role: profile.role, nom: profile.nom } }).catch(() => {});
@@ -432,28 +435,21 @@ export default function App() {
   }
 
   async function saveUsers(nextUsers) {
+    const prevUsers = users;
     setUsers(nextUsers);
     if (!session) return;
-    const currentUser = nextUsers.find((u) => u.email === session.email);
-    if (currentUser) {
-      try {
-        await api.updateUserProfile(currentUser.id, {
-          nom: currentUser.nom,
-          role: currentUser.role,
-        });
-        setSession((cur) => ({
-          ...cur,
-          nom: currentUser.nom,
-          role: currentUser.role,
-        }));
-        await supabase.auth.updateUser({
-          data: {
-            nom: currentUser.nom,
-            role: currentUser.role,
-          },
-        });
-      } catch (err) {
-        console.error('Failed to update user:', err);
+    for (const updated of nextUsers) {
+      const prev = prevUsers.find((u) => u.id === updated.id);
+      if (prev && (prev.nom !== updated.nom || prev.role !== updated.role)) {
+        try {
+          await api.updateUserProfile(updated.id, { nom: updated.nom, role: updated.role });
+          if (updated.id === session.id) {
+            setSession((cur) => ({ ...cur, nom: updated.nom, role: updated.role }));
+            await supabase.auth.updateUser({ data: { nom: updated.nom, role: updated.role } }).catch(() => {});
+          }
+        } catch (err) {
+          console.error('Failed to update user:', err);
+        }
       }
     }
   }
@@ -476,6 +472,11 @@ export default function App() {
     } catch (err) {
       console.error('Failed to delete user:', err);
     }
+  }
+
+  async function handlePasswordChange(newPassword) {
+    await api.updatePassword(newPassword);
+    setSession((cur) => ({ ...cur, mustChangePassword: false }));
   }
 
   async function logout() {
@@ -527,9 +528,9 @@ export default function App() {
     });
   }
 
-  const keyRef = useRef({ selectedItem: null, modalOpen: false, clipboard: null });
+  const keyRef = useRef({ selectedItem: null, modalOpen: false, clipboard: null, canEdit: false });
   useEffect(() => {
-    keyRef.current = { selectedItem, modalOpen: modal.open, clipboard };
+    keyRef.current = { selectedItem, modalOpen: modal.open, clipboard, canEdit };
   });
 
   useEffect(() => {
@@ -547,9 +548,9 @@ export default function App() {
         redo();
       }
 
-      const { selectedItem: sel, modalOpen, clipboard: clip } = keyRef.current;
+      const { selectedItem: sel, modalOpen, clipboard: clip, canEdit: ce } = keyRef.current;
 
-      if ((e.key === 'Delete' || e.key === 'Backspace') && sel && !modalOpen) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && sel && !modalOpen && ce) {
         e.preventDefault();
         deleteSelectedItem();
       }
@@ -562,7 +563,7 @@ export default function App() {
         if (item) setClipboard({ ...item, sourceType: sel.type });
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clip && !modalOpen) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clip && !modalOpen && ce) {
         e.preventDefault();
         pasteClipboard();
       }
@@ -1176,7 +1177,7 @@ export default function App() {
   }
 
   function deleteSelectedItem() {
-    if (!selectedItem) return;
+    if (!selectedItem || !canEdit) return;
     commit(() => {
       if (selectedItem.type === 'chantier') {
         setChantiers((prev) => prev.filter((c) => c.id !== selectedItem.id));
@@ -1190,7 +1191,7 @@ export default function App() {
   }
 
   function pasteClipboard() {
-    if (!clipboard) return;
+    if (!clipboard || !canEdit) return;
     commit(() => {
       if (clipboard.sourceType === 'chantier') {
         const newItem = {
@@ -1292,6 +1293,10 @@ export default function App() {
     return <div className="loading-screen"><div className="loading-spinner"/><p>Chargement...</p></div>;
   }
 
+  if (session?.mustChangePassword) {
+    return <PasswordChangePage onSubmit={handlePasswordChange} />;
+  }
+
   if (!session) {
     if (authScreen === 'payment') {
       return (
@@ -1357,13 +1362,13 @@ export default function App() {
             )}
           </div>
 
-          {activePage === 'planning' && (
+          {activePage === 'planning' && canEdit && (
             <button className="primary-action" onClick={quickAdd}>
               + Chantier
             </button>
           )}
 
-          {activePage === 'planning' && (
+          {activePage === 'planning' && canEdit && (
             <button onClick={() => setHolidayModalOpen(true)}>
               Jours fériés
             </button>
@@ -1682,7 +1687,7 @@ export default function App() {
           }}>
             📋 Copier
           </button>
-          {clipboard && (
+          {clipboard && canEdit && (
             <button onClick={() => {
               pasteClipboard();
               setContextMenu(null);
@@ -1690,12 +1695,14 @@ export default function App() {
               📌 Coller
             </button>
           )}
-          <button onClick={() => {
-            deleteSelectedItem();
-            setContextMenu(null);
-          }}>
-            🗑️ Supprimer
-          </button>
+          {canEdit && (
+            <button onClick={() => {
+              deleteSelectedItem();
+              setContextMenu(null);
+            }}>
+              🗑️ Supprimer
+            </button>
+          )}
         </div>
       )}
 
@@ -2102,9 +2109,11 @@ export default function App() {
 
             <div className="modal-footer">
               {modal.mode === 'modification' && modal.type !== 'conducteur' && (
-                <button className="modal-btn-danger" onClick={deleteSelectedItem}>
-                  Supprimer
-                </button>
+                {canEdit && (
+                  <button className="modal-btn-danger" onClick={deleteSelectedItem}>
+                    Supprimer
+                  </button>
+                )}
               )}
               {modal.type !== 'conducteur' && (
                 <button className="modal-btn-primary" onClick={saveModal} disabled={!canEdit}>

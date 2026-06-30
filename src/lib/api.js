@@ -220,14 +220,15 @@ export async function fetchUsers() {
   if (!error) return data || [];
   const { data: fb, error: fbErr } = await supabase.from('profiles').select('*');
   if (fbErr) throw fbErr;
-  return (fb || []).map((p) => ({ id: p.id, email: p.email, nom: p.nom, role: p.role }));
+  return (fb || []).map((p) => ({ id: p.id, email: p.email, nom: p.nom, role: p.role, must_change_password: !!p.must_change_password }));
 }
 
 export async function updateUserProfile(userId, updates) {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ nom: updates.nom, role: updates.role })
-    .eq('id', userId);
+  const { error } = await supabase.rpc('update_user_profile', {
+    p_user_id: userId,
+    p_nom: updates.nom,
+    p_role: updates.role,
+  });
   if (error) { console.error('update user profile', error); throw error; }
 }
 
@@ -248,4 +249,11 @@ export async function deleteUser(userId) {
     p_user_id: userId,
   });
   if (error) { console.error('delete_user RPC', error); throw error; }
+}
+
+export async function updatePassword(newPassword) {
+  const { error } = await supabase.rpc('update_password', {
+    p_new_password: newPassword,
+  });
+  if (error) { console.error('update_password RPC', error); throw error; }
 }
