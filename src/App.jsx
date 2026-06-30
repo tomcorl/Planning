@@ -532,8 +532,9 @@ export default function App() {
 
   useEffect(() => {
     function onKeyDown(e) {
-      const z = e.key.toLowerCase() === 'z';
-      const y = e.key.toLowerCase() === 'y';
+      const key = e.key || '';
+      const z = key.toLowerCase() === 'z';
+      const y = key.toLowerCase() === 'y';
 
       if ((e.ctrlKey || e.metaKey) && z && !e.shiftKey) {
         e.preventDefault();
@@ -547,12 +548,12 @@ export default function App() {
 
       const { selectedItem: sel, modalOpen, clipboard: clip, canEdit: ce } = keyRef.current;
 
-      if ((e.key === 'Delete' || e.key === 'Backspace') && sel && !modalOpen && ce) {
+      if ((key === 'Delete' || key === 'Backspace') && sel && !modalOpen && ce) {
         e.preventDefault();
         deleteSelectedItem();
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && sel && !modalOpen) {
+      if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'c' && sel && !modalOpen) {
         e.preventDefault();
         const item = sel.type === 'chantier'
           ? chantiers.find((c) => c.id === sel.id)
@@ -560,7 +561,7 @@ export default function App() {
         if (item) setClipboard({ ...item, sourceType: sel.type });
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clip && !modalOpen && ce) {
+      if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'v' && clip && !modalOpen && ce) {
         e.preventDefault();
         pasteClipboard();
       }
@@ -1440,7 +1441,7 @@ export default function App() {
             if (row.type === 'company-header') {
               return (
                 <React.Fragment key={row.id}>
-                  <div className="team-cell company-header-cell"><span>{row.name}</span><button className="add-team-btn" onClick={() => addTeamToCompany(row.id.replace('ch-', ''))}>+</button></div>
+                  <div className="team-cell company-header-cell"><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
                   {visibleDays.map((day) => (
                     <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
                   ))}
@@ -1462,10 +1463,10 @@ export default function App() {
                         onChange={(e) => updateTeam(row.teamIndex, e.target.value)}
                         style={{ fontSize: Math.round(11 + (cellWidth - 26) * 3 / 26) }}
                       />
-                      <button
+                      {canEdit && <button
                         className="delete-team"
                         onClick={() => deleteTeam(row.teamIndex)}
-                      >×</button>
+                      >×</button>}
                     </>
                   )}
                 </div>
@@ -1541,13 +1542,13 @@ export default function App() {
                                 : ''
                             }`}
                             draggable={!resize && canEdit}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={() =>
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
                               setSelectedItem({
                                 type: 'chantier',
                                 id: chantier.id,
-                              })
-                            }
+                              });
+                            }}
                             onDoubleClick={() => openEditChantier(chantier)}
                             onContextMenu={(e) => handleContextMenu(e, 'chantier', chantier.id)}
                             onDragStart={(e) => onDragStart(e, chantier.id, 'chantier')}
@@ -1632,10 +1633,10 @@ export default function App() {
                             fontSize: 16,
                             padding: `${Math.max(4, Math.round(6 + (cellWidth - 26) * 2 / 26))}px ${Math.max(4, Math.round(8 + (cellWidth - 26) * 2 / 26))}px`,
                           }}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={() =>
-                            setSelectedItem({ type: 'conge', id: conge.id })
-                          }
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setSelectedItem({ type: 'conge', id: conge.id });
+                          }}
                           onDoubleClick={() => openEditConge(conge)}
                           onContextMenu={(e) => handleContextMenu(e, 'conge', conge.id)}
                         >

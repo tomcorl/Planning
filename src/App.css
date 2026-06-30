@@ -180,7 +180,7 @@ button:active {
 
 .planning-scroll {
   height: calc(100vh - 70px);
-  overflow: auto;
+  overflow: scroll;
   margin: 0 10px 10px;
   border-radius: 14px;
   background: var(--surface);
@@ -726,13 +726,13 @@ button:active {
 .tooltip {
   display: none;
   position: fixed;
-  width: 260px;
+  width: 320px;
   background: var(--surface);
   color: var(--text);
-  padding: 12px 14px;
-  border-radius: 12px;
-  font-size: 12px;
-  line-height: 1.4;
+  padding: 16px 18px;
+  border-radius: 14px;
+  font-size: 15px;
+  line-height: 1.5;
   box-shadow: 0 12px 36px var(--shadow-md);
   border: 1px solid var(--line);
   z-index: 99999;
@@ -742,12 +742,12 @@ button:active {
 .tooltip::before {
   content: 'Note chantier';
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .note-icon:hover .tooltip {
@@ -1576,7 +1576,47 @@ button:active {
   color: var(--muted) !important;
 }
 
+.admin-created-info {
+  background: var(--surface-2);
+  border: 2px solid var(--green);
+  border-radius: 14px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+  animation: fadeUp 0.3s ease-out;
+}
 
+.admin-created-info strong {
+  font-size: 18px;
+  color: var(--green);
+}
+
+.admin-created-info p {
+  font-size: 15px;
+  margin: 8px 0;
+}
+
+.admin-created-info code {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  background: var(--surface-3);
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--text);
+  user-select: all;
+}
+
+.admin-created-hint {
+  color: var(--muted);
+  font-size: 13px !important;
+}
+
+.admin-created-info button {
+  margin-top: 10px;
+  background: var(--green);
+  color: white;
+  padding: 8px 20px;
+}
 
 /* ═══════════════════════════════════════════════
    ANIMATIONS
