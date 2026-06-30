@@ -344,7 +344,7 @@ BEGIN
       p_email,
       crypt(p_password, gen_salt('bf')),
       v_now,
-      jsonb_build_object('provider', 'email', 'providers', ARRAY['email']),
+      jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
       jsonb_build_object('role', p_role, 'nom', p_nom),
       v_now,
       v_now,
