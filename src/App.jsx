@@ -1651,7 +1651,7 @@ export default function App() {
                             width: (seg.end - seg.start + 1) * cellWidth - 8,
                             height: cH,
                             top: cT,
-                            fontSize: Math.max(9, Math.min(11, 9 + (cellWidth - 26) * 2 / 26)),
+                            fontSize: 16,
                             padding: `${Math.max(4, Math.round(6 + (cellWidth - 26) * 2 / 26))}px ${Math.max(4, Math.round(8 + (cellWidth - 26) * 2 / 26))}px`,
                           }}
                           onMouseDown={(e) => e.stopPropagation()}
