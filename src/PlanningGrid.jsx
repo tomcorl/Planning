@@ -156,8 +156,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                     <>
                       <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.numInCompany}</div>
                       <input
-                        value={row.name}
-                        onChange={(e) => cb.updateTeam(row.teamIndex, e.target.value)}
+                        defaultValue={row.name}
+                        onBlur={(e) => cb.updateTeam(row.teamIndex, e.target.value)}
                         style={{ fontSize: Math.round(11 + (cellWidth - 26) * 3 / 26) }}
                       />
                       {canEdit && <button

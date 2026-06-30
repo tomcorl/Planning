@@ -147,6 +147,7 @@ export default function App() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [dragPreview, setDragPreview] = useState(null);
   const dragThrottle = useRef(null);
+  const selectionThrottle = useRef(null);
   const gridCallbacksRef = useRef({});
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -759,9 +760,14 @@ export default function App() {
   }
 
   function updateSelection(equipe, date) {
-    if (!selection || selection.equipe !== equipe) return;
-
-    setSelection({ ...selection, endDate: date });
+    if (selectionThrottle.current) return;
+    selectionThrottle.current = requestAnimationFrame(() => {
+      setSelection((prev) => {
+        if (!prev || prev.equipe !== equipe) return prev;
+        return { ...prev, endDate: date };
+      });
+      selectionThrottle.current = null;
+    });
   }
 
   function endSelection() {
@@ -1177,34 +1183,36 @@ export default function App() {
   }
 
   function deleteSelectedItem() {
-    if (!selectedItem || !canEdit) return;
+    const ref = keyRef.current;
+    if (!ref.selectedItem || !ref.canEdit) return;
     commit(() => {
-      if (selectedItem.type === 'chantier') {
-        setChantiers((prev) => prev.filter((c) => c.id !== selectedItem.id));
+      if (ref.selectedItem.type === 'chantier') {
+        setChantiers((prev) => prev.filter((c) => c.id !== ref.selectedItem.id));
       }
-      if (selectedItem.type === 'conge') {
-        setConges((prev) => prev.filter((c) => c.id !== selectedItem.id));
+      if (ref.selectedItem.type === 'conge') {
+        setConges((prev) => prev.filter((c) => c.id !== ref.selectedItem.id));
       }
     });
-    if (modal.open) closeModal();
+    if (ref.modalOpen) closeModal();
     setSelectedItem(null);
   }
 
   function pasteClipboard() {
-    if (!clipboard || !canEdit) return;
+    const clip = keyRef.current.clipboard;
+    if (!clip || !canEdit) return;
     commit(() => {
-      if (clipboard.sourceType === 'chantier') {
+      if (clip.sourceType === 'chantier') {
         const newItem = {
-          ...clipboard,
+          ...clip,
           id: nextLocalId(),
-          start: nextWorkingDay(today, clipboard.equipe || 0),
+          start: nextWorkingDay(today, clip.equipe || 0),
         };
         setChantiers((prev) => [...prev, newItem]);
         setSelectedItem({ type: 'chantier', id: newItem.id });
       }
-      if (clipboard.sourceType === 'conge') {
+      if (clip.sourceType === 'conge') {
         const newItem = {
-          ...clipboard,
+          ...clip,
           id: nextLocalId(),
           start: today,
         };
