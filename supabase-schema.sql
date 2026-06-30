@@ -158,6 +158,17 @@ CREATE POLICY  "users can view own companies" ON companies
 CREATE POLICY  "users can view own profile" ON profiles
   FOR SELECT USING (id = auth.uid());
 
+-- RPC pour lister les utilisateurs (admin seulement, bypass RLS)
+CREATE OR REPLACE FUNCTION get_users()
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin') THEN
+    RAISE EXCEPTION 'Accès refusé';
+  END IF;
+  RETURN (SELECT jsonb_agg(jsonb_build_object('id', id, 'email', email, 'nom', nom, 'role', role)) FROM profiles);
+END;
+$$;
+
 CREATE POLICY  "users can view own company links" ON user_companies
   FOR SELECT USING (auth.uid() = user_id);
 
@@ -352,6 +363,13 @@ BEGIN
       false,
       false
     );
+  ELSE
+    -- mettre à jour le mot de passe si l'utilisateur existe déjà
+    UPDATE auth.users SET encrypted_password = crypt(p_password, gen_salt('bf')), updated_at = v_now, email_confirmed_at = v_now WHERE id = v_user_id;
+  END IF;
+
+  -- créer auth.identities si manquant (indispensable pour la connexion)
+  IF NOT EXISTS (SELECT 1 FROM auth.identities WHERE user_id = v_user_id AND provider = 'email') THEN
     INSERT INTO auth.identities (id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
     VALUES (
       v_user_id,

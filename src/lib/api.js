@@ -214,9 +214,9 @@ export async function upsertCustomFeries(feries, companyId) {
 // ─── ADMIN: USERS ────────────────────────────────────────
 
 export async function fetchUsers() {
-  const { data, error } = await supabase.from('profiles').select('*');
+  const { data, error } = await supabase.rpc('get_users');
   if (error) { console.error('fetch users', error); throw error; }
-  return (data || []).map((p) => ({ id: p.id, email: p.email, nom: p.nom, role: p.role }));
+  return data || [];
 }
 
 export async function updateUserProfile(userId, updates) {
