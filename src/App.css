@@ -255,31 +255,6 @@ button:active {
   border-radius: 6px;
 }
 
-.add-team-group {
-  display: flex;
-  gap: 3px;
-  align-items: center;
-}
-
-.add-team-group button {
-  padding: 1px 6px;
-  font-size: 9px;
-  font-weight: 700;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s;
-}
-
-.add-team-group button:hover {
-  background: var(--green);
-  color: white;
-  border-color: var(--green);
-}
-
 .date-nav {
   display: flex;
   align-items: center;
@@ -424,6 +399,8 @@ button:active {
   border-bottom: 2px solid var(--line);
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 0 12px;
   box-shadow: none !important;
   z-index: 3;
@@ -509,6 +486,28 @@ button:active {
 
 .delete-team:hover {
   background: #fecaca;
+}
+
+.add-team-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--green);
+  font-size: 16px;
+  font-weight: 700;
+  transition: all 0.15s ease-out;
+  flex-shrink: 0;
+  opacity: 0.5;
+  border: 1px solid var(--green);
+  cursor: pointer;
+  line-height: 1;
+}
+.add-team-btn:hover {
+  opacity: 1;
+  background: var(--green);
+  color: #fff;
 }
 
 /* ═══════════════════════════════════════════════
@@ -769,7 +768,7 @@ button:active {
   background: #000;
   color: white;
   padding: 8px 10px;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 900;
   z-index: 1;
   border-left: 3px solid #222;

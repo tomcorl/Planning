@@ -1405,16 +1405,6 @@ export default function App() {
         <div className="grid week-grid" style={{ gridTemplateColumns }}>
             <div className="corner week-corner">
             <strong>Équipes</strong>
-            <div className="add-team-group">
-              {companies.map((comp) => {
-                const short = comp.nom.length > 8 ? comp.nom.split(' ')[0].slice(0, 8) : comp.nom;
-                return (
-                  <button key={comp.id} onClick={() => addTeamToCompany(comp.id)} title={`Ajouter à ${comp.nom}`}>
-                    + {short}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {weekGroups.map((g, i) => (
@@ -1462,7 +1452,7 @@ export default function App() {
             if (row.type === 'company-header') {
               return (
                 <React.Fragment key={row.id}>
-                  <div className="team-cell company-header-cell">{row.name}</div>
+                  <div className="team-cell company-header-cell"><span>{row.name}</span><button className="add-team-btn" onClick={() => addTeamToCompany(row.id.replace('ch-', ''))}>+</button></div>
                   {visibleDays.map((day) => (
                     <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
                   ))}
