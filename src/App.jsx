@@ -1614,7 +1614,7 @@ export default function App() {
                         <strong>{f.nom}</strong>
                         <span>{new Date(f.date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
                       </div>
-                      <button className="modal-btn-danger" onClick={() => commit(() => setCustomFeries((prev) => prev.filter((x) => x.id !== f.id)))}>Supprimer</button>
+                      <button className="modal-btn-danger" onClick={() => commit(() => setCustomFeries((prev) => prev.filter((x) => !(x.nom === f.nom && x.date === f.date))))}>Supprimer</button>
                     </div>
                   ))}
                 </div>
