@@ -277,28 +277,30 @@ export default function App() {
 
   useEffect(() => {
     if (!loadedRef.current || !session || !companies.length) return;
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
       for (const comp of companies) {
         const compNames = teams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
         api.upsertEquipes(compNames, comp.id).catch(console.error);
-        const compConducteurs = conducteurs.filter((c) => c.companyId === comp.id);
-        api.upsertConducteurs(compConducteurs, comp.id).then(result => {
-          if (!result) return;
-          setConducteurs(prev => {
-            const nomToId = new Map(result.map(r => [r.nom, r.id]));
-            let changed = false;
-            const updated = prev.map(c => {
-              if (c.companyId !== comp.id) return c;
-              const dbId = nomToId.get(c.nom);
-              if (dbId && c.id !== dbId) {
-                changed = true;
-                return { ...c, id: dbId };
-              }
-              return c;
-            });
-            return changed ? updated : prev;
+      }
+      // Save all conducteurs to all companies (shared — same conducteurs for all)
+      let lastResult;
+      for (const comp of companies) {
+        lastResult = await api.upsertConducteurs(conducteurs, comp.id).catch(console.error);
+      }
+      if (lastResult) {
+        setConducteurs(prev => {
+          const nomToId = new Map(lastResult.map(r => [r.nom, r.id]));
+          let changed = false;
+          const updated = prev.map(c => {
+            const dbId = nomToId.get(c.nom);
+            if (dbId && c.id !== dbId) {
+              changed = true;
+              return { ...c, id: dbId };
+            }
+            return c;
           });
-        }).catch(console.error);
+          return changed ? updated : prev;
+        });
       }
       for (const comp of companies) {
         const compFeries = customFeries.filter((f) => f.companyId === comp.id);
@@ -340,7 +342,9 @@ export default function App() {
         }
       }
 
-      setConducteurs(allData.conducteurs.length > 0 ? allData.conducteurs : []);
+      setConducteurs(allData.conducteurs.length > 0
+        ? [...new Map(allData.conducteurs.map(c => [c.nom, c])).values()]
+        : []);
       setChantiers(allData.chantiers);
       setConges(allData.conges);
       setCustomFeries(allData.customFeries);
@@ -1793,69 +1797,55 @@ export default function App() {
 
               {modal.type === 'conducteur' && (
                 <div className="conducteurs-editor">
-                  {companies.map((comp) => {
-                    const compConducteurs = conducteurs.filter((c) => c.companyId === comp.id);
-                    return (
-                      <div key={comp.id} className="company-section">
-                        <h4>{comp.nom}</h4>
-                        {compConducteurs.length === 0 && (
-                          <div className="empty-state">Aucun conducteur</div>
-                        )}
-                        {compConducteurs.map((c) => {
-                          const globalIdx = conducteurs.findIndex((x) => x.id === c.id);
-                          return (
-                            <div className="conducteur-edit-row" key={c.id}>
-                              <div className="color-picker-wrap">
-                                <input
-                                  type="color"
-                                  value={c.color}
-                                  onChange={(e) =>
-                                    setConducteurs((prev) =>
-                                      prev.map((x, idx) =>
-                                        idx === globalIdx ? { ...x, color: e.target.value } : x
-                                      )
-                                    )
-                                  }
-                                />
-                                <span className="color-swatch" style={{ background: c.color }} />
-                              </div>
-                              <input
-                                value={c.nom}
-                                onChange={(e) =>
-                                  setConducteurs((prev) =>
-                                    prev.map((x, idx) =>
-                                      idx === globalIdx ? { ...x, nom: e.target.value } : x
-                                    )
-                                  )
-                                }
-                              />
-                              <button
-                                className="delete-conducteur"
-                                title="Supprimer ce conducteur"
-                                onClick={() => {
-                                  if (window.confirm(`Supprimer ${c.nom} ?`))
-                                    setConducteurs((prev) => prev.filter((_, idx) => idx !== globalIdx));
-                                }}
-                              >×</button>
-                            </div>
-                          );
-                        })}
-                        <button className="add-conducteur-btn" onClick={() =>
-                          setConducteurs((prev) => [
-                            ...prev,
-                            {
-                              id: nextLocalId(),
-                              nom: `Conducteur ${prev.length + 1}`,
-                              color: conducteurColors[prev.length % conducteurColors.length] || conducteurColors[0] || '#2563eb',
-                              companyId: comp.id,
-                            },
-                          ])
-                        }>
-                          + Ajouter un conducteur ({comp.nom})
-                        </button>
+                  {conducteurs.map((c, i) => (
+                    <div className="conducteur-edit-row" key={c.id}>
+                      <div className="color-picker-wrap">
+                        <input
+                          type="color"
+                          value={c.color}
+                          onChange={(e) =>
+                            setConducteurs((prev) =>
+                              prev.map((x, idx) =>
+                                idx === i ? { ...x, color: e.target.value } : x
+                              )
+                            )
+                          }
+                        />
+                        <span className="color-swatch" style={{ background: c.color }} />
                       </div>
-                    );
-                  })}
+                      <input
+                        value={c.nom}
+                        onChange={(e) =>
+                          setConducteurs((prev) =>
+                            prev.map((x, idx) =>
+                              idx === i ? { ...x, nom: e.target.value } : x
+                            )
+                          )
+                        }
+                      />
+                      <button
+                        className="delete-conducteur"
+                        title="Supprimer ce conducteur"
+                        onClick={() => {
+                          if (window.confirm(`Supprimer ${c.nom} ?`))
+                            setConducteurs((prev) => prev.filter((_, idx) => idx !== i));
+                        }}
+                      >×</button>
+                    </div>
+                  ))}
+                  <button className="add-conducteur-btn" onClick={() =>
+                    setConducteurs((prev) => [
+                      ...prev,
+                      {
+                        id: nextLocalId(),
+                        nom: `Conducteur ${prev.length + 1}`,
+                        color: conducteurColors[prev.length % conducteurColors.length] || conducteurColors[0] || '#2563eb',
+                        companyId: companies[0]?.id || 'noree',
+                      },
+                    ])
+                  }>
+                    + Ajouter un conducteur
+                  </button>
                 </div>
               )}
             </div>
@@ -1866,9 +1856,13 @@ export default function App() {
                   Supprimer
                 </button>
               )}
-              {modal.type !== 'conducteur' && (
+              {modal.type !== 'conducteur' ? (
                 <button className="modal-btn-primary" onClick={saveModal} disabled={!canEdit}>
                   {modal.mode === 'modification' ? 'Modifier' : 'Créer'}
+                </button>
+              ) : (
+                <button className="modal-btn-primary" onClick={closeModal}>
+                  OK
                 </button>
               )}
               <button className="modal-btn-cancel" onClick={closeModal}>
