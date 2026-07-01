@@ -256,7 +256,7 @@ CREATE POLICY  "admin delete" ON custom_feries FOR DELETE USING (
 -- RPC TRANSACTIONNELS (sauvegardes atomiques)
 -- ============================================================
 
--- RPC pour conducteurs : upsert par nom (préserve les IDs)
+-- RPC pour conducteurs : upsert avec suppression sélective
 CREATE OR REPLACE FUNCTION upsert_conducteurs(p_company_id TEXT, p_conducteurs JSONB)
 RETURNS SETOF conducteurs LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
@@ -265,6 +265,13 @@ BEGIN
   IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
     RAISE EXCEPTION 'Accès refusé : rôle lecture';
   END IF;
+  -- Supprime les conducteurs qui ne sont plus dans la liste entrante
+  DELETE FROM conducteurs
+  WHERE company_id = p_company_id
+  AND id NOT IN (
+    SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conducteurs) AS x
+    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^[0-9]+$'
+  );
   FOR r IN SELECT * FROM jsonb_array_elements(p_conducteurs) LOOP
     INSERT INTO conducteurs (company_id, nom, color)
     VALUES (p_company_id, r->>'nom', r->>'color')
@@ -319,13 +326,26 @@ BEGIN
   IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
     RAISE EXCEPTION 'Accès refusé : rôle lecture';
   END IF;
-  DELETE FROM conges WHERE company_id = p_company_id;
+  -- Supprime les congés qui ne sont plus dans la liste entrante
+  DELETE FROM conges
+  WHERE company_id = p_company_id
+  AND id NOT IN (
+    SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conges) AS x
+    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^[0-9]+$'
+  );
   RETURN QUERY
   INSERT INTO conges (id, company_id, equipe, start, duree, nom, all_equipes)
   SELECT COALESCE((x->>'id')::INT, nextval('conges_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT,
          (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT,
          COALESCE((x->>'all_equipes')::INT, 0)
   FROM jsonb_array_elements(p_conges) AS x
+  ON CONFLICT (id) DO UPDATE SET
+    company_id = EXCLUDED.company_id,
+    equipe = EXCLUDED.equipe,
+    start = EXCLUDED.start,
+    duree = EXCLUDED.duree,
+    nom = EXCLUDED.nom,
+    all_equipes = EXCLUDED.all_equipes
   RETURNING *;
 END;
 $$;

@@ -171,12 +171,20 @@ export async function upsertEquipes(equipes, companyId) {
 }
 
 export async function upsertConducteurs(conducteurs, companyId) {
-  const rows = conducteurs.map((c) => ({
-    nom: c.nom,
-    color: c.color,
-  }));
+  const rows = conducteurs.map((c) => {
+    const row = { nom: c.nom, color: c.color };
+    if (c.id && c.id > 0 && c.id <= 2147483647) row.id = c.id;
+    return row;
+  });
 
-  if (rows.length === 0) return;
+  if (rows.length === 0) {
+    const { error: delErr } = await supabase
+      .from('conducteurs')
+      .delete()
+      .eq('company_id', companyId);
+    if (delErr) { console.error('delete conducteurs error', delErr); throw delErr; }
+    return [];
+  }
 
   const { data, error } = await supabase.rpc('upsert_conducteurs', {
     p_company_id: companyId,

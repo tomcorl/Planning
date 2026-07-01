@@ -284,8 +284,10 @@ export default function App() {
         const compConducteurs = conducteurs.filter((c) => c.companyId === comp.id);
         api.upsertConducteurs(compConducteurs, comp.id).catch(console.error);
       }
-      // Save custom feries to first company (current UI limitation)
-      api.upsertCustomFeries(customFeries, companies[0].id).catch(console.error);
+      for (const comp of companies) {
+        const compFeries = customFeries.filter((f) => f.companyId === comp.id);
+        api.upsertCustomFeries(compFeries, comp.id).catch(console.error);
+      }
     }, 800);
     return () => clearTimeout(timer);
   }, [teams, conducteurs, customFeries, session, companies]);
@@ -293,8 +295,9 @@ export default function App() {
   useEffect(() => {
     if (!loadedRef.current || !session || !companies.length) return;
     const timer = setTimeout(() => {
-      const comp = companies[0];
-      if (comp) api.updateCompanyColors(comp.id, chantierColors, conducteurColors).catch(console.error);
+      for (const comp of companies) {
+        api.updateCompanyColors(comp.id, chantierColors, conducteurColors).catch(console.error);
+      }
     }, 800);
     return () => clearTimeout(timer);
   }, [chantierColors, conducteurColors, session, companies]);
