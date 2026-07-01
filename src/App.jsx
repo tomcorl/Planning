@@ -303,7 +303,8 @@ export default function App() {
         });
       }
       for (const comp of companies) {
-        api.upsertCustomFeries(customFeries, comp.id).catch(console.error);
+        const compFeries = customFeries.filter((f) => f.companyId === comp.id);
+        api.upsertCustomFeries(compFeries, comp.id).catch(console.error);
       }
     }, 800);
     return () => clearTimeout(timer);
