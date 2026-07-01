@@ -270,7 +270,7 @@ BEGIN
   WHERE company_id = p_company_id
   AND id NOT IN (
     SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conducteurs) AS x
-    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^[0-9]+$'
+    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
   );
   FOR r IN SELECT * FROM jsonb_array_elements(p_conducteurs) LOOP
     INSERT INTO conducteurs (company_id, nom, color)
@@ -292,7 +292,7 @@ BEGIN
   WHERE company_id = p_company_id
   AND id NOT IN (
     SELECT (x->>'id')::INT FROM jsonb_array_elements(p_chantiers) AS x
-    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^[0-9]+$'
+    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
   );
   -- Upsert all incoming rows (non-destructive)
   RETURN QUERY
@@ -331,7 +331,7 @@ BEGIN
   WHERE company_id = p_company_id
   AND id NOT IN (
     SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conges) AS x
-    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^[0-9]+$'
+    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
   );
   RETURN QUERY
   INSERT INTO conges (id, company_id, equipe, start, duree, nom, all_equipes)

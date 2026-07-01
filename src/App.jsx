@@ -282,7 +282,23 @@ export default function App() {
         const compNames = teams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
         api.upsertEquipes(compNames, comp.id).catch(console.error);
         const compConducteurs = conducteurs.filter((c) => c.companyId === comp.id);
-        api.upsertConducteurs(compConducteurs, comp.id).catch(console.error);
+        api.upsertConducteurs(compConducteurs, comp.id).then(result => {
+          if (!result) return;
+          setConducteurs(prev => {
+            const nomToId = new Map(result.map(r => [r.nom, r.id]));
+            let changed = false;
+            const updated = prev.map(c => {
+              if (c.companyId !== comp.id) return c;
+              const dbId = nomToId.get(c.nom);
+              if (dbId && c.id !== dbId) {
+                changed = true;
+                return { ...c, id: dbId };
+              }
+              return c;
+            });
+            return changed ? updated : prev;
+          });
+        }).catch(console.error);
       }
       for (const comp of companies) {
         const compFeries = customFeries.filter((f) => f.companyId === comp.id);
@@ -1777,54 +1793,69 @@ export default function App() {
 
               {modal.type === 'conducteur' && (
                 <div className="conducteurs-editor">
-                  {conducteurs.map((c, i) => (
-                    <div className="conducteur-edit-row" key={c.id}>
-                      <div className="color-picker-wrap">
-                        <input
-                          type="color"
-                          value={c.color}
-                          onChange={(e) =>
-                            setConducteurs((prev) =>
-                              prev.map((x, idx) =>
-                                idx === i ? { ...x, color: e.target.value } : x
-                              )
-                            )
-                          }
-                        />
-                        <span className="color-swatch" style={{ background: c.color }} />
+                  {companies.map((comp) => {
+                    const compConducteurs = conducteurs.filter((c) => c.companyId === comp.id);
+                    return (
+                      <div key={comp.id} className="company-section">
+                        <h4>{comp.nom}</h4>
+                        {compConducteurs.length === 0 && (
+                          <div className="empty-state">Aucun conducteur</div>
+                        )}
+                        {compConducteurs.map((c) => {
+                          const globalIdx = conducteurs.findIndex((x) => x.id === c.id);
+                          return (
+                            <div className="conducteur-edit-row" key={c.id}>
+                              <div className="color-picker-wrap">
+                                <input
+                                  type="color"
+                                  value={c.color}
+                                  onChange={(e) =>
+                                    setConducteurs((prev) =>
+                                      prev.map((x, idx) =>
+                                        idx === globalIdx ? { ...x, color: e.target.value } : x
+                                      )
+                                    )
+                                  }
+                                />
+                                <span className="color-swatch" style={{ background: c.color }} />
+                              </div>
+                              <input
+                                value={c.nom}
+                                onChange={(e) =>
+                                  setConducteurs((prev) =>
+                                    prev.map((x, idx) =>
+                                      idx === globalIdx ? { ...x, nom: e.target.value } : x
+                                    )
+                                  )
+                                }
+                              />
+                              <button
+                                className="delete-conducteur"
+                                title="Supprimer ce conducteur"
+                                onClick={() => {
+                                  if (window.confirm(`Supprimer ${c.nom} ?`))
+                                    setConducteurs((prev) => prev.filter((_, idx) => idx !== globalIdx));
+                                }}
+                              >×</button>
+                            </div>
+                          );
+                        })}
+                        <button className="add-conducteur-btn" onClick={() =>
+                          setConducteurs((prev) => [
+                            ...prev,
+                            {
+                              id: nextLocalId(),
+                              nom: `Conducteur ${prev.length + 1}`,
+                              color: conducteurColors[prev.length % conducteurColors.length] || conducteurColors[0] || '#2563eb',
+                              companyId: comp.id,
+                            },
+                          ])
+                        }>
+                          + Ajouter un conducteur ({comp.nom})
+                        </button>
                       </div>
-                      <input
-                        value={c.nom}
-                        onChange={(e) =>
-                          setConducteurs((prev) =>
-                            prev.map((x, idx) =>
-                              idx === i ? { ...x, nom: e.target.value } : x
-                            )
-                          )
-                        }
-                      />
-                      <button
-                        className="delete-conducteur"
-                        title="Supprimer ce conducteur"
-                        onClick={() => {
-                          if (window.confirm(`Supprimer ${c.nom} ?`))
-                            setConducteurs((prev) => prev.filter((_, idx) => idx !== i));
-                        }}
-                      >×</button>
-                    </div>
-                  ))}
-                  <button className="add-conducteur-btn" onClick={() =>
-                    setConducteurs((prev) => [
-                      ...prev,
-                      {
-                        id: nextLocalId(),
-                        nom: `Conducteur ${prev.length + 1}`,
-                        color: conducteurColors[prev.length % conducteurColors.length] || conducteurColors[0] || '#2563eb',
-                      },
-                    ])
-                  }>
-                    + Ajouter un conducteur
-                  </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

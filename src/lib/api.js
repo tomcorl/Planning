@@ -125,7 +125,7 @@ export async function upsertConges(conges, companyId) {
       nom: c.nom || 'Congé',
       all_equipes: c.allEquipes ? 1 : 0,
     };
-    if (c.id && c.id > 0 && c.id <= 2147483647) row.id = c.id;
+    if (Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647) row.id = c.id;
     return row;
   });
 
@@ -134,7 +134,7 @@ export async function upsertConges(conges, companyId) {
       .from('conges')
       .delete()
       .eq('company_id', companyId);
-    if (delErr) { console.error('delete conges', delErr); throw delErr; }
+    if (delErr) { console.error('delete conges error', delErr); throw delErr; }
     return;
   }
 
@@ -173,7 +173,7 @@ export async function upsertEquipes(equipes, companyId) {
 export async function upsertConducteurs(conducteurs, companyId) {
   const rows = conducteurs.map((c) => {
     const row = { nom: c.nom, color: c.color };
-    if (c.id && c.id > 0 && c.id <= 2147483647) row.id = c.id;
+    if (Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647) row.id = c.id;
     return row;
   });
 
