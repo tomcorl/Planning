@@ -327,7 +327,7 @@ export default function App() {
       setCompanies(allData.companies);
 
       if (allData.equipes.length > 0) {
-        setTeams(allData.equipes);
+        setTeams(allData.equipes.map(e => ({ ...e, companyId: e.company_id })));
       } else {
         const defaultTeams = [];
         for (const comp of allData.companies) {
@@ -753,7 +753,8 @@ export default function App() {
   }
 
   function addTeamToCompany(companyId) {
-    const name = `Équipe ${teams.length + 1}`;
+    const numInCompany = teams.filter((t) => t.companyId === companyId).length + 1;
+    const name = `Équipe ${numInCompany}`;
     commit(() => {
       setTeams((prev) => [...prev, { nom: name, companyId }]);
     });
