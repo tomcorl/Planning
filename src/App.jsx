@@ -508,8 +508,20 @@ export default function App() {
     setLoginError('');
   }
 
+  const chantiersRef = useRef(chantiers);
+  const congesRef = useRef(conges);
+  const teamsRef = useRef(teams);
+  const conducteursRef = useRef(conducteurs);
+  const customFeriesRef = useRef(customFeries);
+
+  useEffect(() => { chantiersRef.current = chantiers; });
+  useEffect(() => { congesRef.current = conges; });
+  useEffect(() => { teamsRef.current = teams; });
+  useEffect(() => { conducteursRef.current = conducteurs; });
+  useEffect(() => { customFeriesRef.current = customFeries; });
+
   function snapshot() {
-    return { chantiers, conges, teams, conducteurs, customFeries };
+    return { chantiers: chantiersRef.current, conges: congesRef.current, teams: teamsRef.current, conducteurs: conducteursRef.current, customFeries: customFeriesRef.current };
   }
 
   function restore(s) {
@@ -886,9 +898,7 @@ export default function App() {
         };
 
         setChantiers((prev) =>
-          modal.mode === 'modification'
-            ? prev.map((c) => (c.id === item.id ? item : c))
-            : applyInsertion(prev, item, item.equipe, item.start, true)
+          applyInsertion(prev, item, item.equipe, item.start, true)
         );
       }
 
@@ -963,6 +973,43 @@ export default function App() {
     next = next.map((c) => changed.get(c.id) || c);
     return next;
   }
+
+  function reflowTeams() {
+    setChantiers((prev) => {
+      const teamsSet = [...new Set(prev.map((c) => c.equipe))];
+      const result = [];
+      for (const equipe of teamsSet) {
+        const teamItems = prev
+          .filter((c) => c.equipe === equipe)
+          .sort((a, b) => toDate(a.start) - toDate(b.start) || (a.id || 0) - (b.id || 0));
+        let cursor = null;
+        for (const item of teamItems) {
+          if (cursor) {
+            const nextAvailable = nextWorkingDay(
+              formatDate(addDays(toDate(cursor), 1)),
+              equipe,
+              item.force_aout
+            );
+            if (toDate(nextAvailable) > toDate(item.start)) {
+              result.push({ ...item, start: nextAvailable });
+            } else {
+              result.push(item);
+            }
+          } else {
+            result.push(item);
+          }
+          const updated = result[result.length - 1];
+          cursor = getEndDateForChantier(updated);
+        }
+      }
+      return result;
+    });
+  }
+
+  useEffect(() => {
+    if (!loadedRef.current || !session) return;
+    reflowTeams();
+  }, [customFeries, conges, session]);
 
   function onDragStart(e, id, type) {
     e.dataTransfer.setData('itemId', String(id));
@@ -1229,7 +1276,7 @@ export default function App() {
           id: nextLocalId(),
           start: nextWorkingDay(today, clip.equipe || 0),
         };
-        setChantiers((prev) => [...prev, newItem]);
+        setChantiers((prev) => applyInsertion(prev, newItem, newItem.equipe, newItem.start, true));
         setSelectedItem({ type: 'chantier', id: newItem.id });
       }
       if (clip.sourceType === 'conge') {
