@@ -303,8 +303,7 @@ export default function App() {
         });
       }
       for (const comp of companies) {
-        const compFeries = customFeries.filter((f) => f.companyId === comp.id);
-        api.upsertCustomFeries(compFeries, comp.id).catch(console.error);
+        api.upsertCustomFeries(customFeries, comp.id).catch(console.error);
       }
     }, 800);
     return () => clearTimeout(timer);
@@ -1245,7 +1244,7 @@ export default function App() {
     commit(() => {
       setCustomFeries((prev) => [
         ...prev,
-        { id: nextLocalId(), nom: ferieForm.nom, date: ferieForm.date },
+        { id: nextLocalId(), nom: ferieForm.nom, date: ferieForm.date, companyId: companies[0]?.id },
       ]);
     });
 
