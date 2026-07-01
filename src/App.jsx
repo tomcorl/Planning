@@ -327,7 +327,7 @@ export default function App() {
       setCompanies(allData.companies);
 
       if (allData.equipes.length > 0) {
-        setTeams(allData.equipes.map(e => ({ ...e, companyId: e.company_id })));
+        setTeams(allData.equipes);
       } else {
         const defaultTeams = [];
         for (const comp of allData.companies) {
