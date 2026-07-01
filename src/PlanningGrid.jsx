@@ -21,7 +21,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   weekGroups,
   monthGroups,
   chantiersParCellule,
-  conges,
+  congeSegments,
   conducteurs,
   selectedItem,
   dragPreview,
@@ -30,9 +30,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   canEdit,
   resize,
   today,
-  companies,
-  teams,
-  holidays,
+  ferieSet,
   callbacksRef,
   dragThrottle,
   scrollRef,
@@ -45,7 +43,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   }
 
   function isFerie(date) {
-    return holidays.some((h) => h.date === date);
+    return ferieSet.has(date);
   }
 
   function isSelected(equipe, date) {
@@ -63,14 +61,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   function getConducteur(id) {
     const num = Number(id);
     return conducteurs.find((c) => c.id === num);
-  }
-
-  function getCongeSegment(conge) {
-    const start = dayIndex(conge.start);
-    if (start === -1) return null;
-    const endDate = cb.addWorkingDays(conge.start, conge.duree, conge.equipe || 0, { countConges: true });
-    const end = dayIndex(endDate);
-    return { start, end: Math.max(start, end) };
   }
 
   return (
@@ -170,10 +160,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
                 {visibleDays.map((day) => {
                   const segments = chantiersParCellule.get(`${equipeIndex}-${dayIndex(day.date)}`) || [];
-                  const congeItems = conges
-                    .filter((c) => c.equipe === equipeIndex || c.allEquipes)
-                    .map((c) => ({ conge: c, seg: getCongeSegment(c) }))
-                    .filter((x) => x.seg && x.seg.start === dayIndex(day.date));
+                  const congeItems = (congeSegments.get(`${equipeIndex}-${dayIndex(day.date)}`) || []);
 
                   return (
                     <div

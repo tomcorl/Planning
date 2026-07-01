@@ -148,6 +148,7 @@ export default function App() {
   const [dragPreview, setDragPreview] = useState(null);
   const dragThrottle = useRef(null);
   const selectionThrottle = useRef(null);
+  const scrollThrottleRef = useRef(null);
   const gridCallbacksRef = useRef({});
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -173,6 +174,29 @@ export default function App() {
     const base = Array.from(years).flatMap((year) => getFrenchHolidays(year));
     return [...base, ...customFeries];
   }, [allDays, customFeries]);
+
+  const ferieSet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
+
+  const congeBlockedSet = useMemo(() => {
+    const set = new Set();
+    for (const c of conges) {
+      const end = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
+      let cur = c.start;
+      let safety = 0;
+      while (sameOrBefore(cur, end) && safety < 1200) {
+        if (c.allEquipes) {
+          for (let t = 0; t < teams.length; t++) {
+            set.add(`${t}-${cur}`);
+          }
+        } else {
+          set.add(`${c.equipe}-${cur}`);
+        }
+        cur = formatDate(addDays(toDate(cur), 1));
+        safety++;
+      }
+    }
+    return set;
+  }, [conges, teams, ferieSet]);
 
   const visibleDays = useMemo(() => {
     return allDays.filter((d) => !d.weekend);
@@ -358,6 +382,7 @@ export default function App() {
       setHistory({ past: [], future: [] });
       setSelection(null);
       setSelectedItem(null);
+      setTimeout(reflowTeams, 0);
     } catch (e) {
       console.error('Failed to load company data:', e);
       throw e;
@@ -514,11 +539,14 @@ export default function App() {
   const conducteursRef = useRef(conducteurs);
   const customFeriesRef = useRef(customFeries);
 
-  useEffect(() => { chantiersRef.current = chantiers; });
-  useEffect(() => { congesRef.current = conges; });
-  useEffect(() => { teamsRef.current = teams; });
-  useEffect(() => { conducteursRef.current = conducteurs; });
-  useEffect(() => { customFeriesRef.current = customFeries; });
+  useEffect(() => {
+    chantiersRef.current = chantiers;
+    congesRef.current = conges;
+    teamsRef.current = teams;
+    conducteursRef.current = conducteurs;
+    customFeriesRef.current = customFeries;
+    keyRef.current = { selectedItem, modalOpen: modal.open, clipboard, canEdit };
+  });
 
   function snapshot() {
     return { chantiers: chantiersRef.current, conges: congesRef.current, teams: teamsRef.current, conducteurs: conducteursRef.current, customFeries: customFeriesRef.current };
@@ -561,9 +589,6 @@ export default function App() {
   }
 
   const keyRef = useRef({ selectedItem: null, modalOpen: false, clipboard: null, canEdit: false });
-  useEffect(() => {
-    keyRef.current = { selectedItem, modalOpen: modal.open, clipboard, canEdit };
-  });
 
   useEffect(() => {
     function onKeyDown(e) {
@@ -619,7 +644,7 @@ export default function App() {
   }
 
   function isFerie(date) {
-    return holidays.some((h) => h.date === date);
+    return ferieSet.has(date);
   }
 
   function isAugustClosure(dateStr) {
@@ -650,15 +675,7 @@ export default function App() {
   }
 
   function isCongeForTeam(equipe, date) {
-    return conges.some((c) => {
-      if (c.equipe !== equipe && !c.allEquipes) return false;
-
-      const realEnd = addWorkingDays(c.start, c.duree, c.equipe || 0, {
-        countConges: true,
-      });
-
-      return sameOrAfter(date, c.start) && sameOrBefore(date, realEnd);
-    });
+    return congeBlockedSet.has(`${equipe}-${date}`);
   }
 
   function isBlockedDay(equipe, date, options = {}) {
@@ -708,16 +725,9 @@ export default function App() {
     for (const d of days) {
       const blockedFerie = isFerie(d.date);
       const blockedAout = !chantier.force_aout && isAugustClosure(d.date);
-      const isConge = conges.some(
-        (c) =>
-          (c.equipe === chantier.equipe || c.allEquipes) &&
-          (() => {
-            const realEnd = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
-            return sameOrAfter(d.date, c.start) && sameOrBefore(d.date, realEnd);
-          })()
-      );
+      const blockedConge = isCongeForTeam(chantier.equipe, d.date);
 
-      if (blockedFerie || blockedAout || isConge) {
+      if (blockedFerie || blockedAout || blockedConge) {
         if (segStart !== null) {
           segments.push({ start: segStart, end: d.i - 1 });
           segStart = null;
@@ -732,18 +742,6 @@ export default function App() {
     }
 
     return segments;
-  }
-
-  function getCongeSegment(conge) {
-    const start = dayIndex(conge.start);
-    if (start === -1) return null;
-
-    const endDate = addWorkingDays(conge.start, conge.duree, conge.equipe || 0, {
-      countConges: true,
-    });
-    const end = dayIndex(endDate);
-
-    return { start, end: Math.max(start, end) };
   }
 
   function updateTeam(index, value) {
@@ -1074,10 +1072,9 @@ export default function App() {
   }
   useEffect(() => {
     if (!resize) return;
+    let rafId = null;
 
-    function onMouseMove(e) {
-      const delta = Math.round((e.clientX - resize.startX) / cellWidth);
-
+    function applyResize(delta) {
       setChantiers((prev) => {
         if (resize.side === 'right') {
           const newDuree = Math.max(1, resize.originalDuree + delta);
@@ -1160,7 +1157,20 @@ export default function App() {
       });
     }
 
+    function onMouseMove(e) {
+      if (rafId) return;
+      const delta = Math.round((e.clientX - resize.startX) / cellWidth);
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        applyResize(delta);
+      });
+    }
+
     function onMouseUp() {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       commit(() => {});
       setResize(null);
     }
@@ -1169,6 +1179,7 @@ export default function App() {
     window.addEventListener('mouseup', onMouseUp);
 
     return () => {
+      if (rafId) cancelAnimationFrame(rafId);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -1176,23 +1187,27 @@ export default function App() {
 
   function handleScroll(e) {
     const el = e.currentTarget;
+    const raf = scrollThrottleRef.current;
+    if (raf) cancelAnimationFrame(raf);
+    scrollThrottleRef.current = requestAnimationFrame(() => {
+      scrollThrottleRef.current = null;
+      try {
+        localStorage.setItem('scrollPos', JSON.stringify({ left: el.scrollLeft, top: el.scrollTop }));
+      } catch { }
 
-    try {
-      localStorage.setItem('scrollPos', JSON.stringify({ left: el.scrollLeft, top: el.scrollTop }));
-    } catch { }
+      if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
+        setCalendarLength((prev) => prev + 15);
+      }
 
-    if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
-      setCalendarLength((prev) => prev + 15);
-    }
+      if (el.scrollLeft < 200) {
+        setCalendarStart((prev) => addDays(prev, -30));
+        setCalendarLength((prev) => prev + 15);
 
-    if (el.scrollLeft < 200) {
-      setCalendarStart((prev) => addDays(prev, -30));
-      setCalendarLength((prev) => prev + 15);
-
-      setTimeout(() => {
-        el.scrollLeft += 30 * cellWidth;
-      }, 0);
-    }
+        setTimeout(() => {
+          el.scrollLeft += 30 * cellWidth;
+        }, 0);
+      }
+    });
   }
 
   function goToday() {
@@ -1311,6 +1326,25 @@ export default function App() {
     };
   }, [contextMenu]);
 
+  const congeSegmentsMap = useMemo(() => {
+    const map = new Map();
+    for (const c of conges) {
+      const start = dayIndex(c.start);
+      if (start === -1) continue;
+      const endDate = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
+      const end = dayIndex(endDate);
+      if (end === -1) continue;
+      const seg = { start, end: Math.max(start, end) };
+      const eqs = c.allEquipes ? teams.map((_, t) => t) : [c.equipe];
+      for (const eq of eqs) {
+        const key = `${eq}-${seg.start}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push({ conge: c, seg });
+      }
+    }
+    return map;
+  }, [conges, visibleDays, teams]);
+
   const chantiersParCellule = useMemo(() => {
     const map = new Map();
     const byEquipe = {};
@@ -1355,6 +1389,14 @@ export default function App() {
 
     return map;
   }, [chantiers, conges, holidays, visibleDays]);
+
+  const modalEndDate = useMemo(() => {
+    if (!form || modal.type === 'conducteur') return '';
+    if (modal.type === 'chantier') {
+      return addWorkingDays(form.start, Number(form.duree || 1), Number(form.equipe || 0), { force_aout: form.force_aout });
+    }
+    return addWorkingDays(form.start, Number(form.duree || 1), Number(form.equipe || 0), { countConges: true });
+  }, [form?.start, form?.duree, form?.equipe, form?.force_aout, modal.type]);
 
   gridCallbacksRef.current = {
     addTeamToCompany,
@@ -1478,6 +1520,7 @@ export default function App() {
         monthGroups={monthGroups}
         chantiersParCellule={chantiersParCellule}
         conges={conges}
+        congeSegments={congeSegmentsMap}
         conducteurs={conducteurs}
         selectedItem={selectedItem}
         dragPreview={dragPreview}
@@ -1488,7 +1531,7 @@ export default function App() {
         today={today}
         companies={companies}
         teams={teams}
-        holidays={holidays}
+        ferieSet={ferieSet}
         callbacksRef={gridCallbacksRef}
         dragThrottle={dragThrottle}
         scrollRef={scrollRef}
@@ -1686,21 +1729,7 @@ export default function App() {
                       <label>Date de fin</label>
                       <input
                         type="date"
-                        value={
-                          modal.type === 'chantier'
-                            ? addWorkingDays(
-                                form.start,
-                                Number(form.duree || 1),
-                                Number(form.equipe || 0),
-                                { force_aout: form.force_aout }
-                              )
-                            : addWorkingDays(
-                                form.start,
-                                Number(form.duree || 1),
-                                Number(form.equipe || 0),
-                                { countConges: true }
-                              )
-                        }
+                        value={modalEndDate}
                         readOnly
                       />
                       <small>calculée</small>
