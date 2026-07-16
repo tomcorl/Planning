@@ -157,7 +157,6 @@ export default function App() {
   const [viewportDayRange, setViewportDayRange] = useState(null);
   const viewportRangeRef = useRef(null);
   const resizeRef = useRef(null);
-  const resizeChantiersRef = useRef(null);
   const lastXRef = useRef(0);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -993,35 +992,10 @@ export default function App() {
     setChantiers((prev) => {
       const teamsSet = [...new Set(prev.map((c) => c.equipe))];
       let changed = false;
-      const result = [];
-      // Forward pass (left-to-right): push items right when overlapping previous
-      for (const equipe of teamsSet) {
-        const teamItems = prev
-          .filter((c) => c.equipe === equipe)
-          .sort((a, b) => toDate(a.start) - toDate(b.start) || (a.id || 0) - (b.id || 0));
-        let cursor = null;
-        for (const item of teamItems) {
-          if (cursor) {
-            const nextAvailable = nextWorkingDay(
-              formatDate(addDays(toDate(cursor), 1)),
-              equipe,
-              item.force_aout
-            );
-            if (toDate(nextAvailable) > toDate(item.start)) {
-              result.push({ ...item, start: nextAvailable });
-              changed = true;
-            } else {
-              result.push(item);
-            }
-          } else {
-            result.push(item);
-          }
-          const updated = result[result.length - 1];
-          cursor = getEndDateForChantier(updated);
-        }
-      }
-      // Reverse pass (right-to-left): push items left when overlapping next
-      // Repeat until stable (cascading pushes)
+      const result = [...prev];
+
+      // Reverse pass FIRST (right-to-left): push items left when overlapping next
+      // Handles left-extensions & cascading left pushes
       let stable = false;
       while (!stable) {
         stable = true;
@@ -1059,6 +1033,36 @@ export default function App() {
           }
         }
       }
+
+      // Forward pass (left-to-right): make items contiguous (fill gaps + fix overlaps)
+      for (const equipe of teamsSet) {
+        const teamItems = result
+          .filter((c) => c.equipe === equipe)
+          .sort((a, b) => toDate(a.start) - toDate(b.start) || (a.id || 0) - (b.id || 0));
+        let cursor = null;
+        for (const item of teamItems) {
+          if (cursor) {
+            const nextAvailable = nextWorkingDay(
+              formatDate(addDays(toDate(cursor), 1)),
+              equipe,
+              item.force_aout
+            );
+            if (toDate(nextAvailable) !== toDate(item.start)) {
+              const idx = result.findIndex((c) => c.id === item.id);
+              if (idx >= 0) {
+                result[idx] = { ...item, start: nextAvailable };
+                changed = true;
+              }
+              cursor = getEndDateForChantier({ ...item, start: nextAvailable });
+            } else {
+              cursor = getEndDateForChantier(item);
+            }
+          } else {
+            cursor = getEndDateForChantier(item);
+          }
+        }
+      }
+
       return changed ? result : prev;
     });
   }
@@ -1152,7 +1156,6 @@ export default function App() {
       rafId = requestAnimationFrame(() => {
         rafId = null;
         const delta = Math.round((lastXRef.current - r.startX) / cellWidth);
-        if (resizeRef.current) resizeRef.current.delta = delta;
         setResize((prev) => prev ? { ...prev, delta } : prev);
       });
     }
@@ -1173,26 +1176,11 @@ export default function App() {
             const oldEnd = getEndDateForChantier({ start: originalStart, duree: originalDuree, ...baseInfo });
             const newEndCal = formatDate(addDays(toDate(oldEnd), delta));
             const newDuree = Math.max(1, countWorkingDays(originalStart, newEndCal, originalEquipe, originalForceAout));
-            let next = prev.map((c) =>
+            return prev.map((c) =>
               c.id === id
                 ? { ...c, start: originalStart, duree: newDuree }
                 : c
             );
-            const updatedEnd = getEndDateForChantier({ start: originalStart, duree: newDuree, ...baseInfo });
-            let cursor = formatDate(addDays(toDate(updatedEnd), 1));
-            cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
-            const changed = new Map();
-            const sorted = next
-              .filter((c) => c.id !== id && c.equipe === originalEquipe && toDate(c.start) > toDate(originalStart))
-              .sort((a, b) => toDate(a.start) - toDate(b.start));
-            for (const c of sorted) {
-              if (toDate(c.start) >= toDate(cursor)) break;
-              const newStart = nextWorkingDay(cursor, originalEquipe, originalForceAout);
-              changed.set(c.id, { ...c, start: newStart });
-              cursor = formatDate(addDays(toDate(getEndDateForChantier({ ...c, start: newStart })), 1));
-              cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
-            }
-            return next.map((c) => changed.get(c.id) || c);
           }
           return prev.map((c) => {
             if (c.id !== id) return c;
@@ -1208,7 +1196,6 @@ export default function App() {
       commit(() => {});
       setResize(null);
       resizeRef.current = null;
-      resizeChantiersRef.current = null;
       setTimeout(reflowTeams, 0);
     }
 
