@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useDeferredValue, lazy, Suspense } from 'react';
 import './App.css';
-import AdminUsersPage from './AdminUsersPage.jsx';
+
+const AdminUsersPage = lazy(() => import('./AdminUsersPage.jsx'));
+const Modals = lazy(() => import('./Modals.jsx'));
 
 import LoginPage from './LoginPage.jsx';
 import PasswordChangePage from './PasswordChangePage.jsx';
@@ -153,6 +155,8 @@ export default function App() {
   const gridCallbacksRef = useRef({});
   const [viewportDayRange, setViewportDayRange] = useState(null);
   const viewportRangeRef = useRef(null);
+  const resizeRef = useRef(null);
+  const resizeChantiersRef = useRef(null);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
 
@@ -560,11 +564,12 @@ export default function App() {
   }
 
   function restore(s) {
-    setChantiers(s.chantiers);
-    setConges(s.conges);
-    setTeams(s.teams);
-    setConducteurs(s.conducteurs);
-    setCustomFeries(s.customFeries);
+    const current = snapshot();
+    if (current.chantiers !== s.chantiers) setChantiers(s.chantiers);
+    if (current.conges !== s.conges) setConges(s.conges);
+    if (current.teams !== s.teams) setTeams(s.teams);
+    if (current.conducteurs !== s.conducteurs) setConducteurs(s.conducteurs);
+    if (current.customFeries !== s.customFeries) setCustomFeries(s.customFeries);
   }
 
   function commit(action) {
@@ -1015,7 +1020,8 @@ export default function App() {
 
   useEffect(() => {
     if (!loadedRef.current || !session) return;
-    reflowTeams();
+    const timer = setTimeout(reflowTeams, 200);
+    return () => clearTimeout(timer);
   }, [customFeries, conges, session]);
 
   function onDragStart(e, id, type) {
@@ -1052,14 +1058,21 @@ export default function App() {
     e.preventDefault();
     e.stopPropagation();
 
-    setResize({
+    resizeRef.current = {
       id: chantier.id,
       side,
       startX: e.clientX,
+      delta: 0,
       originalStart: chantier.start,
       originalDuree: chantier.duree,
       originalEquipe: chantier.equipe,
       originalForceAout: chantier.force_aout,
+    };
+
+    setResize({
+      id: chantier.id,
+      side,
+      delta: 0,
     });
   }
   function countWorkingDays(start, end, equipe, force_aout = false) {
@@ -1080,97 +1093,16 @@ export default function App() {
   }
   useEffect(() => {
     if (!resize) return;
+    const r = resizeRef.current;
+    if (!r) return;
     let rafId = null;
-
-    function applyResize(delta) {
-      setChantiers((prev) => {
-        if (resize.side === 'right') {
-          const newDuree = Math.max(1, resize.originalDuree + delta);
-
-          let next = prev.map((c) =>
-            c.id === resize.id
-              ? { ...c, start: resize.originalStart, duree: newDuree }
-              : c
-          );
-
-          const updated = next.find((c) => c.id === resize.id);
-          const updatedEnd = getEndDateForChantier(updated);
-
-          let cursor = formatDate(addDays(toDate(updatedEnd), 1));
-          cursor = nextWorkingDay(cursor, resize.originalEquipe, resize.originalForceAout);
-
-          const changed = new Map();
-
-          const sorted = next
-            .filter(
-              (c) =>
-                c.id !== resize.id &&
-                c.equipe === resize.originalEquipe &&
-                toDate(c.start) > toDate(resize.originalStart)
-            )
-            .sort((a, b) => toDate(a.start) - toDate(b.start));
-
-          for (const c of sorted) {
-            if (toDate(c.start) >= toDate(cursor)) break;
-
-            const newStart = nextWorkingDay(cursor, resize.originalEquipe, resize.originalForceAout);
-            changed.set(c.id, { ...c, start: newStart });
-            cursor = formatDate(
-              addDays(
-                toDate(getEndDateForChantier({ ...c, start: newStart })),
-                1
-              )
-            );
-            cursor = nextWorkingDay(cursor, resize.originalEquipe, resize.originalForceAout);
-          }
-
-          return next.map((c) => changed.get(c.id) || c);
-        }
-
-        return prev.map((c) => {
-          if (c.id !== resize.id) return c;
-
-          if (resize.side === 'left') {
-            const originalEnd = addWorkingDays(
-              resize.originalStart,
-              resize.originalDuree,
-              resize.originalEquipe,
-              { force_aout: resize.originalForceAout }
-            );
-
-            const rawNewStart = formatDate(
-              addDays(toDate(resize.originalStart), delta)
-            );
-
-            const newStart = nextWorkingDay(rawNewStart, resize.originalEquipe, resize.originalForceAout);
-
-            const newDuree = countWorkingDays(
-              newStart,
-              originalEnd,
-              resize.originalEquipe,
-              resize.originalForceAout
-            );
-
-            if (newDuree < 1) return c;
-
-            return {
-              ...c,
-              start: newStart,
-              duree: newDuree,
-            };
-          }
-
-          return c;
-        })
-      });
-    }
 
     function onMouseMove(e) {
       if (rafId) return;
-      const delta = Math.round((e.clientX - resize.startX) / cellWidth);
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        applyResize(delta);
+        const delta = Math.round((e.clientX - r.startX) / cellWidth);
+        setResize((prev) => prev ? { ...prev, delta } : prev);
       });
     }
 
@@ -1179,8 +1111,50 @@ export default function App() {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
+      const delta = resizeRef.current?.delta || 0;
+      if (delta !== 0) {
+        setChantiers((prev) => {
+          const r2 = resizeRef.current;
+          if (!r2) return prev;
+          if (r2.side === 'right') {
+            const newDuree = Math.max(1, r2.originalDuree + delta);
+            let next = prev.map((c) =>
+              c.id === r2.id
+                ? { ...c, start: r2.originalStart, duree: newDuree }
+                : c
+            );
+            const updated = next.find((c) => c.id === r2.id);
+            const updatedEnd = getEndDateForChantier(updated);
+            let cursor = formatDate(addDays(toDate(updatedEnd), 1));
+            cursor = nextWorkingDay(cursor, r2.originalEquipe, r2.originalForceAout);
+            const changed = new Map();
+            const sorted = next
+              .filter((c) => c.id !== r2.id && c.equipe === r2.originalEquipe && toDate(c.start) > toDate(r2.originalStart))
+              .sort((a, b) => toDate(a.start) - toDate(b.start));
+            for (const c of sorted) {
+              if (toDate(c.start) >= toDate(cursor)) break;
+              const newStart = nextWorkingDay(cursor, r2.originalEquipe, r2.originalForceAout);
+              changed.set(c.id, { ...c, start: newStart });
+              cursor = formatDate(addDays(toDate(getEndDateForChantier({ ...c, start: newStart })), 1));
+              cursor = nextWorkingDay(cursor, r2.originalEquipe, r2.originalForceAout);
+            }
+            return next.map((c) => changed.get(c.id) || c);
+          }
+          return prev.map((c) => {
+            if (c.id !== r2.id) return c;
+            const originalEnd = addWorkingDays(r2.originalStart, r2.originalDuree, r2.originalEquipe, { force_aout: r2.originalForceAout });
+            const rawNewStart = formatDate(addDays(toDate(r2.originalStart), delta));
+            const newStart = nextWorkingDay(rawNewStart, r2.originalEquipe, r2.originalForceAout);
+            const newDuree = countWorkingDays(newStart, originalEnd, r2.originalEquipe, r2.originalForceAout);
+            if (newDuree < 1) return c;
+            return { ...c, start: newStart, duree: newDuree };
+          });
+        });
+      }
       commit(() => {});
       setResize(null);
+      resizeRef.current = null;
+      resizeChantiersRef.current = null;
     }
 
     window.addEventListener('mousemove', onMouseMove);
@@ -1354,9 +1328,12 @@ export default function App() {
     };
   }, [contextMenu]);
 
+  const deferredChantiers = useDeferredValue(chantiers);
+  const deferredConges = useDeferredValue(conges);
+
   const congeSegmentsMap = useMemo(() => {
     const map = new Map();
-    for (const c of conges) {
+    for (const c of deferredConges) {
       const start = dayIndex(c.start);
       if (start === -1) continue;
       const endDate = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
@@ -1373,13 +1350,13 @@ export default function App() {
       }
     }
     return map;
-  }, [conges, visibleDays, teams]);
+  }, [deferredConges, visibleDays, teams]);
 
   const chantiersParCellule = useMemo(() => {
     const map = new Map();
     const byEquipe = {};
 
-    chantiers.forEach((chantier) => {
+    deferredChantiers.forEach((chantier) => {
       const segments = splitChantier(chantier).filter(Boolean);
       const segLens = segments.map(s => s.end - s.start + 1);
       const maxSegLen = segLens.length ? Math.max(...segLens) : 0;
@@ -1418,7 +1395,7 @@ export default function App() {
     });
 
     return map;
-  }, [chantiers, conges, holidays, visibleDays]);
+  }, [deferredChantiers, conges, holidays, visibleDays]);
 
   const modalEndDate = useMemo(() => {
     if (!form || modal.type === 'conducteur') return '';
@@ -1532,6 +1509,7 @@ export default function App() {
         </div>
       </div>
 
+      <Suspense fallback={null}>
       {activePage === 'users' && isAdmin && (
         <AdminUsersPage
           onSaveUsers={saveUsers}
@@ -1568,439 +1546,32 @@ export default function App() {
         viewportDayRange={viewportDayRange}
       />
 
-      {contextMenu && (
-        <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
-          <button onClick={() => {
-            const item = contextMenu.type === 'chantier'
-              ? chantiers.find((c) => c.id === contextMenu.id)
-              : conges.find((c) => c.id === contextMenu.id);
-            if (item) setClipboard({ ...item, sourceType: contextMenu.type });
-            setContextMenu(null);
-          }}>
-            📋 Copier
-          </button>
-          {clipboard && canEdit && (
-            <button onClick={() => {
-              pasteClipboard();
-              setContextMenu(null);
-            }}>
-              📌 Coller
-            </button>
-          )}
-          {canEdit && (
-            <button onClick={() => {
-              deleteSelectedItem();
-              setContextMenu(null);
-            }}>
-              🗑️ Supprimer
-            </button>
-          )}
-        </div>
-      )}
-
-      {colorManager && (
-        <div className="modal-bg modal-bg-top" onMouseDown={() => setColorManager(null)}>
-          <div className="modal color-manager-modal" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{colorManager.index === -1 ? 'Ajouter une couleur' : 'Modifier la couleur'}</h2>
-              <button className="modal-header-close" onClick={() => setColorManager(null)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="color-manager-preview">
-                <div className="color-manager-swatch" style={{ background: colorManager.color }} />
-                <input
-                  type="color"
-                  value={colorManager.color}
-                  onChange={(e) => setColorManager({ ...colorManager, color: e.target.value })}
-                />
-              </div>
-              <input
-                type="text"
-                value={colorManager.color}
-                className="color-manager-hex"
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setColorManager({ ...colorManager, color: v });
-                }}
-              />
-            </div>
-            <div className="modal-footer">
-              <button className="modal-btn-primary" onClick={() => {
-                if (colorManager.index === -1) {
-                  const setter = colorManager.type === 'chantier' ? setChantierColors : setConducteurColors;
-                  setter((prev) => [...prev, colorManager.color]);
-                } else {
-                  const setter = colorManager.type === 'chantier' ? setChantierColors : setConducteurColors;
-                  setter((prev) => prev.map((c, i) => i === colorManager.index ? colorManager.color : c));
-                }
-                setColorManager(null);
-              }}>{colorManager.index === -1 ? 'Ajouter' : 'Valider'}</button>
-              <button className="modal-btn-cancel" onClick={() => setColorManager(null)}>Annuler</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {holidayModalOpen && (
-        <div
-          className="modal-bg"
-          onMouseDown={() => setHolidayModalOpen(false)}
-        >
-          <div
-            className="modal holiday-modal"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="modal-header">
-              <h2>Jours fériés</h2>
-              <button className="modal-header-close" onClick={() => setHolidayModalOpen(false)}>×</button>
-            </div>
-
-            <div className="modal-body">
-              <div className="holiday-add-row">
-                <input
-                  value={ferieForm.date}
-                  type="date"
-                  onChange={(e) =>
-                    setFerieForm({ ...ferieForm, date: e.target.value })
-                  }
-                />
-                <input
-                  value={ferieForm.nom}
-                  onChange={(e) =>
-                    setFerieForm({ ...ferieForm, nom: e.target.value })
-                  }
-                />
-                <button className="modal-btn-primary" onClick={addCustomFerie}>Ajouter</button>
-              </div>
-
-              <h3>Jours personnalisés</h3>
-
-              {customFeries.length === 0 ? (
-                <div className="holiday-empty">
-                  <span className="holiday-empty-icon">📅</span>
-                  <span>Aucun jour férié personnalisé</span>
-                </div>
-              ) : (
-                <div className="holiday-list">
-                  {customFeries.map((f) => (
-                    <div key={f.id} className="holiday-item">
-                      <div className="holiday-item-info">
-                        <strong>{f.nom}</strong>
-                        <span>{new Date(f.date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                      </div>
-                      <button className="modal-btn-danger" onClick={() => commit(() => setCustomFeries((prev) => prev.filter((x) => !(x.nom === f.nom && x.date === f.date))))}>Supprimer</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer">
-              <button className="modal-btn-cancel" onClick={() => setHolidayModalOpen(false)}>Fermer</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {modal.open && form && (
-        <div className="modal-bg" onMouseDown={(e) => e.stopPropagation()}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2>
-                {modal.mode === 'modification' ? 'Modifier' : 'Nouvel élément'}
-              </h2>
-              <div className="modal-tabs">
-                <button
-                  className={modal.type === 'chantier' ? 'active' : ''}
-                  onClick={() => setModal({ ...modal, type: 'chantier' })}
-                >
-                  Chantier
-                </button>
-                <button
-                  className={modal.type === 'conge' ? 'active' : ''}
-                  onClick={() => setModal({ ...modal, type: 'conge' })}
-                >
-                  Congé
-                </button>
-                <button
-                  className={modal.type === 'conducteur' ? 'active' : ''}
-                  onClick={() => setModal({ ...modal, type: 'conducteur' })}
-                >
-                  Conducteur
-                </button>
-              </div>
-            </div>
-
-            <div className="modal-body">
-              {modal.type !== 'conducteur' && (
-                <>
-                  <div className="modal-date-group">
-                    <div className="modal-field">
-                      <label>Durée</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={form.duree}
-                        onChange={(e) =>
-                          setForm({ ...form, duree: e.target.value })
-                        }
-                      />
-                      <small>jours travaillés</small>
-                    </div>
-                    <div className="modal-field">
-                      <label>Date de début</label>
-                      <input
-                        type="date"
-                        value={form.start}
-                        onChange={(e) =>
-                          setForm({ ...form, start: e.target.value })
-                        }
-                      />
-                    </div>
-                    <div className="modal-field">
-                      <label>Date de fin</label>
-                      <input
-                        type="date"
-                        value={modalEndDate}
-                        readOnly
-                      />
-                      <small>calculée</small>
-                    </div>
-                  </div>
-
-                  <div className="modal-field">
-                    <label>
-                      {modal.type === 'chantier'
-                        ? 'Nom du chantier'
-                        : 'Nom du congé'}
-                    </label>
-                    <input
-                      value={form.nom}
-                      onChange={(e) => setForm({ ...form, nom: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="modal-field">
-                    <label>Équipe</label>
-                    {form.allEquipes ? (
-                      <select
-                        value={form.companyId || companies[0]?.id || ''}
-                        onChange={(e) => {
-                          const compId = e.target.value;
-                          const firstIdx = teams.findIndex(t => t.companyId === compId);
-                          setForm({ ...form, companyId: compId, equipe: firstIdx >= 0 ? firstIdx : form.equipe });
-                        }}
-                      >
-                        {companies.map((comp) => (
-                          <option key={comp.id} value={comp.id}>{comp.nom}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <select
-                        value={form.equipe}
-                        onChange={(e) => setForm({ ...form, equipe: e.target.value })}
-                      >
-                        {companies.map((comp) => {
-                          const compTeams = teams
-                            .map((t, i) => ({ ...t, index: i }))
-                            .filter((t) => t.companyId === comp.id);
-                          if (compTeams.length === 0) return null;
-                          return (
-                            <optgroup key={comp.id} label={comp.nom}>
-                              {compTeams.map((t) => (
-                                <option key={t.index} value={t.index}>{t.nom}</option>
-                              ))}
-                            </optgroup>
-                          );
-                        })}
-                      </select>
-                    )}
-                    {modal.type === 'conge' && (
-                      <label className="toggle-switch">
-                        <input
-                          type="checkbox"
-                          checked={form.allEquipes || false}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              const team = teams[form.equipe];
-                              setForm({ ...form, allEquipes: true, companyId: team?.companyId || companies[0]?.id || '' });
-                            } else {
-                              setForm({ ...form, allEquipes: false, companyId: undefined });
-                            }
-                          }}
-                        />
-                        <span className="toggle-track" />
-                        <span className="toggle-label">Toutes les équipes (congé simultané)</span>
-                      </label>
-                    )}
-                    {modal.type === 'chantier' && (
-                      <label className="toggle-switch">
-                        <input
-                          type="checkbox"
-                          checked={form.force_aout || false}
-                          onChange={(e) => setForm({ ...form, force_aout: e.target.checked })}
-                        />
-                        <span className="toggle-track" />
-                        <span className="toggle-label">Traverser août (chantier visible en août)</span>
-                      </label>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {modal.type === 'chantier' && (
-                <>
-                  <div className="modal-field">
-                    <label>Couleur du chantier</label>
-                    <div className="color-grid editable-colors">
-                      {chantierColors.map((c, ci) => (
-                        <div key={ci} className="color-dot-wrapper">
-                          <button
-                            className={`color-dot ${
-                              form.color === c ? 'selected-color' : ''
-                            }`}
-                            style={{ background: c }}
-                            onClick={() => setForm({ ...form, color: c })}
-                          />
-                          <button
-                            className="color-dot-edit"
-                            onClick={() => setColorManager({ type: 'chantier', index: ci, color: c })}
-                            title="Modifier"
-                          >✎</button>
-                          <button
-                            className="color-dot-delete"
-                            onClick={() => {
-                              const next = chantierColors.filter((_, i) => i !== ci);
-                              setChantierColors(next.length > 0 ? next : [...CHANTIER_COLORS]);
-                              if (form.color === c) setForm({ ...form, color: next[0] || CHANTIER_COLORS[0] });
-                            }}
-                            title="Supprimer"
-                          >×</button>
-                        </div>
-                      ))}
-                      <button
-                        className="color-dot color-add"
-                        title="Ajouter une couleur"
-                        onClick={() => setColorManager({ type: 'chantier', index: -1, color: '#2563eb' })}
-                      >+</button>
-                    </div>
-                  </div>
-
-                  <div className="modal-field">
-                    <label>Conducteur</label>
-                    <div className="conducteur-list">
-                      {conducteurs.map((c) => (
-                        <button
-                          key={c.id}
-                          className={`conducteur-choice ${
-                            Number(form.conducteurId) === c.id
-                              ? 'active-conducteur'
-                              : ''
-                          }`}
-                          onClick={() => setForm({ ...form, conducteurId: c.id })}
-                        >
-                          <span style={{ background: c.color }} /> {c.nom}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="modal-field">
-                    <label>Détail chantier</label>
-                    <input
-                      value={form.detail || ''}
-                      onChange={(e) => setForm({ ...form, detail: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="modal-field">
-                    <label>Notes</label>
-                    <textarea
-                      value={form.note}
-                      onChange={(e) => setForm({ ...form, note: e.target.value })}
-                    />
-                  </div>
-                </>
-              )}
-
-              {modal.type === 'conducteur' && (
-                <div className="conducteurs-editor">
-                  {conducteurs.map((c, i) => (
-                    <div className="conducteur-edit-row" key={c.id}>
-                      <div className="color-picker-wrap">
-                        <input
-                          type="color"
-                          value={c.color}
-                          onChange={(e) =>
-                            setConducteurs((prev) =>
-                              prev.map((x, idx) =>
-                                idx === i ? { ...x, color: e.target.value } : x
-                              )
-                            )
-                          }
-                        />
-                        <span className="color-swatch" style={{ background: c.color }} />
-                      </div>
-                      <input
-                        value={c.nom}
-                        onChange={(e) =>
-                          setConducteurs((prev) =>
-                            prev.map((x, idx) =>
-                              idx === i ? { ...x, nom: e.target.value } : x
-                            )
-                          )
-                        }
-                      />
-                      <button
-                        className="delete-conducteur"
-                        title="Supprimer ce conducteur"
-                        onClick={() => {
-                          if (window.confirm(`Supprimer ${c.nom} ?`))
-                            setConducteurs((prev) => prev.filter((_, idx) => idx !== i));
-                        }}
-                      >×</button>
-                    </div>
-                  ))}
-                  <button className="add-conducteur-btn" onClick={() =>
-                    setConducteurs((prev) => [
-                      ...prev,
-                      {
-                        id: nextLocalId(),
-                        nom: `Conducteur ${prev.length + 1}`,
-                        color: conducteurColors[prev.length % conducteurColors.length] || conducteurColors[0] || '#2563eb',
-                        companyId: companies[0]?.id || 'noree',
-                      },
-                    ])
-                  }>
-                    + Ajouter un conducteur
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer">
-              {modal.mode === 'modification' && modal.type !== 'conducteur' && canEdit && (
-                <button className="modal-btn-danger" onClick={deleteSelectedItem}>
-                  Supprimer
-                </button>
-              )}
-              {modal.type !== 'conducteur' ? (
-                <button className="modal-btn-primary" onClick={saveModal} disabled={!canEdit}>
-                  {modal.mode === 'modification' ? 'Modifier' : 'Créer'}
-                </button>
-              ) : (
-                <button className="modal-btn-primary" onClick={closeModal}>
-                  OK
-                </button>
-              )}
-              <button className="modal-btn-cancel" onClick={closeModal}>
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        <Modals
+          modal={modal} setModal={setModal}
+          form={form} setForm={setForm}
+          modalEndDate={modalEndDate}
+          companies={companies} teams={teams}
+          chantierColors={chantierColors} setChantierColors={setChantierColors}
+          conducteurColors={conducteurColors} setConducteurColors={setConducteurColors}
+          setColorManager={setColorManager} colorManager={colorManager}
+          holidayModalOpen={holidayModalOpen} setHolidayModalOpen={setHolidayModalOpen}
+          ferieForm={ferieForm} setFerieForm={setFerieForm}
+          customFeries={customFeries} setCustomFeries={setCustomFeries}
+          conducteurs={conducteurs} setConducteurs={setConducteurs}
+          contextMenu={contextMenu} setContextMenu={setContextMenu}
+          clipboard={clipboard} setClipboard={setClipboard}
+          chantiers={chantiers} conges={conges}
+          canEdit={canEdit}
+          saveModal={saveModal} closeModal={closeModal}
+          deleteSelectedItem={deleteSelectedItem}
+          pasteClipboard={pasteClipboard}
+          addCustomFerie={addCustomFerie}
+          nextLocalId={nextLocalId}
+          commit={commit}
+        />
         </>
       )}
+      </Suspense>
     </div>
   );
 }
