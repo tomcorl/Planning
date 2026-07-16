@@ -185,8 +185,11 @@ export default function App() {
       let safety = 0;
       while (sameOrBefore(cur, end) && safety < 1200) {
         if (c.allEquipes) {
+          const compId = c.companyId || teams[c.equipe]?.companyId;
           for (let t = 0; t < teams.length; t++) {
-            set.add(`${t}-${cur}`);
+            if (teams[t].companyId === compId) {
+              set.add(`${t}-${cur}`);
+            }
           }
         } else {
           set.add(`${c.equipe}-${cur}`);
@@ -290,6 +293,7 @@ export default function App() {
         const compChantiers = chantiers.filter((c) => c.company_id === comp.id);
         api.upsertChantiers(compChantiers, comp.id).catch(console.error);
         const compConges = conges.filter((c) => {
+          if (c.allEquipes && c.companyId) return c.companyId === comp.id;
           const t = teams[c.equipe];
           return t && t.companyId === comp.id;
         });
@@ -909,6 +913,7 @@ export default function App() {
           duree: Number(form.duree),
           nom: form.nom,
           allEquipes: !!form.allEquipes,
+          companyId: form.allEquipes ? form.companyId : undefined,
         };
 
         setConges((prev) =>
@@ -1335,7 +1340,9 @@ export default function App() {
       const end = dayIndex(endDate);
       if (end === -1) continue;
       const seg = { start, end: Math.max(start, end) };
-      const eqs = c.allEquipes ? teams.map((_, t) => t) : [c.equipe];
+      const eqs = c.allEquipes
+        ? teams.map((_, t) => t).filter(t => teams[t].companyId === (c.companyId || teams[c.equipe]?.companyId))
+        : [c.equipe];
       for (const eq of eqs) {
         const key = `${eq}-${seg.start}`;
         if (!map.has(key)) map.set(key, []);
@@ -1750,33 +1757,52 @@ export default function App() {
 
                   <div className="modal-field">
                     <label>Équipe</label>
-                    <select
-                      value={form.equipe}
-                      onChange={(e) => setForm({ ...form, equipe: e.target.value })}
-                      disabled={form.allEquipes}
-                    >
-                      {companies.map((comp) => {
-                        const compTeams = teams
-                          .map((t, i) => ({ ...t, index: i }))
-                          .filter((t) => t.companyId === comp.id);
-                        if (compTeams.length === 0) return null;
-                        return (
-                          <optgroup key={comp.id} label={comp.nom}>
-                            {compTeams.map((t) => (
-                              <option key={t.index} value={t.index}>
-                                {t.nom}
-                              </option>
-                            ))}
-                          </optgroup>
-                        );
-                      })}
-                    </select>
+                    {form.allEquipes ? (
+                      <select
+                        value={form.companyId || companies[0]?.id || ''}
+                        onChange={(e) => {
+                          const compId = e.target.value;
+                          const firstIdx = teams.findIndex(t => t.companyId === compId);
+                          setForm({ ...form, companyId: compId, equipe: firstIdx >= 0 ? firstIdx : form.equipe });
+                        }}
+                      >
+                        {companies.map((comp) => (
+                          <option key={comp.id} value={comp.id}>{comp.nom}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <select
+                        value={form.equipe}
+                        onChange={(e) => setForm({ ...form, equipe: e.target.value })}
+                      >
+                        {companies.map((comp) => {
+                          const compTeams = teams
+                            .map((t, i) => ({ ...t, index: i }))
+                            .filter((t) => t.companyId === comp.id);
+                          if (compTeams.length === 0) return null;
+                          return (
+                            <optgroup key={comp.id} label={comp.nom}>
+                              {compTeams.map((t) => (
+                                <option key={t.index} value={t.index}>{t.nom}</option>
+                              ))}
+                            </optgroup>
+                          );
+                        })}
+                      </select>
+                    )}
                     {modal.type === 'conge' && (
                       <label className="toggle-switch">
                         <input
                           type="checkbox"
                           checked={form.allEquipes || false}
-                          onChange={(e) => setForm({ ...form, allEquipes: e.target.checked })}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const team = teams[form.equipe];
+                              setForm({ ...form, allEquipes: true, companyId: team?.companyId || companies[0]?.id || '' });
+                            } else {
+                              setForm({ ...form, allEquipes: false, companyId: undefined });
+                            }
+                          }}
                         />
                         <span className="toggle-track" />
                         <span className="toggle-label">Toutes les équipes (congé simultané)</span>
