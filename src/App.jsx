@@ -1111,28 +1111,15 @@ export default function App() {
         rafId = null;
         const delta = Math.round((e.clientX - r.startX) / cellWidth);
         if (resizeRef.current) resizeRef.current.delta = delta;
-        let effectiveDelta = delta;
-        let effStart = r.originalStart;
-        let effDuree = r.originalDuree;
-        let effEnd = '';
-        const bi = { equipe: r.originalEquipe, force_aout: r.originalForceAout };
+        let effectiveDelta;
         if (r.side === 'left') {
           const rawNs = formatDate(addDays(toDate(r.originalStart), delta));
           const newStart = nextWorkingDay(rawNs, r.originalEquipe, r.originalForceAout);
-          const diNew = dayIndex(newStart);
-          const diOrig = dayIndex(r.originalStart);
-          effectiveDelta = diNew >= 0 && diOrig >= 0 ? diNew - diOrig : delta;
-          effStart = newStart;
-          const origEnd = addWorkingDays(r.originalStart, r.originalDuree, r.originalEquipe, { force_aout: r.originalForceAout });
-          effDuree = Math.max(1, countWorkingDays(newStart, origEnd, r.originalEquipe, r.originalForceAout));
-        } else {
-          const oldEnd = getEndDateForChantier({ start: r.originalStart, duree: r.originalDuree, ...bi });
-          const newEndCal = formatDate(addDays(toDate(oldEnd), delta));
-          effDuree = Math.max(1, countWorkingDays(r.originalStart, newEndCal, r.originalEquipe, r.originalForceAout));
-          const newEnd = getEndDateForChantier({ start: r.originalStart, duree: effDuree, ...bi });
-          effEnd = newEnd;
+          const diN = dayIndex(newStart);
+          const diO = dayIndex(r.originalStart);
+          effectiveDelta = diN >= 0 && diO >= 0 ? diN - diO : delta;
         }
-        setResize((prev) => prev ? { ...prev, delta, effectiveDelta, effStart, effDuree, effEnd } : prev);
+        setResize((prev) => prev ? { ...prev, delta, effectiveDelta } : prev);
       });
     }
 
@@ -1188,6 +1175,7 @@ export default function App() {
       setResize(null);
       resizeRef.current = null;
       resizeChantiersRef.current = null;
+      setTimeout(reflowTeams, 0);
     }
 
     window.addEventListener('mousemove', onMouseMove);

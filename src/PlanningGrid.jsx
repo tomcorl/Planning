@@ -393,7 +393,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                               top: blocT,
                               height: blocH,
                               background: chantier.color,
-                              zIndex: resize?.id === chantier.id ? 200 : undefined,
+                              zIndex: resize?.id === chantier.id ? 9999 : undefined,
                               ...(resize?.id === chantier.id && resize.side === 'left' && resize.delta && isFirstSegment
                                 ? { left: 3 + visDelta * cellWidth }
                                 : {}),
@@ -438,16 +438,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                                 className="resize-handle right"
                                 data-rs="right"
                               />
-                            )}
-                            {resize?.id === chantier.id && resize.delta && isLastSegment && resize.side === 'right' && resize.effDuree && (
-                              <div className="resize-tooltip right">
-                                {resize.effDuree}j ({resize.effEnd || '…'})
-                              </div>
-                            )}
-                            {resize?.id === chantier.id && resize.delta && isFirstSegment && resize.side === 'left' && resize.effStart && (
-                              <div className="resize-tooltip left">
-                                Déb. {resize.effStart} — {resize.effDuree}j
-                              </div>
                             )}
                           </div>
                         );
