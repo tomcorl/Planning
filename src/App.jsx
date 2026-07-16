@@ -1020,34 +1020,40 @@ export default function App() {
         }
       }
       // Reverse pass (right-to-left): push items left when overlapping next
-      for (const equipe of teamsSet) {
-        const teamIds = result
-          .filter((c) => c.equipe === equipe)
-          .sort((a, b) => toDate(a.start) - toDate(b.start) || (a.id || 0) - (b.id || 0))
-          .map((c) => c.id);
-        for (let i = teamIds.length - 1; i > 0; i--) {
-          const prev = result.find((c) => c.id === teamIds[i - 1]);
-          const next = result.find((c) => c.id === teamIds[i]);
-          if (!prev || !next) continue;
-          if (toDate(getEndDateForChantier(prev)) >= toDate(next.start)) {
-            const newPrevEnd = formatDate(addDays(toDate(next.start), -1));
-            const newPrevStart = (() => {
-              let cnt = prev.duree;
-              let cur = toDate(newPrevEnd);
-              let safe = 0;
-              while (cnt > 0 && safe < 1200) {
-                if (!isBlockedDay(equipe, formatDate(cur), { force_aout: prev.force_aout })) {
-                  cnt -= 1;
+      // Repeat until stable (cascading pushes)
+      let stable = false;
+      while (!stable) {
+        stable = true;
+        for (const equipe of teamsSet) {
+          const teamIds = result
+            .filter((c) => c.equipe === equipe)
+            .sort((a, b) => toDate(a.start) - toDate(b.start) || (a.id || 0) - (b.id || 0))
+            .map((c) => c.id);
+          for (let i = teamIds.length - 1; i > 0; i--) {
+            const prev = result.find((c) => c.id === teamIds[i - 1]);
+            const next = result.find((c) => c.id === teamIds[i]);
+            if (!prev || !next) continue;
+            if (toDate(getEndDateForChantier(prev)) >= toDate(next.start)) {
+              const newPrevEnd = formatDate(addDays(toDate(next.start), -1));
+              const newPrevStart = (() => {
+                let cnt = prev.duree;
+                let cur = toDate(newPrevEnd);
+                let safe = 0;
+                while (cnt > 0 && safe < 1200) {
+                  if (!isBlockedDay(equipe, formatDate(cur), { force_aout: prev.force_aout })) {
+                    cnt -= 1;
+                  }
+                  cur = addDays(cur, -1);
+                  safe += 1;
                 }
-                cur = addDays(cur, -1);
-                safe += 1;
+                return formatDate(addDays(cur, 1));
+              })();
+              const idx = result.findIndex((c) => c.id === prev.id);
+              if (idx >= 0) {
+                result[idx] = { ...prev, start: newPrevStart };
+                changed = true;
+                stable = false;
               }
-              return formatDate(addDays(cur, 1));
-            })();
-            const idx = result.findIndex((c) => c.id === prev.id);
-            if (idx >= 0) {
-              result[idx] = { ...prev, start: newPrevStart };
-              changed = true;
             }
           }
         }
