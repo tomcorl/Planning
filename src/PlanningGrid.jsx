@@ -37,6 +37,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   viewportDayRange,
 }) {
   const cb = callbacksRef.current;
+  const lastHoverRef = React.useRef(null);
   const totalDays = visibleDays.length;
   const { start: vpStart, end: vpEnd } = viewportDayRange || { start: 0, end: totalDays - 1 };
   const visibleDaysSlice = visibleDays.slice(vpStart, vpEnd + 1);
@@ -71,8 +72,14 @@ const PlanningGrid = React.memo(function PlanningGrid({
     return groups;
   }, [visibleDaysSlice]);
 
+  const dayIdxMemo = React.useMemo(() => {
+    const map = new Map();
+    visibleDays.forEach((d, i) => map.set(d.date, i));
+    return map;
+  }, [visibleDays]);
+
   function dayIndex(date) {
-    return visibleDays.findIndex((d) => d.date === date);
+    return dayIdxMemo.get(date) ?? -1;
   }
 
   function isFerie(date) {
@@ -94,6 +101,109 @@ const PlanningGrid = React.memo(function PlanningGrid({
   function getConducteur(id) {
     const num = Number(id);
     return conducteurs.find((c) => c.id === num);
+  }
+
+  function handleGridEvent(e) {
+    const type = e.type;
+    const cell = e.target.closest('[data-eq]');
+    const chantierBloc = e.target.closest('[data-ch]');
+    const congeBloc = e.target.closest('[data-co]');
+    const resizeHandle = e.target.closest('[data-rs]');
+    const noteIcon = e.target.closest('.note-icon');
+    const addBtn = e.target.closest('.add-team-btn');
+    const deleteBtn = e.target.closest('.delete-team');
+    const teamInput = e.target.closest('.team-cell input');
+
+    if (addBtn) return;
+    if (deleteBtn) return;
+    if (teamInput) return;
+
+    if (resizeHandle && type === 'mousedown') {
+      const ch = chantierBloc || resizeHandle.closest('[data-ch]');
+      if (ch) {
+        const id = Number(ch.dataset.ch);
+        const side = resizeHandle.dataset.rs;
+        e.stopPropagation();
+        cb.startResize(e, { id }, side);
+        return;
+      }
+    }
+
+    if (chantierBloc) {
+      const id = Number(chantierBloc.dataset.ch);
+      if (type === 'mousedown') {
+        e.stopPropagation();
+        cb.setSelectedItem({ type: 'chantier', id });
+        return;
+      }
+      if (type === 'dblclick') {
+        cb.openEditChantier({ id });
+        return;
+      }
+      if (type === 'contextmenu') {
+        e.preventDefault();
+        cb.handleContextMenu(e, 'chantier', id);
+        return;
+      }
+    }
+
+    if (congeBloc) {
+      const id = Number(congeBloc.dataset.co);
+      if (type === 'mousedown') {
+        e.stopPropagation();
+        cb.setSelectedItem({ type: 'conge', id });
+        return;
+      }
+      if (type === 'dblclick') {
+        cb.openEditConge({ id });
+        return;
+      }
+      if (type === 'contextmenu') {
+        e.preventDefault();
+        cb.handleContextMenu(e, 'conge', id);
+        return;
+      }
+    }
+
+    if (noteIcon && type === 'mouseover') {
+      const rect = noteIcon.getBoundingClientRect();
+      const tip = noteIcon.querySelector('.tooltip');
+      if (tip) {
+        tip.style.left = (rect.left - 260) + 'px';
+        tip.style.top = (rect.top - 10) + 'px';
+      }
+    }
+
+    if (!cell) return;
+    const equipe = Number(cell.dataset.eq);
+    const date = cell.dataset.da;
+
+    if (type === 'mousedown') {
+      cb.startSelection(e, equipe, date);
+      return;
+    }
+    if (type === 'mouseover') {
+      const key = `${equipe}-${date}`;
+      if (lastHoverRef.current === key) return;
+      lastHoverRef.current = key;
+      cb.updateSelection(equipe, date);
+      return;
+    }
+    if (type === 'dragover') {
+      e.preventDefault();
+      if (!dragThrottle.current) {
+        dragThrottle.current = requestAnimationFrame(() => {
+          cb.setDragPreview({ equipe, date });
+          dragThrottle.current = null;
+        });
+      }
+      return;
+    }
+    if (type === 'drop') {
+      e.preventDefault();
+      cb.onDrop(e, equipe, date);
+      return;
+    }
   }
 
   return (
@@ -145,7 +255,15 @@ const PlanningGrid = React.memo(function PlanningGrid({
           </div>
         </div>
 
-        <div className="grid main-grid" style={{ gridTemplateColumns, paddingLeft, paddingRight, gridAutoRows: Math.round(56 + (cellWidth - 26) * (78 - 56) / 26) }}>
+        <div className="grid main-grid"
+          style={{ gridTemplateColumns, paddingLeft, paddingRight, gridAutoRows: Math.round(56 + (cellWidth - 26) * (78 - 56) / 26) }}
+          onMouseDown={handleGridEvent}
+          onMouseOver={handleGridEvent}
+          onDragOver={handleGridEvent}
+          onDrop={handleGridEvent}
+          onDoubleClick={handleGridEvent}
+          onContextMenu={handleGridEvent}
+        >
           {gridRows.map((row) => {
             if (row.type === 'separator') {
               return (
@@ -211,25 +329,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           ? 'drag-preview'
                           : ''
                       } ${isPending ? 'pending-cell' : ''}`}
-                      onMouseDown={(e) =>
-                        cb.startSelection(e, equipeIndex, day.date)
-                      }
-                      onMouseEnter={() =>
-                        cb.updateSelection(equipeIndex, day.date)
-                      }
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        if (!dragThrottle.current) {
-                          dragThrottle.current = requestAnimationFrame(() => {
-                            cb.setDragPreview({ equipe: equipeIndex, date: day.date });
-                            dragThrottle.current = null;
-                          });
-                        }
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        cb.onDrop(e, row.teamIndex || equipeIndex, day.date);
-                      }}
+                      data-eq={equipeIndex}
+                      data-da={day.date}
                     >
                       {segments.filter(({ seg }) => {
                         const visibleStart = Math.max(seg.start, vpStart);
@@ -270,16 +371,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                                 ? 'active-item'
                                 : ''
                             }`}
+                            data-ch={chantier.id}
                             draggable={!resize && canEdit}
-                            onMouseDown={(e) => {
-                              e.stopPropagation();
-                              cb.setSelectedItem({
-                                type: 'chantier',
-                                id: chantier.id,
-                              });
-                            }}
-                            onDoubleClick={() => cb.openEditChantier(chantier)}
-                            onContextMenu={(e) => cb.handleContextMenu(e, 'chantier', chantier.id)}
                             onDragStart={(e) => cb.onDragStart(e, chantier.id, 'chantier')}
                             style={{
                               width,
@@ -291,20 +384,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           >
                             <div
                               className="resize-handle left"
-                              onMouseDown={(e) =>
-                                cb.startResize(e, chantier, 'left')
-                              }
+                              data-rs="left"
                             />
 
                             {chantier.note && isFirstSegment && (
-                              <div className="note-icon"
-                                onMouseEnter={(e) => {
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  const tip = e.currentTarget.querySelector('.tooltip');
-                                  tip.style.left = (rect.left - 260) + 'px';
-                                  tip.style.top = (rect.top - 10) + 'px';
-                                }}
-                              >
+                              <div className="note-icon">
                                 💬
                                 <div className="tooltip">{chantier.note}</div>
                               </div>
@@ -331,9 +415,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
                             <div
                               className="resize-handle right"
-                              onMouseDown={(e) =>
-                                cb.startResize(e, chantier, 'right')
-                              }
+                              data-rs="right"
                             />
                           </div>
                         );
@@ -362,8 +444,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           } ${
                             clippedLeft ? 'bloc-clipped-left' : ''
                           }`}
-                           draggable={!resize && canEdit}
-                           onDragStart={(e) => cb.onDragStart(e, conge.id, 'conge')}
+                          data-co={conge.id}
+                          draggable={!resize && canEdit}
+                          onDragStart={(e) => cb.onDragStart(e, conge.id, 'conge')}
                           style={{
                             width: segLen * cellWidth - 8,
                             height: cH,
@@ -371,12 +454,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                             fontSize: 16,
                             padding: `${Math.max(4, Math.round(6 + (cellWidth - 26) * 2 / 26))}px ${Math.max(4, Math.round(8 + (cellWidth - 26) * 2 / 26))}px`,
                           }}
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                            cb.setSelectedItem({ type: 'conge', id: conge.id });
-                          }}
-                          onDoubleClick={() => cb.openEditConge(conge)}
-                          onContextMenu={(e) => cb.handleContextMenu(e, 'conge', conge.id)}
                         >
                           {conge.nom}
                         </div>

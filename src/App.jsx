@@ -1058,19 +1058,22 @@ export default function App() {
     e.preventDefault();
     e.stopPropagation();
 
+    const ch = chantier.start !== undefined ? chantier : chantiers.find(c => c.id === chantier.id);
+    if (!ch) return;
+
     resizeRef.current = {
-      id: chantier.id,
+      id: ch.id,
       side,
       startX: e.clientX,
       delta: 0,
-      originalStart: chantier.start,
-      originalDuree: chantier.duree,
-      originalEquipe: chantier.equipe,
-      originalForceAout: chantier.force_aout,
+      originalStart: ch.start,
+      originalDuree: ch.duree,
+      originalEquipe: ch.equipe,
+      originalForceAout: ch.force_aout,
     };
 
     setResize({
-      id: chantier.id,
+      id: ch.id,
       side,
       delta: 0,
     });
@@ -1354,7 +1357,74 @@ export default function App() {
     return map;
   }, [deferredConges, visibleDays, teams]);
 
+  const chantiersParCelluleCacheRef = useRef(null);
+
   const chantiersParCellule = useMemo(() => {
+    const cache = chantiersParCelluleCacheRef.current;
+    const depsKey = `${deferredConges.length}|${holidays.size}|${visibleDays[0]?.date}-${visibleDays[visibleDays.length-1]?.date}`;
+
+    if (cache && cache.depsKey === depsKey) {
+      const newByTeam = {};
+      deferredChantiers.forEach(c => {
+        if (!newByTeam[c.equipe]) newByTeam[c.equipe] = [];
+        newByTeam[c.equipe].push(c.id);
+      });
+      const allTeams = new Set([...Object.keys(cache.byTeam || {}).map(Number), ...Object.keys(newByTeam).map(Number)]);
+      const changedTeams = new Set();
+      allTeams.forEach(t => {
+        const old = (cache.byTeam[t] || []).sort((a, b) => a - b).join(',');
+        const nw = (newByTeam[t] || []).sort((a, b) => a - b).join(',');
+        if (old !== nw) changedTeams.add(t);
+      });
+
+      if (changedTeams.size > 0 && changedTeams.size <= allTeams.size * 0.75) {
+        const map = new Map(cache.map);
+        for (const key of cache.map.keys()) {
+          const team = Number(key.split('-')[0]);
+          if (changedTeams.has(team)) map.delete(key);
+        }
+        const byEquipe = {};
+        deferredChantiers.filter(c => changedTeams.has(c.equipe)).forEach((chantier) => {
+          const segments = splitChantier(chantier).filter(Boolean);
+          const segLens = segments.map(s => s.end - s.start + 1);
+          const maxSegLen = segLens.length ? Math.max(...segLens) : 0;
+          segments.forEach((seg, si) => {
+            if (!byEquipe[chantier.equipe]) byEquipe[chantier.equipe] = [];
+            byEquipe[chantier.equipe].push({ chantier, seg, segIndex: si, segCount: segments.length, longestLen: maxSegLen });
+          });
+        });
+        Object.values(byEquipe).forEach((items) => {
+          items.sort((a, b) => a.seg.start - b.seg.start);
+          const rows = [];
+          items.forEach(({ chantier, seg, segIndex, segCount, longestLen }) => {
+            let placed = false;
+            for (let r = 0; r < rows.length; r++) {
+              const lastInRow = rows[r][rows[r].length - 1];
+              if (seg.start > lastInRow.seg.end) {
+                rows[r].push({ chantier, seg, stack: r, segIndex, segCount, longestLen });
+                placed = true;
+                break;
+              }
+            }
+            if (!placed) {
+              rows.push([{ chantier, seg, stack: rows.length, segIndex, segCount, longestLen }]);
+            }
+          });
+          rows.forEach((row) => {
+            row.forEach(({ chantier, seg, stack, segIndex, segCount, longestLen }) => {
+              for (let d = seg.start; d <= seg.end; d++) {
+                const key = `${chantier.equipe}-${d}`;
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push({ chantier, seg, i: 0, stack, segIndex, segCount, longestLen });
+              }
+            });
+          });
+        });
+        chantiersParCelluleCacheRef.current = { depsKey, map, byTeam: newByTeam };
+        return map;
+      }
+    }
+
     const map = new Map();
     const byEquipe = {};
 
@@ -1396,6 +1466,12 @@ export default function App() {
       });
     });
 
+    const byTeam = {};
+    deferredChantiers.forEach(c => {
+      if (!byTeam[c.equipe]) byTeam[c.equipe] = [];
+      byTeam[c.equipe].push(c.id);
+    });
+    chantiersParCelluleCacheRef.current = { depsKey, map, byTeam };
     return map;
   }, [deferredChantiers, conges, holidays, visibleDays]);
 
