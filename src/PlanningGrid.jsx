@@ -216,7 +216,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
             const isPending = row.type === 'pending';
 
             return (
-              <div key={isPending ? row.id : `team-${row.teamIndex}`} style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 80px' }}>
+              <React.Fragment key={isPending ? row.id : `team-${row.teamIndex}`}>
                 <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
                   {isPending ? null : (
                     <>
@@ -289,7 +289,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                     </div>
                   );
                 })}
-              </div>
+              </React.Fragment>
             );
           })}
         </div>
