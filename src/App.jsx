@@ -149,6 +149,7 @@ export default function App() {
   const dragThrottle = useRef(null);
   const selectionThrottle = useRef(null);
   const scrollThrottleRef = useRef(null);
+  const [viewportDayRange, setViewportDayRange] = useState({ start: 0, end: 50 });
   const gridCallbacksRef = useRef({});
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -1200,6 +1201,10 @@ export default function App() {
         localStorage.setItem('scrollPos', JSON.stringify({ left: el.scrollLeft, top: el.scrollTop }));
       } catch { }
 
+      const visibleCount = Math.ceil(el.clientWidth / cellWidth) + 4;
+      const start = Math.max(0, Math.floor(el.scrollLeft / cellWidth) - 2);
+      setViewportDayRange({ start, end: Math.min(visibleDays.length - 1, start + visibleCount) });
+
       if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
         setCalendarLength((prev) => prev + 15);
       }
@@ -1539,6 +1544,7 @@ export default function App() {
         companies={companies}
         teams={teams}
         ferieSet={ferieSet}
+        viewportDayRange={viewportDayRange}
         callbacksRef={gridCallbacksRef}
         dragThrottle={dragThrottle}
         scrollRef={scrollRef}
