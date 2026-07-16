@@ -149,7 +149,7 @@ export default function App() {
   const dragThrottle = useRef(null);
   const selectionThrottle = useRef(null);
   const scrollThrottleRef = useRef(null);
-  const [viewportDayRange, setViewportDayRange] = useState(null);
+  const [viewportDayRange, setViewportDayRange] = useState({ start: 0, end: 50 });
   const gridCallbacksRef = useRef({});
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
@@ -1193,7 +1193,6 @@ export default function App() {
 
   function handleScroll(e) {
     const el = e.currentTarget;
-    if (!visibleDays.length) return;
     const raf = scrollThrottleRef.current;
     if (raf) cancelAnimationFrame(raf);
     scrollThrottleRef.current = requestAnimationFrame(() => {
