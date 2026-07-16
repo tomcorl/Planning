@@ -1127,14 +1127,15 @@ export default function App() {
       if (delta !== 0) {
         setChantiers((prev) => {
           if (side === 'right') {
-            const newDuree = Math.max(1, originalDuree + delta);
+            const oldEnd = getEndDateForChantier({ start: originalStart, duree: originalDuree });
+            const newEndCal = formatDate(addDays(toDate(oldEnd), delta));
+            const newDuree = Math.max(1, countWorkingDays(originalStart, newEndCal, originalEquipe, originalForceAout));
             let next = prev.map((c) =>
               c.id === id
                 ? { ...c, start: originalStart, duree: newDuree }
                 : c
             );
-            const updated = next.find((c) => c.id === id);
-            const updatedEnd = getEndDateForChantier(updated);
+            const updatedEnd = getEndDateForChantier({ start: originalStart, duree: newDuree });
             let cursor = formatDate(addDays(toDate(updatedEnd), 1));
             cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
             const changed = new Map();
