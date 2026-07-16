@@ -34,9 +34,42 @@ const PlanningGrid = React.memo(function PlanningGrid({
   callbacksRef,
   dragThrottle,
   scrollRef,
+  viewportDayRange,
 }) {
   const cb = callbacksRef.current;
-  const gridTemplateColumns = `260px repeat(${visibleDays.length}, ${cellWidth}px)`;
+  const totalDays = visibleDays.length;
+  const { start: vpStart, end: vpEnd } = viewportDayRange || { start: 0, end: totalDays - 1 };
+  const visibleDaysSlice = visibleDays.slice(vpStart, vpEnd + 1);
+  const sliceCount = visibleDaysSlice.length;
+  const gridTemplateColumns = `260px repeat(${sliceCount}, ${cellWidth}px)`;
+  const paddingLeft = vpStart * cellWidth;
+  const paddingRight = (totalDays - 1 - vpEnd) * cellWidth;
+
+  const slicedMonthGroups = React.useMemo(() => {
+    const groups = [];
+    visibleDaysSlice.forEach((day) => {
+      const last = groups[groups.length - 1];
+      if (!last || last.monthKey !== day.monthKey) {
+        groups.push({ monthLabel: day.monthLabel, monthKey: day.monthKey, count: 1 });
+      } else {
+        last.count += 1;
+      }
+    });
+    return groups;
+  }, [visibleDaysSlice]);
+
+  const slicedWeekGroups = React.useMemo(() => {
+    const groups = [];
+    visibleDaysSlice.forEach((day) => {
+      const last = groups[groups.length - 1];
+      if (!last || last.week !== day.week) {
+        groups.push({ week: day.week, count: 1 });
+      } else {
+        last.count += 1;
+      }
+    });
+    return groups;
+  }, [visibleDaysSlice]);
 
   function dayIndex(date) {
     return visibleDays.findIndex((d) => d.date === date);
@@ -67,9 +100,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
     <div className="planning-container">
       <div className="planning-scroll" ref={scrollRef} onScroll={cb.handleScroll}>
         <div className="planning-header">
-          <div className="grid month-grid" style={{ gridTemplateColumns }}>
+          <div className="grid month-grid" style={{ gridTemplateColumns, paddingLeft, paddingRight }}>
             <div className="corner month-corner"></div>
-            {monthGroups.map((g, i) => (
+            {slicedMonthGroups.map((g, i) => (
               <div
                 className={`month-cell ${i % 2 === 0 ? 'month-even' : 'month-odd'}`}
                 key={g.monthKey}
@@ -80,11 +113,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
             ))}
           </div>
 
-          <div className="grid week-grid" style={{ gridTemplateColumns }}>
+          <div className="grid week-grid" style={{ gridTemplateColumns, paddingLeft, paddingRight }}>
             <div className="corner week-corner">
               <strong>Équipes</strong>
             </div>
-            {weekGroups.map((g, i) => (
+            {slicedWeekGroups.map((g, i) => (
               <div
                 className="week-cell"
                 key={`${g.week}-${i}`}
@@ -95,9 +128,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
             ))}
           </div>
 
-          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: Math.round(28 + (cellWidth - 26) * (44 - 28) / 26) }}>
+          <div className="grid date-grid" style={{ gridTemplateColumns, paddingLeft, paddingRight, gridAutoRows: Math.round(28 + (cellWidth - 26) * (44 - 28) / 26) }}>
             <div className="corner date-corner"></div>
-            {visibleDays.map((d) => (
+            {visibleDaysSlice.map((d) => (
               <div
                 key={d.date}
                 className={`date-cell ${d.weekend ? 'weekend' : ''} ${
@@ -112,13 +145,13 @@ const PlanningGrid = React.memo(function PlanningGrid({
           </div>
         </div>
 
-        <div className="grid main-grid" style={{ gridTemplateColumns, gridAutoRows: Math.round(56 + (cellWidth - 26) * (78 - 56) / 26) }}>
+        <div className="grid main-grid" style={{ gridTemplateColumns, paddingLeft, paddingRight, gridAutoRows: Math.round(56 + (cellWidth - 26) * (78 - 56) / 26) }}>
           {gridRows.map((row) => {
             if (row.type === 'separator') {
               return (
                 <React.Fragment key={row.id}>
                   <div className="team-cell separator-row" />
-                  {visibleDays.map((day) => (
+                  {visibleDaysSlice.map((day) => (
                     <div key={`sep-${day.date}`} className="cell separator-cell" />
                   ))}
                 </React.Fragment>
@@ -129,7 +162,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
               return (
                 <React.Fragment key={row.id}>
                   <div className="team-cell company-header-cell"><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
-                  {visibleDays.map((day) => (
+                  {visibleDaysSlice.map((day) => (
                     <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
                   ))}
                 </React.Fragment>
@@ -158,9 +191,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
                   )}
                 </div>
 
-                {visibleDays.map((day) => {
-                  const segments = chantiersParCellule.get(`${equipeIndex}-${dayIndex(day.date)}`) || [];
-                  const congeItems = (congeSegments.get(`${equipeIndex}-${dayIndex(day.date)}`) || []);
+                {visibleDaysSlice.map((day, _idx) => {
+                  const realIdx = vpStart + _idx;
+                  const segments = chantiersParCellule.get(`${equipeIndex}-${realIdx}`) || [];
+                  const congeItems = (congeSegments.get(`${equipeIndex}-${realIdx}`) || []);
 
                   return (
                     <div
@@ -197,7 +231,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         cb.onDrop(e, row.teamIndex || equipeIndex, day.date);
                       }}
                     >
-                      {segments.filter(({ seg }) => dayIndex(day.date) === seg.start).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
+                      {segments.filter(({ seg }) => realIdx === seg.start).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
                         const conducteur = getConducteur(chantier.conducteurId);
                         const segLen = seg.end - seg.start + 1;
                         const width = segLen * cellWidth - 8;

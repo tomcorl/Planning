@@ -9,6 +9,7 @@ import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
 const CELL_WIDTH = 26;
+const MIN_VISIBLE_DAYS = 65;
 
 const CHANTIER_COLORS = [
   '#2563eb', // bleu foncé
@@ -150,6 +151,8 @@ export default function App() {
   const selectionThrottle = useRef(null);
   const scrollThrottleRef = useRef(null);
   const gridCallbacksRef = useRef({});
+  const [viewportDayRange, setViewportDayRange] = useState(null);
+  const viewportRangeRef = useRef(null);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
 
@@ -1200,6 +1203,26 @@ export default function App() {
         localStorage.setItem('scrollPos', JSON.stringify({ left: el.scrollLeft, top: el.scrollTop }));
       } catch { }
 
+      const totalDays = visibleDays.length;
+      if (totalDays) {
+        const BUFFER = 4;
+        const firstVisible = Math.floor(Math.max(0, el.scrollLeft - 260) / CELL_WIDTH);
+        const visibleCount = Math.ceil(el.clientWidth / CELL_WIDTH);
+        const totalWindow = Math.max(visibleCount + BUFFER * 2, MIN_VISIBLE_DAYS);
+        const center = firstVisible + Math.floor(visibleCount / 2);
+        const halfWindow = Math.floor(totalWindow / 2);
+
+        let newStart = Math.max(0, center - halfWindow);
+        let newEnd = Math.min(totalDays - 1, newStart + totalWindow - 1);
+        newStart = Math.max(0, newEnd - totalWindow + 1);
+
+        const prev = viewportRangeRef.current;
+        if (!prev || prev.start !== newStart || prev.end !== newEnd) {
+          viewportRangeRef.current = { start: newStart, end: newEnd };
+          setViewportDayRange({ start: newStart, end: newEnd });
+        }
+      }
+
       if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
         setCalendarLength((prev) => prev + 15);
       }
@@ -1542,6 +1565,7 @@ export default function App() {
         callbacksRef={gridCallbacksRef}
         dragThrottle={dragThrottle}
         scrollRef={scrollRef}
+        viewportDayRange={viewportDayRange}
       />
 
       {contextMenu && (
