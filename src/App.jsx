@@ -993,6 +993,7 @@ export default function App() {
       const teamsSet = [...new Set(prev.map((c) => c.equipe))];
       let changed = false;
       const result = [];
+      // Forward pass (left-to-right): push items right when overlapping previous
       for (const equipe of teamsSet) {
         const teamItems = prev
           .filter((c) => c.equipe === equipe)
@@ -1016,6 +1017,37 @@ export default function App() {
           }
           const updated = result[result.length - 1];
           cursor = getEndDateForChantier(updated);
+        }
+      }
+      // Reverse pass (right-to-left): push items left when overlapping next
+      for (const equipe of teamsSet) {
+        const teamItems = result
+          .filter((c) => c.equipe === equipe)
+          .sort((a, b) => toDate(a.start) - toDate(b.start) || (a.id || 0) - (b.id || 0));
+        for (let i = teamItems.length - 1; i > 0; i--) {
+          const prev = teamItems[i - 1];
+          const next = teamItems[i];
+          if (toDate(getEndDateForChantier(prev)) >= toDate(next.start)) {
+            const newPrevEnd = formatDate(addDays(toDate(next.start), -1));
+            const newPrevStart = (() => {
+              let cnt = prev.duree;
+              let cur = toDate(newPrevEnd);
+              let safe = 0;
+              while (cnt > 0 && safe < 1200) {
+                if (!isBlockedDay(equipe, formatDate(cur), { force_aout: prev.force_aout })) {
+                  cnt -= 1;
+                }
+                cur = addDays(cur, -1);
+                safe += 1;
+              }
+              return formatDate(addDays(cur, 1));
+            })();
+            const idx = result.findIndex((c) => c.id === prev.id);
+            if (idx >= 0) {
+              result[idx] = { ...prev, start: newPrevStart };
+              changed = true;
+            }
+          }
         }
       }
       return changed ? result : prev;
@@ -1158,7 +1190,7 @@ export default function App() {
             const rawNewStart = formatDate(addDays(toDate(originalStart), delta));
             const newStart = nextWorkingDay(rawNewStart, originalEquipe, originalForceAout);
             const newDuree = countWorkingDays(newStart, originalEnd, originalEquipe, originalForceAout);
-            if (newDuree < 1) return c;
+            if (newDuree < 1 || (newStart === originalStart && newDuree === originalDuree)) return c;
             return { ...c, start: newStart, duree: newDuree };
           });
         });
