@@ -231,9 +231,14 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         cb.onDrop(e, row.teamIndex || equipeIndex, day.date);
                       }}
                     >
-                      {segments.filter(({ seg }) => realIdx === seg.start).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
+                      {segments.filter(({ seg }) => {
+                        const visibleStart = Math.max(seg.start, vpStart);
+                        return realIdx === visibleStart && realIdx <= seg.end;
+                      }).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
                         const conducteur = getConducteur(chantier.conducteurId);
-                        const segLen = seg.end - seg.start + 1;
+                        const clippedStart = Math.max(seg.start, vpStart);
+                        const clippedEnd = Math.min(seg.end, vpEnd);
+                        const segLen = clippedEnd - clippedStart + 1;
                         const width = segLen * cellWidth - 8;
                         const compact = segments.length > 1;
                         const isFirstSegment = segIndex === 0;
@@ -245,6 +250,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           ? Math.max(15, Math.min(Math.round(20 + (cellWidth - 26) * (26 - 20) / 26), blocH / segments.length))
                           : blocH;
                         const top = compact ? Math.round(5 + (cellWidth - 26) * (7 - 5) / 26) + stack * (height + 2) : blocT;
+                        const clippedLeft = seg.start < vpStart;
+                        const clippedRight = seg.end > vpEnd;
 
                         return (
                           <div
@@ -253,6 +260,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
                               compact ? 'compact-bloc' : ''
                             } ${
                               chantier.termine ? 'termine' : ''
+                            } ${
+                              clippedLeft ? 'bloc-clipped-left' : ''
+                            } ${
+                              clippedRight ? 'bloc-clipped-right' : ''
                             } ${
                               selectedItem?.type === 'chantier' &&
                               selectedItem.id === chantier.id
@@ -328,9 +339,16 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         );
                       })}
 
-                      {congeItems.map(({ conge, seg }) => {
+                      {congeItems.filter(({ seg }) => {
+                        const visibleStart = Math.max(seg.start, vpStart);
+                        return realIdx === visibleStart && realIdx <= seg.end;
+                      }).map(({ conge, seg }) => {
+                        const clippedStart = Math.max(seg.start, vpStart);
+                        const clippedEnd = Math.min(seg.end, vpEnd);
+                        const segLen = clippedEnd - clippedStart + 1;
                         const cH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                         const cT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
+                        const clippedLeft = seg.start < vpStart;
                         return (
                         <div
                           key={conge.id}
@@ -341,11 +359,13 @@ const PlanningGrid = React.memo(function PlanningGrid({
                             selectedItem.id === conge.id
                               ? 'active-item'
                               : ''
+                          } ${
+                            clippedLeft ? 'bloc-clipped-left' : ''
                           }`}
                            draggable={!resize && canEdit}
                            onDragStart={(e) => cb.onDragStart(e, conge.id, 'conge')}
                           style={{
-                            width: (seg.end - seg.start + 1) * cellWidth - 8,
+                            width: segLen * cellWidth - 8,
                             height: cH,
                             top: cT,
                             fontSize: 16,

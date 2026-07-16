@@ -1686,3 +1686,17 @@ button:active {
     grid-template-columns: 1fr;
   }
 }
+
+.bloc-clipped-left {
+  border-left: 3px solid rgba(0,0,0,0.25);
+  border-radius: 0 8px 8px 0;
+}
+
+.bloc-clipped-right {
+  border-right: 3px solid rgba(0,0,0,0.25);
+  border-radius: 8px 0 0 8px;
+}
+
+.bloc-clipped-left.bloc-clipped-right {
+  border-radius: 0;
+}

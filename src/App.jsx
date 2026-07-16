@@ -1344,9 +1344,11 @@ export default function App() {
         ? teams.map((_, t) => t).filter(t => teams[t].companyId === (c.companyId || teams[c.equipe]?.companyId))
         : [c.equipe];
       for (const eq of eqs) {
-        const key = `${eq}-${seg.start}`;
-        if (!map.has(key)) map.set(key, []);
-        map.get(key).push({ conge: c, seg });
+        for (let d = seg.start; d <= seg.end; d++) {
+          const key = `${eq}-${d}`;
+          if (!map.has(key)) map.set(key, []);
+          map.get(key).push({ conge: c, seg });
+        }
       }
     }
     return map;
