@@ -1123,40 +1123,39 @@ export default function App() {
       const r2 = resizeRef.current;
       if (!r2) { setResize(null); resizeRef.current = null; return; }
       const delta = Math.round((e.clientX - r2.startX) / cellWidth);
+      const { id, side, originalStart, originalDuree, originalEquipe, originalForceAout } = r2;
       if (delta !== 0) {
         setChantiers((prev) => {
-          const r2 = resizeRef.current;
-          if (!r2) return prev;
-          if (r2.side === 'right') {
-            const newDuree = Math.max(1, r2.originalDuree + delta);
+          if (side === 'right') {
+            const newDuree = Math.max(1, originalDuree + delta);
             let next = prev.map((c) =>
-              c.id === r2.id
-                ? { ...c, start: r2.originalStart, duree: newDuree }
+              c.id === id
+                ? { ...c, start: originalStart, duree: newDuree }
                 : c
             );
-            const updated = next.find((c) => c.id === r2.id);
+            const updated = next.find((c) => c.id === id);
             const updatedEnd = getEndDateForChantier(updated);
             let cursor = formatDate(addDays(toDate(updatedEnd), 1));
-            cursor = nextWorkingDay(cursor, r2.originalEquipe, r2.originalForceAout);
+            cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
             const changed = new Map();
             const sorted = next
-              .filter((c) => c.id !== r2.id && c.equipe === r2.originalEquipe && toDate(c.start) > toDate(r2.originalStart))
+              .filter((c) => c.id !== id && c.equipe === originalEquipe && toDate(c.start) > toDate(originalStart))
               .sort((a, b) => toDate(a.start) - toDate(b.start));
             for (const c of sorted) {
               if (toDate(c.start) >= toDate(cursor)) break;
-              const newStart = nextWorkingDay(cursor, r2.originalEquipe, r2.originalForceAout);
+              const newStart = nextWorkingDay(cursor, originalEquipe, originalForceAout);
               changed.set(c.id, { ...c, start: newStart });
               cursor = formatDate(addDays(toDate(getEndDateForChantier({ ...c, start: newStart })), 1));
-              cursor = nextWorkingDay(cursor, r2.originalEquipe, r2.originalForceAout);
+              cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
             }
             return next.map((c) => changed.get(c.id) || c);
           }
           return prev.map((c) => {
-            if (c.id !== r2.id) return c;
-            const originalEnd = addWorkingDays(r2.originalStart, r2.originalDuree, r2.originalEquipe, { force_aout: r2.originalForceAout });
-            const rawNewStart = formatDate(addDays(toDate(r2.originalStart), delta));
-            const newStart = nextWorkingDay(rawNewStart, r2.originalEquipe, r2.originalForceAout);
-            const newDuree = countWorkingDays(newStart, originalEnd, r2.originalEquipe, r2.originalForceAout);
+            if (c.id !== id) return c;
+            const originalEnd = addWorkingDays(originalStart, originalDuree, originalEquipe, { force_aout: originalForceAout });
+            const rawNewStart = formatDate(addDays(toDate(originalStart), delta));
+            const newStart = nextWorkingDay(rawNewStart, originalEquipe, originalForceAout);
+            const newDuree = countWorkingDays(newStart, originalEnd, originalEquipe, originalForceAout);
             if (newDuree < 1) return c;
             return { ...c, start: newStart, duree: newDuree };
           });

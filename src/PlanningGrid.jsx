@@ -390,10 +390,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
                             }}
                             title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
                           >
-                            <div
-                              className="resize-handle left"
-                              data-rs="left"
-                            />
+                            {isFirstSegment && (
+                              <div
+                                className="resize-handle left"
+                                data-rs="left"
+                              />
+                            )}
 
                             {chantier.note && isFirstSegment && (
                               <div className="note-icon">
@@ -421,10 +423,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
                               }}
                             />
 
-                            <div
-                              className="resize-handle right"
-                              data-rs="right"
-                            />
+                            {isLastSegment && (
+                              <div
+                                className="resize-handle right"
+                                data-rs="right"
+                              />
+                            )}
                           </div>
                         );
                       })}
