@@ -1335,6 +1335,12 @@ button:active {
   outline-offset: -2px;
 }
 
+.resize-preview {
+  background: rgba(22, 163, 74, 0.08) !important;
+  outline: 2px dashed var(--green);
+  outline-offset: -2px;
+}
+
 .context-menu {
   position: fixed;
   background: var(--surface);

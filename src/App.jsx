@@ -1156,7 +1156,23 @@ export default function App() {
       rafId = requestAnimationFrame(() => {
         rafId = null;
         const delta = Math.round((lastXRef.current - r.startX) / cellWidth);
-        setResize((prev) => prev ? { ...prev, delta } : prev);
+
+        let previewStart, previewEnd;
+        if (delta !== 0) {
+          if (r.side === 'right') {
+            const oldEnd = getEndDateForChantier({ start: r.originalStart, duree: r.originalDuree, equipe: r.originalEquipe, force_aout: r.originalForceAout });
+            const newEndCal = formatDate(addDays(toDate(oldEnd), delta));
+            const newDuree = Math.max(1, countWorkingDays(r.originalStart, newEndCal, r.originalEquipe, r.originalForceAout));
+            previewStart = r.originalStart;
+            previewEnd = getEndDateForChantier({ start: r.originalStart, duree: newDuree, equipe: r.originalEquipe, force_aout: r.originalForceAout });
+          } else {
+            const originalEnd = addWorkingDays(r.originalStart, r.originalDuree, r.originalEquipe, { force_aout: r.originalForceAout });
+            const rawNewStart = formatDate(addDays(toDate(r.originalStart), delta));
+            previewStart = nextWorkingDay(rawNewStart, r.originalEquipe, r.originalForceAout);
+            previewEnd = originalEnd;
+          }
+        }
+        setResize((prev) => prev ? { ...prev, delta, previewStart, previewEnd, previewEquipe: r.originalEquipe } : prev);
       });
     }
 

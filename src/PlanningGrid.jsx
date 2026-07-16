@@ -333,7 +333,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         dragPreview?.date === day.date
                           ? 'drag-preview'
                           : ''
-                      } ${isPending ? 'pending-cell' : ''}`}
+                       } ${
+                         resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex &&
+                         sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd)
+                           ? 'resize-preview'
+                           : ''
+                       } ${isPending ? 'pending-cell' : ''}`}
                       data-eq={equipeIndex}
                       data-da={day.date}
                     >
