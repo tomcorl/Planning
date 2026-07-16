@@ -345,7 +345,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         const clippedStart = Math.max(seg.start, vpStart);
                         const clippedEnd = Math.min(seg.end, vpEnd);
                         const segLen = clippedEnd - clippedStart + 1;
-                        const width = segLen * cellWidth - 8;
+                        let width = segLen * cellWidth - 8;
+                        if (resize?.id === chantier.id && resize.delta) {
+                          width += (resize.side === 'left' ? -1 : 1) * resize.delta * cellWidth;
+                        }
                         const isFirstSegment = segIndex === 0;
                         const isLastSegment = segIndex === segCount - 1;
                         const isLongestSeg = segLen === longestLen;
@@ -381,6 +384,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
                               top: blocT,
                               height: blocH,
                               background: chantier.color,
+                              ...(resize?.id === chantier.id && resize.side === 'left' && resize.delta
+                                ? { left: 3 + resize.delta * cellWidth }
+                                : {}),
                             }}
                             title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
                           >

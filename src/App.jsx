@@ -1110,6 +1110,7 @@ export default function App() {
       rafId = requestAnimationFrame(() => {
         rafId = null;
         const delta = Math.round((e.clientX - r.startX) / cellWidth);
+        if (resizeRef.current) resizeRef.current.delta = delta;
         setResize((prev) => prev ? { ...prev, delta } : prev);
       });
     }
