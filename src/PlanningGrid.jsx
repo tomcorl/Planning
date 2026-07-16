@@ -345,6 +345,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         const clippedStart = Math.max(seg.start, vpStart);
                         const clippedEnd = Math.min(seg.end, vpEnd);
                         const segLen = clippedEnd - clippedStart + 1;
+                        const isFirstSegment = segIndex === 0;
+                        const isLastSegment = segIndex === segCount - 1;
                         let width = segLen * cellWidth - 8;
                         if (resize?.id === chantier.id && resize.delta) {
                           if (resize.side === 'right' && isLastSegment) {
@@ -353,8 +355,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                             width -= resize.delta * cellWidth;
                           }
                         }
-                        const isFirstSegment = segIndex === 0;
-                        const isLastSegment = segIndex === segCount - 1;
                         const isLongestSeg = segLen === longestLen;
                         const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                         const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
