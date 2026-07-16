@@ -1021,12 +1021,14 @@ export default function App() {
       }
       // Reverse pass (right-to-left): push items left when overlapping next
       for (const equipe of teamsSet) {
-        const teamItems = result
+        const teamIds = result
           .filter((c) => c.equipe === equipe)
-          .sort((a, b) => toDate(a.start) - toDate(b.start) || (a.id || 0) - (b.id || 0));
-        for (let i = teamItems.length - 1; i > 0; i--) {
-          const prev = teamItems[i - 1];
-          const next = teamItems[i];
+          .sort((a, b) => toDate(a.start) - toDate(b.start) || (a.id || 0) - (b.id || 0))
+          .map((c) => c.id);
+        for (let i = teamIds.length - 1; i > 0; i--) {
+          const prev = result.find((c) => c.id === teamIds[i - 1]);
+          const next = result.find((c) => c.id === teamIds[i]);
+          if (!prev || !next) continue;
           if (toDate(getEndDateForChantier(prev)) >= toDate(next.start)) {
             const newPrevEnd = formatDate(addDays(toDate(next.start), -1));
             const newPrevStart = (() => {
