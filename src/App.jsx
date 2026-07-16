@@ -1336,7 +1336,7 @@ export default function App() {
 
   const congeSegmentsMap = useMemo(() => {
     const map = new Map();
-    for (const c of deferredConges) {
+    for (const c of conges) {
       const start = dayIndex(c.start);
       if (start === -1) continue;
       const endDate = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
@@ -1355,7 +1355,7 @@ export default function App() {
       }
     }
     return map;
-  }, [deferredConges, visibleDays, teams]);
+  }, [conges, visibleDays, teams]);
 
   const chantiersParCelluleCacheRef = useRef(null);
 
@@ -1395,29 +1395,15 @@ export default function App() {
         });
         Object.values(byEquipe).forEach((items) => {
           items.sort((a, b) => a.seg.start - b.seg.start);
-          const rows = [];
+          let lastEnd = -1;
           items.forEach(({ chantier, seg, segIndex, segCount, longestLen }) => {
-            let placed = false;
-            for (let r = 0; r < rows.length; r++) {
-              const lastInRow = rows[r][rows[r].length - 1];
-              if (seg.start > lastInRow.seg.end) {
-                rows[r].push({ chantier, seg, stack: r, segIndex, segCount, longestLen });
-                placed = true;
-                break;
-              }
+            if (seg.start <= lastEnd) return;
+            for (let d = seg.start; d <= seg.end; d++) {
+              const key = `${chantier.equipe}-${d}`;
+              if (!map.has(key)) map.set(key, []);
+              map.get(key).push({ chantier, seg, i: 0, stack: 0, segIndex, segCount, longestLen });
             }
-            if (!placed) {
-              rows.push([{ chantier, seg, stack: rows.length, segIndex, segCount, longestLen }]);
-            }
-          });
-          rows.forEach((row) => {
-            row.forEach(({ chantier, seg, stack, segIndex, segCount, longestLen }) => {
-              for (let d = seg.start; d <= seg.end; d++) {
-                const key = `${chantier.equipe}-${d}`;
-                if (!map.has(key)) map.set(key, []);
-                map.get(key).push({ chantier, seg, i: 0, stack, segIndex, segCount, longestLen });
-              }
-            });
+            lastEnd = seg.end;
           });
         });
         chantiersParCelluleCacheRef.current = { depsKey, map, byTeam: newByTeam };
@@ -1440,29 +1426,15 @@ export default function App() {
 
     Object.values(byEquipe).forEach((items) => {
       items.sort((a, b) => a.seg.start - b.seg.start);
-      const rows = [];
+      let lastEnd = -1;
       items.forEach(({ chantier, seg, segIndex, segCount, longestLen }) => {
-        let placed = false;
-        for (let r = 0; r < rows.length; r++) {
-          const lastInRow = rows[r][rows[r].length - 1];
-          if (seg.start > lastInRow.seg.end) {
-            rows[r].push({ chantier, seg, stack: r, segIndex, segCount, longestLen });
-            placed = true;
-            break;
-          }
+        if (seg.start <= lastEnd) return;
+        for (let d = seg.start; d <= seg.end; d++) {
+          const key = `${chantier.equipe}-${d}`;
+          if (!map.has(key)) map.set(key, []);
+          map.get(key).push({ chantier, seg, i: 0, stack: 0, segIndex, segCount, longestLen });
         }
-        if (!placed) {
-          rows.push([{ chantier, seg, stack: rows.length, segIndex, segCount, longestLen }]);
-        }
-      });
-      rows.forEach((row) => {
-        row.forEach(({ chantier, seg, stack, segIndex, segCount, longestLen }) => {
-          for (let d = seg.start; d <= seg.end; d++) {
-            const key = `${chantier.equipe}-${d}`;
-            if (!map.has(key)) map.set(key, []);
-            map.get(key).push({ chantier, seg, i: 0, stack, segIndex, segCount, longestLen });
-          }
-        });
+        lastEnd = seg.end;
       });
     });
 

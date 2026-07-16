@@ -121,10 +121,15 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (resizeHandle && type === 'mousedown') {
       const ch = chantierBloc || resizeHandle.closest('[data-ch]');
       if (ch) {
-        const id = Number(ch.dataset.ch);
         const side = resizeHandle.dataset.rs;
         e.stopPropagation();
-        cb.startResize(e, { id }, side);
+        cb.startResize(e, {
+          id: Number(ch.dataset.ch),
+          start: ch.dataset.start,
+          duree: Number(ch.dataset.duree),
+          equipe: Number(ch.dataset.equipe),
+          force_aout: ch.dataset.forceAout === '1',
+        }, side);
         return;
       }
     }
@@ -341,16 +346,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         const clippedEnd = Math.min(seg.end, vpEnd);
                         const segLen = clippedEnd - clippedStart + 1;
                         const width = segLen * cellWidth - 8;
-                        const compact = segments.length > 1;
                         const isFirstSegment = segIndex === 0;
                         const isLastSegment = segIndex === segCount - 1;
                         const isLongestSeg = segLen === longestLen;
                         const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                         const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
-                        const height = compact
-                          ? Math.max(15, Math.min(Math.round(20 + (cellWidth - 26) * (26 - 20) / 26), blocH / segments.length))
-                          : blocH;
-                        const top = compact ? Math.round(5 + (cellWidth - 26) * (7 - 5) / 26) + stack * (height + 2) : blocT;
                         const clippedLeft = seg.start < vpStart;
                         const clippedRight = seg.end > vpEnd;
 
@@ -358,8 +358,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           <div
                             key={`${chantier.id}-${i}`}
                             className={`bloc chantier ${
-                              compact ? 'compact-bloc' : ''
-                            } ${
                               chantier.termine ? 'termine' : ''
                             } ${
                               clippedLeft ? 'bloc-clipped-left' : ''
@@ -372,12 +370,16 @@ const PlanningGrid = React.memo(function PlanningGrid({
                                 : ''
                             }`}
                             data-ch={chantier.id}
+                            data-start={chantier.start}
+                            data-duree={chantier.duree}
+                            data-equipe={chantier.equipe}
+                            data-force-aout={chantier.force_aout ? 1 : 0}
                             draggable={!resize && canEdit}
                             onDragStart={(e) => cb.onDragStart(e, chantier.id, 'chantier')}
                             style={{
                               width,
-                              top,
-                              height,
+                              top: blocT,
+                              height: blocH,
                               background: chantier.color,
                             }}
                             title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
