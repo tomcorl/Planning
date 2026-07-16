@@ -1111,15 +1111,7 @@ export default function App() {
         rafId = null;
         const delta = Math.round((e.clientX - r.startX) / cellWidth);
         if (resizeRef.current) resizeRef.current.delta = delta;
-        let effectiveDelta;
-        if (r.side === 'left') {
-          const rawNs = formatDate(addDays(toDate(r.originalStart), delta));
-          const newStart = nextWorkingDay(rawNs, r.originalEquipe, r.originalForceAout);
-          const diN = dayIndex(newStart);
-          const diO = dayIndex(r.originalStart);
-          effectiveDelta = diN >= 0 && diO >= 0 ? diN - diO : delta;
-        }
-        setResize((prev) => prev ? { ...prev, delta, effectiveDelta } : prev);
+        setResize((prev) => prev ? { ...prev, delta } : prev);
       });
     }
 
