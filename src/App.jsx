@@ -158,6 +158,7 @@ export default function App() {
   const viewportRangeRef = useRef(null);
   const resizeRef = useRef(null);
   const resizeChantiersRef = useRef(null);
+  const lastXRef = useRef(0);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
 
@@ -1147,9 +1148,10 @@ export default function App() {
 
     function onMouseMove(e) {
       if (rafId) return;
+      lastXRef.current = e.clientX;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        const delta = Math.round((e.clientX - r.startX) / cellWidth);
+        const delta = Math.round((lastXRef.current - r.startX) / cellWidth);
         if (resizeRef.current) resizeRef.current.delta = delta;
         setResize((prev) => prev ? { ...prev, delta } : prev);
       });
