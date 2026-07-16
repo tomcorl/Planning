@@ -1005,7 +1005,7 @@ export default function App() {
               equipe,
               item.force_aout
             );
-            if (nextAvailable !== item.start) {
+            if (toDate(nextAvailable) > toDate(item.start)) {
               result.push({ ...item, start: nextAvailable });
               changed = true;
             } else {
@@ -1115,12 +1115,14 @@ export default function App() {
       });
     }
 
-    function onMouseUp() {
+    function onMouseUp(e) {
       if (rafId) {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
-      const delta = resizeRef.current?.delta || 0;
+      const r2 = resizeRef.current;
+      if (!r2) { setResize(null); resizeRef.current = null; return; }
+      const delta = Math.round((e.clientX - r2.startX) / cellWidth);
       if (delta !== 0) {
         setChantiers((prev) => {
           const r2 = resizeRef.current;
