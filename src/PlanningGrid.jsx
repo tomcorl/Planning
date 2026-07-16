@@ -347,12 +347,17 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         const segLen = clippedEnd - clippedStart + 1;
                         const isFirstSegment = segIndex === 0;
                         const isLastSegment = segIndex === segCount - 1;
+                        const visDelta = resize?.id === chantier.id
+                          ? (resize.side === 'left' && resize.effectiveDelta !== undefined
+                              ? resize.effectiveDelta
+                              : resize.delta)
+                          : 0;
                         let width = segLen * cellWidth - 8;
                         if (resize?.id === chantier.id && resize.delta) {
                           if (resize.side === 'right' && isLastSegment) {
-                            width += resize.delta * cellWidth;
+                            width += visDelta * cellWidth;
                           } else if (resize.side === 'left' && isFirstSegment) {
-                            width -= resize.delta * cellWidth;
+                            width -= visDelta * cellWidth;
                           }
                         }
                         const isLongestSeg = segLen === longestLen;
@@ -388,9 +393,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
                               top: blocT,
                               height: blocH,
                               background: chantier.color,
-                              zIndex: resize?.id === chantier.id ? 100 : undefined,
+                              zIndex: resize?.id === chantier.id ? 200 : undefined,
                               ...(resize?.id === chantier.id && resize.side === 'left' && resize.delta && isFirstSegment
-                                ? { left: 3 + resize.delta * cellWidth }
+                                ? { left: 3 + visDelta * cellWidth }
                                 : {}),
                             }}
                             title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
@@ -433,6 +438,16 @@ const PlanningGrid = React.memo(function PlanningGrid({
                                 className="resize-handle right"
                                 data-rs="right"
                               />
+                            )}
+                            {resize?.id === chantier.id && resize.delta && isLastSegment && resize.side === 'right' && resize.effDuree && (
+                              <div className="resize-tooltip right">
+                                {resize.effDuree}j ({resize.effEnd || '…'})
+                              </div>
+                            )}
+                            {resize?.id === chantier.id && resize.delta && isFirstSegment && resize.side === 'left' && resize.effStart && (
+                              <div className="resize-tooltip left">
+                                Déb. {resize.effStart} — {resize.effDuree}j
+                              </div>
                             )}
                           </div>
                         );

@@ -1111,7 +1111,28 @@ export default function App() {
         rafId = null;
         const delta = Math.round((e.clientX - r.startX) / cellWidth);
         if (resizeRef.current) resizeRef.current.delta = delta;
-        setResize((prev) => prev ? { ...prev, delta } : prev);
+        let effectiveDelta = delta;
+        let effStart = r.originalStart;
+        let effDuree = r.originalDuree;
+        let effEnd = '';
+        const bi = { equipe: r.originalEquipe, force_aout: r.originalForceAout };
+        if (r.side === 'left') {
+          const rawNs = formatDate(addDays(toDate(r.originalStart), delta));
+          const newStart = nextWorkingDay(rawNs, r.originalEquipe, r.originalForceAout);
+          const diNew = dayIndex(newStart);
+          const diOrig = dayIndex(r.originalStart);
+          effectiveDelta = diNew >= 0 && diOrig >= 0 ? diNew - diOrig : delta;
+          effStart = newStart;
+          const origEnd = addWorkingDays(r.originalStart, r.originalDuree, r.originalEquipe, { force_aout: r.originalForceAout });
+          effDuree = Math.max(1, countWorkingDays(newStart, origEnd, r.originalEquipe, r.originalForceAout));
+        } else {
+          const oldEnd = getEndDateForChantier({ start: r.originalStart, duree: r.originalDuree, ...bi });
+          const newEndCal = formatDate(addDays(toDate(oldEnd), delta));
+          effDuree = Math.max(1, countWorkingDays(r.originalStart, newEndCal, r.originalEquipe, r.originalForceAout));
+          const newEnd = getEndDateForChantier({ start: r.originalStart, duree: effDuree, ...bi });
+          effEnd = newEnd;
+        }
+        setResize((prev) => prev ? { ...prev, delta, effectiveDelta, effStart, effDuree, effEnd } : prev);
       });
     }
 
@@ -1127,7 +1148,8 @@ export default function App() {
       if (delta !== 0) {
         setChantiers((prev) => {
           if (side === 'right') {
-            const oldEnd = getEndDateForChantier({ start: originalStart, duree: originalDuree });
+            const baseInfo = { equipe: originalEquipe, force_aout: originalForceAout };
+            const oldEnd = getEndDateForChantier({ start: originalStart, duree: originalDuree, ...baseInfo });
             const newEndCal = formatDate(addDays(toDate(oldEnd), delta));
             const newDuree = Math.max(1, countWorkingDays(originalStart, newEndCal, originalEquipe, originalForceAout));
             let next = prev.map((c) =>
@@ -1135,7 +1157,7 @@ export default function App() {
                 ? { ...c, start: originalStart, duree: newDuree }
                 : c
             );
-            const updatedEnd = getEndDateForChantier({ start: originalStart, duree: newDuree });
+            const updatedEnd = getEndDateForChantier({ start: originalStart, duree: newDuree, ...baseInfo });
             let cursor = formatDate(addDays(toDate(updatedEnd), 1));
             cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
             const changed = new Map();
