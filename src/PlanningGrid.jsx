@@ -384,6 +384,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                               top: blocT,
                               height: blocH,
                               background: chantier.color,
+                              zIndex: resize?.id === chantier.id ? 100 : undefined,
                               ...(resize?.id === chantier.id && resize.side === 'left' && resize.delta
                                 ? { left: 3 + resize.delta * cellWidth }
                                 : {}),
