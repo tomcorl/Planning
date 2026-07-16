@@ -38,6 +38,7 @@ const DEFAULT_TEAMS_COUNT = 12;
 
 function toDate(value) {
   if (value instanceof Date) return value;
+  if (!value || typeof value !== 'string') return new Date(NaN);
   const [y, m, d] = value.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
