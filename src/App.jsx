@@ -865,17 +865,17 @@ export default function App() {
 
   function openEditChantier(chantier) {
     if (!chantier) return;
-
-    setSelectedItem({ type: 'chantier', id: chantier.id });
-    setForm({ ...chantier });
+    const full = chantiers.find((c) => c.id === chantier.id) || chantier;
+    setSelectedItem({ type: 'chantier', id: full.id });
+    setForm({ ...full });
     setModal({ open: true, mode: 'modification', type: 'chantier' });
   }
 
   function openEditConge(conge) {
     if (!conge) return;
-
-    setSelectedItem({ type: 'conge', id: conge.id });
-    setForm({ ...conge });
+    const full = conges.find((c) => c.id === conge.id) || conge;
+    setSelectedItem({ type: 'conge', id: full.id });
+    setForm({ ...full });
     setModal({ open: true, mode: 'modification', type: 'conge' });
   }
 
@@ -934,6 +934,7 @@ export default function App() {
     });
 
     closeModal();
+    setTimeout(reflowTeams, 0);
   }
 
   function applyInsertion(
@@ -990,6 +991,7 @@ export default function App() {
   function reflowTeams() {
     setChantiers((prev) => {
       const teamsSet = [...new Set(prev.map((c) => c.equipe))];
+      let changed = false;
       const result = [];
       for (const equipe of teamsSet) {
         const teamItems = prev
@@ -1003,8 +1005,9 @@ export default function App() {
               equipe,
               item.force_aout
             );
-            if (toDate(nextAvailable) > toDate(item.start)) {
+            if (nextAvailable !== item.start) {
               result.push({ ...item, start: nextAvailable });
+              changed = true;
             } else {
               result.push(item);
             }
@@ -1015,7 +1018,7 @@ export default function App() {
           cursor = getEndDateForChantier(updated);
         }
       }
-      return result;
+      return changed ? result : prev;
     });
   }
 
@@ -1053,6 +1056,7 @@ export default function App() {
     commit(() => {
       setChantiers((prev) => applyInsertion(prev, item, equipe, start));
     });
+    setTimeout(reflowTeams, 0);
   }
 
   function startResize(e, chantier, side) {
@@ -1276,8 +1280,9 @@ export default function App() {
   function deleteSelectedItem() {
     const ref = keyRef.current;
     if (!ref.selectedItem || !ref.canEdit) return;
+    const wasChantier = ref.selectedItem.type === 'chantier';
     commit(() => {
-      if (ref.selectedItem.type === 'chantier') {
+      if (wasChantier) {
         setChantiers((prev) => prev.filter((c) => c.id !== ref.selectedItem.id));
       }
       if (ref.selectedItem.type === 'conge') {
@@ -1286,6 +1291,7 @@ export default function App() {
     });
     if (ref.modalOpen) closeModal();
     setSelectedItem(null);
+    if (wasChantier) setTimeout(reflowTeams, 0);
   }
 
   function pasteClipboard() {
@@ -1311,6 +1317,7 @@ export default function App() {
         setSelectedItem({ type: 'conge', id: newItem.id });
       }
     });
+    if (clip.sourceType === 'chantier') setTimeout(reflowTeams, 0);
   }
 
   function handleContextMenu(e, type, id) {
