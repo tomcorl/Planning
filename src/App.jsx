@@ -1407,6 +1407,7 @@ export default function App() {
 
   const deferredChantiers = useDeferredValue(chantiers);
   const deferredConges = useDeferredValue(conges);
+  const deferredVisibleDays = useDeferredValue(visibleDays);
 
   const congeSegmentsMap = useMemo(() => {
     const map = new Map();
@@ -1435,7 +1436,7 @@ export default function App() {
 
   const chantiersParCellule = useMemo(() => {
     const cache = chantiersParCelluleCacheRef.current;
-    const depsKey = `${deferredConges.length}|${holidays.size}|${visibleDays[0]?.date}-${visibleDays[visibleDays.length-1]?.date}`;
+    const depsKey = `${deferredConges.length}|${holidays.size}|${deferredVisibleDays[0]?.date}-${deferredVisibleDays[deferredVisibleDays.length-1]?.date}`;
 
     if (cache && cache.depsKey === depsKey) {
       const newByTeam = {};
@@ -1519,7 +1520,7 @@ export default function App() {
     });
     chantiersParCelluleCacheRef.current = { depsKey, map, byTeam };
     return map;
-  }, [deferredChantiers, conges, holidays, visibleDays]);
+  }, [deferredChantiers, conges, holidays, deferredVisibleDays]);
 
   const modalEndDate = useMemo(() => {
     if (!form || modal.type === 'conducteur') return '';
