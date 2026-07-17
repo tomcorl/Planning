@@ -289,7 +289,7 @@ BEGIN
   INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
   SELECT COALESCE((x->>'id')::INT, nextval('chantiers_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT, (x->>'start')::TEXT, (x->>'duree')::INT,
          (x->>'nom')::TEXT, (x->>'conducteurId')::INT, (x->>'color')::TEXT, (x->>'note')::TEXT,
-         (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT, COALESCE((x->>'force_aout')::BOOLEAN, false)
+         (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT, COALESCE((x->>'force_aout')::INT, 0)::BOOLEAN
   FROM jsonb_array_elements(p_chantiers) AS x
   ON CONFLICT (id) DO UPDATE SET
     company_id = EXCLUDED.company_id,
@@ -543,7 +543,7 @@ BEGIN
     INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
     SELECT COALESCE((x->>'id')::INT, nextval('chantiers_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT, (x->>'start')::TEXT, (x->>'duree')::INT,
            (x->>'nom')::TEXT, (x->>'conducteurId')::INT, (x->>'color')::TEXT, (x->>'note')::TEXT,
-           (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT, COALESCE((x->>'force_aout')::INT, 0)
+           (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT, COALESCE((x->>'force_aout')::INT, 0)::BOOLEAN
     FROM jsonb_array_elements(p_chantiers) AS x
     WHERE (x->>'company_id') = comp_id
     ON CONFLICT (id) DO UPDATE SET
@@ -595,16 +595,28 @@ BEGIN
   FROM jsonb_array_elements(p_conducteurs) AS r
   ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
 
-  -- Couleurs (appliquées à toutes les entreprises)
-  UPDATE companies SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors;
+    -- Couleurs dans la boucle
+    UPDATE companies
+    SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors
+    WHERE id = comp_id;
+  END LOOP;
 
-  -- Retourne les données à jour
+  DELETE FROM conducteurs
+  WHERE id NOT IN (
+    SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conducteurs) AS x
+    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
+  );
+  INSERT INTO conducteurs (nom, color)
+  SELECT r->>'nom', r->>'color'
+  FROM jsonb_array_elements(p_conducteurs) AS r
+  ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
+
   SELECT jsonb_build_object(
-    'chantiers', (SELECT jsonb_agg(to_jsonb(ch)) FROM chantiers ch),
-    'conges', (SELECT jsonb_agg(to_jsonb(co)) FROM conges co),
-    'equipes', (SELECT jsonb_agg(jsonb_build_object('nom', e.nom, 'company_id', e.company_id, 'ordre', e.ordre)) FROM equipes e ORDER BY ordre),
-    'conducteurs', (SELECT jsonb_agg(jsonb_build_object('id', cd.id, 'nom', cd.nom, 'color', cd.color)) FROM conducteurs cd),
-    'custom_feries', (SELECT jsonb_agg(to_jsonb(cf)) FROM custom_feries cf)
+    'chantiers', (SELECT jsonb_agg(to_jsonb(ch) ORDER BY ch.id) FROM chantiers ch),
+    'conges', (SELECT jsonb_agg(to_jsonb(co) ORDER BY co.id) FROM conges co),
+    'equipes', (SELECT jsonb_agg(jsonb_build_object('nom', e.nom, 'company_id', e.company_id, 'ordre', e.ordre) ORDER BY e.ordre) FROM equipes e),
+    'conducteurs', (SELECT jsonb_agg(jsonb_build_object('id', cd.id, 'nom', cd.nom, 'color', cd.color) ORDER BY cd.id) FROM conducteurs cd),
+    'custom_feries', (SELECT jsonb_agg(to_jsonb(cf) ORDER BY cf.id) FROM custom_feries cf)
   ) INTO result;
   RETURN result;
 END;
