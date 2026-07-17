@@ -15,6 +15,142 @@ function isAugustClosure(dateStr) {
   return d.getMonth() === 7 && d.getDate() >= 1 && d.getDate() <= 21;
 }
 
+function getConducteur(conducteurs, id) {
+  return conducteurs.find((c) => c.id === Number(id));
+}
+
+const CellContent = React.memo(function CellContent({
+  baseClassName, isSelected, isDragPreview, isResizePreview,
+  segments, congeItems, vpStart, vpEnd, realIdx,
+  cellWidth, blocH, blocT,
+  selectedItem, conducteurs, canEdit, resize,
+  cb, dayEq, dayDa, dayIdxMap,
+}) {
+  const cellClassName = baseClassName
+    + (isSelected ? ' selected' : '')
+    + (isDragPreview ? ' drag-preview' : '')
+    + (isResizePreview ? ' resize-preview' : '');
+
+  function dayIndex(date) {
+    return dayIdxMap.get(date) ?? -1;
+  }
+
+  return (
+    <div className={cellClassName} data-eq={dayEq} data-da={dayDa}>
+      {segments.filter(({ seg }) => {
+        const visibleStart = Math.max(seg.start, vpStart);
+        return realIdx === visibleStart && realIdx <= seg.end;
+      }).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
+        const conducteur = getConducteur(conducteurs, chantier.conducteurId);
+        const clippedStart = Math.max(seg.start, vpStart);
+        const clippedEnd = Math.min(seg.end, vpEnd);
+        const segLen = clippedEnd - clippedStart + 1;
+        const isFirstSegment = segIndex === 0;
+        const isLastSegment = segIndex === segCount - 1;
+        let width = segLen * cellWidth - 8;
+        if (resize?.id === chantier.id && resize.delta && resize.previewStart && resize.previewEnd) {
+          const pStart = dayIndex(resize.previewStart);
+          const pEnd = dayIndex(resize.previewEnd);
+          if (pStart >= 0 && pEnd >= 0) {
+            width = (pEnd - pStart + 1) * cellWidth - 8;
+          }
+        }
+        const isLongestSeg = segLen === longestLen;
+        const clippedLeft = seg.start < vpStart;
+        const clippedRight = seg.end > vpEnd;
+
+        return (
+          <div
+            key={`${chantier.id}-${i}`}
+            className={`bloc chantier ${chantier.termine ? 'termine' : ''} ${clippedLeft ? 'bloc-clipped-left' : ''} ${clippedRight ? 'bloc-clipped-right' : ''} ${selectedItem?.type === 'chantier' && selectedItem.id === chantier.id ? 'active-item' : ''}`}
+            data-ch={chantier.id}
+            data-start={chantier.start}
+            data-duree={chantier.duree}
+            data-equipe={chantier.equipe}
+            data-force-aout={chantier.force_aout ? 1 : 0}
+            draggable={!resize && canEdit}
+            onDragStart={(e) => cb.onDragStart(e, chantier.id, 'chantier')}
+            style={{
+              width,
+              top: blocT,
+              height: blocH,
+              background: chantier.color,
+              zIndex: resize?.id === chantier.id ? 9999 : undefined,
+              opacity: resize?.id === chantier.id ? 0.85 : undefined,
+              ...(resize?.id === chantier.id && resize.previewStart && isFirstSegment
+                ? { left: 3 + (dayIndex(resize.previewStart) - seg.start) * cellWidth }
+                : {}),
+            }}
+            title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
+          >
+            {isFirstSegment && <div className="resize-handle left" data-rs="left" />}
+            {chantier.note && isFirstSegment && (
+              <div className="note-icon">💬<div className="tooltip">{chantier.note}</div></div>
+            )}
+            {chantier.linked && cellWidth >= 22 && <div className="link-icon">🔗</div>}
+            <div className="chantier-content">
+              <div className="chantier-title-row">
+                <strong>{chantier.nom}</strong>
+                {(isLongestSeg || segLen > 15) && chantier.detail && <em>{chantier.detail}</em>}
+              </div>
+              {isLastSegment && <small>{chantier.duree} j</small>}
+            </div>
+            <div className="conducteur-bar" style={{ background: conducteur?.color || '#64748b' }} />
+            {isLastSegment && <div className="resize-handle right" data-rs="right" />}
+          </div>
+        );
+      })}
+
+      {congeItems.filter(({ seg }) => {
+        const visibleStart = Math.max(seg.start, vpStart);
+        return realIdx === visibleStart && realIdx <= seg.end;
+      }).map(({ conge, seg }) => {
+        const clippedStart = Math.max(seg.start, vpStart);
+        const clippedEnd = Math.min(seg.end, vpEnd);
+        const segLen = clippedEnd - clippedStart + 1;
+        const cH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
+        const cT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
+        const clippedLeft = seg.start < vpStart;
+        return (
+          <div
+            key={conge.id}
+            className={`bloc conge ${conge.allEquipes ? 'conge-entreprise' : ''} ${selectedItem?.type === 'conge' && selectedItem.id === conge.id ? 'active-item' : ''} ${clippedLeft ? 'bloc-clipped-left' : ''}`}
+            data-co={conge.id}
+            draggable={!resize && canEdit}
+            onDragStart={(e) => cb.onDragStart(e, conge.id, 'conge')}
+            style={{
+              width: segLen * cellWidth - 8,
+              height: cH, top: cT, fontSize: 16,
+              padding: `${Math.max(4, Math.round(6 + (cellWidth - 26) * 2 / 26))}px ${Math.max(4, Math.round(8 + (cellWidth - 26) * 2 / 26))}px`,
+            }}
+          >
+            {conge.nom}
+          </div>
+        );
+      })}
+
+      {resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === dayEq && (() => {
+        const pStart = dayIndex(resize.previewStart);
+        const pEnd = dayIndex(resize.previewEnd);
+        if (pStart === -1 || pEnd === -1) return null;
+        const visiblePStart = Math.max(pStart, vpStart);
+        const visiblePEnd = Math.min(pEnd, vpEnd);
+        if (realIdx !== visiblePStart) return null;
+        const pLen = visiblePEnd - visiblePStart + 1;
+        const pClippedLeft = pStart < vpStart;
+        return (
+          <div className={`bloc resize-preview-bloc${pClippedLeft ? ' bloc-clipped-left' : ''}`}
+            style={{
+              width: pLen * cellWidth - 8, top: blocT, height: blocH,
+              left: pClippedLeft ? 0 : 3, zIndex: 10000,
+            }}
+          />
+        );
+      })()}
+    </div>
+  );
+});
+
 const PlanningGrid = React.memo(function PlanningGrid({
   gridRows,
   visibleDays,
@@ -96,11 +232,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
     const a = Math.min(startIdx, endIdx);
     const b = Math.max(startIdx, endIdx);
     return idx >= a && idx <= b;
-  }
-
-  function getConducteur(id) {
-    const num = Number(id);
-    return conducteurs.find((c) => c.id === num);
   }
 
   function handleGridEvent(e) {
@@ -321,191 +452,35 @@ const PlanningGrid = React.memo(function PlanningGrid({
                   const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                   const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
 
+                  const baseClassName = `cell${equipeIndex % 2 ? ' odd' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${isAugustClosure(day.date) ? ' august-closure' : ''}${day.date === today ? ' today' : ''}${isPending ? ' pending-cell' : ''}`;
+                  const sel = isSelected(equipeIndex, day.date);
+                  const drag = dragPreview?.equipe === equipeIndex && dragPreview?.date === day.date;
+                  const res = resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex && sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd);
+
                   return (
-                    <div
+                    <CellContent
                       key={`${equipeIndex}-${day.date}`}
-                      className={`cell ${equipeIndex % 2 ? 'odd' : ''} ${
-                        day.weekend ? 'weekend' : ''
-                      } ${isFerie(day.date) ? 'ferie' : ''} ${
-                        isAugustClosure(day.date) ? 'august-closure' : ''
-                      } ${day.date === today ? 'today' : ''} ${
-                        isSelected(equipeIndex, day.date) ? 'selected' : ''
-                      } ${
-                        dragPreview?.equipe === equipeIndex &&
-                        dragPreview?.date === day.date
-                          ? 'drag-preview'
-                          : ''
-                       } ${
-                         resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex &&
-                         sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd)
-                           ? 'resize-preview'
-                           : ''
-                       } ${isPending ? 'pending-cell' : ''}`}
-                      data-eq={equipeIndex}
-                      data-da={day.date}
-                    >
-                      {segments.filter(({ seg }) => {
-                        const visibleStart = Math.max(seg.start, vpStart);
-                        return realIdx === visibleStart && realIdx <= seg.end;
-                      }).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
-                        const conducteur = getConducteur(chantier.conducteurId);
-                        const clippedStart = Math.max(seg.start, vpStart);
-                        const clippedEnd = Math.min(seg.end, vpEnd);
-                        const segLen = clippedEnd - clippedStart + 1;
-                        const isFirstSegment = segIndex === 0;
-                        const isLastSegment = segIndex === segCount - 1;
-                        let width = segLen * cellWidth - 8;
-                        if (resize?.id === chantier.id && resize.delta && resize.previewStart && resize.previewEnd) {
-                          const pStart = dayIndex(resize.previewStart);
-                          const pEnd = dayIndex(resize.previewEnd);
-                          if (pStart >= 0 && pEnd >= 0) {
-                            width = (pEnd - pStart + 1) * cellWidth - 8;
-                          }
-                        }
-                        const isLongestSeg = segLen === longestLen;
-                        const clippedLeft = seg.start < vpStart;
-                        const clippedRight = seg.end > vpEnd;
-
-                        return (
-                          <div
-                            key={`${chantier.id}-${i}`}
-                            className={`bloc chantier ${
-                              chantier.termine ? 'termine' : ''
-                            } ${
-                              clippedLeft ? 'bloc-clipped-left' : ''
-                            } ${
-                              clippedRight ? 'bloc-clipped-right' : ''
-                            } ${
-                              selectedItem?.type === 'chantier' &&
-                              selectedItem.id === chantier.id
-                                ? 'active-item'
-                                : ''
-                            }`}
-                            data-ch={chantier.id}
-                            data-start={chantier.start}
-                            data-duree={chantier.duree}
-                            data-equipe={chantier.equipe}
-                            data-force-aout={chantier.force_aout ? 1 : 0}
-                            draggable={!resize && canEdit}
-                            onDragStart={(e) => cb.onDragStart(e, chantier.id, 'chantier')}
-                            style={{
-                              width,
-                              top: blocT,
-                              height: blocH,
-                              background: chantier.color,
-                              zIndex: resize?.id === chantier.id ? 9999 : undefined,
-                              opacity: resize?.id === chantier.id ? 0.85 : undefined,
-                              ...(resize?.id === chantier.id && resize.previewStart && isFirstSegment
-                                ? { left: 3 + (dayIndex(resize.previewStart) - seg.start) * cellWidth }
-                                : {}),
-                            }}
-                            title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
-                          >
-                            {isFirstSegment && (
-                              <div
-                                className="resize-handle left"
-                                data-rs="left"
-                              />
-                            )}
-
-                            {chantier.note && isFirstSegment && (
-                              <div className="note-icon">
-                                💬
-                                <div className="tooltip">{chantier.note}</div>
-                              </div>
-                            )}
-
-                            {chantier.linked && cellWidth >= 22 && (
-                              <div className="link-icon">🔗</div>
-                            )}
-
-                            <div className="chantier-content">
-                              <div className="chantier-title-row">
-                                <strong>{chantier.nom}</strong>
-                                {(isLongestSeg || segLen > 15) && chantier.detail && <em>{chantier.detail}</em>}
-                              </div>
-                              {isLastSegment && <small>{chantier.duree} j</small>}
-                            </div>
-
-                            <div
-                              className="conducteur-bar"
-                              style={{
-                                background: conducteur?.color || '#64748b',
-                              }}
-                            />
-
-                            {isLastSegment && (
-                              <div
-                                className="resize-handle right"
-                                data-rs="right"
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-
-                      {congeItems.filter(({ seg }) => {
-                        const visibleStart = Math.max(seg.start, vpStart);
-                        return realIdx === visibleStart && realIdx <= seg.end;
-                      }).map(({ conge, seg }) => {
-                        const clippedStart = Math.max(seg.start, vpStart);
-                        const clippedEnd = Math.min(seg.end, vpEnd);
-                        const segLen = clippedEnd - clippedStart + 1;
-                        const cH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
-                        const cT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
-                        const clippedLeft = seg.start < vpStart;
-                        return (
-                        <div
-                          key={conge.id}
-                          className={`bloc conge ${
-                            conge.allEquipes ? 'conge-entreprise' : ''
-                          } ${
-                            selectedItem?.type === 'conge' &&
-                            selectedItem.id === conge.id
-                              ? 'active-item'
-                              : ''
-                          } ${
-                            clippedLeft ? 'bloc-clipped-left' : ''
-                          }`}
-                          data-co={conge.id}
-                          draggable={!resize && canEdit}
-                          onDragStart={(e) => cb.onDragStart(e, conge.id, 'conge')}
-                          style={{
-                            width: segLen * cellWidth - 8,
-                            height: cH,
-                            top: cT,
-                            fontSize: 16,
-                            padding: `${Math.max(4, Math.round(6 + (cellWidth - 26) * 2 / 26))}px ${Math.max(4, Math.round(8 + (cellWidth - 26) * 2 / 26))}px`,
-                          }}
-                        >
-                          {conge.nom}
-                        </div>
-                        );
-                      })}
-
-                      {resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex && (() => {
-                        const pStart = dayIndex(resize.previewStart);
-                        const pEnd = dayIndex(resize.previewEnd);
-                        if (pStart === -1 || pEnd === -1) return null;
-                        const visiblePStart = Math.max(pStart, vpStart);
-                        const visiblePEnd = Math.min(pEnd, vpEnd);
-                        if (realIdx !== visiblePStart) return null;
-                        const pLen = visiblePEnd - visiblePStart + 1;
-                        const pClippedLeft = pStart < vpStart;
-                        return (
-                          <div
-                            className={`bloc resize-preview-bloc${pClippedLeft ? ' bloc-clipped-left' : ''}`}
-                            style={{
-                              width: pLen * cellWidth - 8,
-                              top: blocT,
-                              height: blocH,
-                              left: pClippedLeft ? 0 : 3,
-                              zIndex: 10000,
-                            }}
-                          />
-                        );
-                      })()}
-                    </div>
+                      baseClassName={baseClassName}
+                      isSelected={sel}
+                      isDragPreview={drag}
+                      isResizePreview={res}
+                      segments={segments}
+                      congeItems={congeItems}
+                      vpStart={vpStart}
+                      vpEnd={vpEnd}
+                      realIdx={realIdx}
+                      cellWidth={cellWidth}
+                      blocH={blocH}
+                      blocT={blocT}
+                      selectedItem={selectedItem}
+                      conducteurs={conducteurs}
+                      canEdit={canEdit}
+                      resize={resize}
+                      cb={cb}
+                      dayEq={equipeIndex}
+                      dayDa={day.date}
+                      dayIdxMap={dayIdxMemo}
+                    />
                   );
                 })}
               </React.Fragment>

@@ -183,7 +183,14 @@ export default function App() {
     return [...base, ...customFeries];
   }, [allDays, customFeries]);
 
-  const ferieSet = useMemo(() => new Set(holidays.map(h => h.date)), [holidays]);
+  const ferieSetCacheRef = useRef(null);
+  const ferieSet = useMemo(() => {
+    const key = holidays.map(h => h.date).sort().join('|');
+    if (ferieSetCacheRef.current?.key === key) return ferieSetCacheRef.current.set;
+    const set = new Set(holidays.map(h => h.date));
+    ferieSetCacheRef.current = { key, set };
+    return set;
+  }, [holidays]);
 
   const congeBlockedSet = useMemo(() => {
     const set = new Set();
