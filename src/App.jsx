@@ -155,7 +155,7 @@ export default function App() {
   const scrollThrottleRef = useRef(null);
   const gridCallbacksRef = useRef({});
   const [viewportDayRange, setViewportDayRange] = useState(null);
-  const viewportRangeRef = useRef(null);
+  const lastCommittedVpRef = useRef(null);
   const resizeRef = useRef(null);
   const lastXRef = useRef(0);
   const [clipboard, setClipboard] = useState(null);
@@ -1253,6 +1253,7 @@ export default function App() {
       const totalDays = visibleDays.length;
       if (totalDays) {
         const BUFFER = 4;
+        const VP_HYSTERESIS = 8;
         const firstVisible = Math.floor(Math.max(0, el.scrollLeft - 260) / CELL_WIDTH);
         const visibleCount = Math.ceil(el.clientWidth / CELL_WIDTH);
         const totalWindow = Math.max(visibleCount + BUFFER * 2, MIN_VISIBLE_DAYS);
@@ -1263,9 +1264,9 @@ export default function App() {
         let newEnd = Math.min(totalDays - 1, newStart + totalWindow - 1);
         newStart = Math.max(0, newEnd - totalWindow + 1);
 
-        const prev = viewportRangeRef.current;
-        if (!prev || prev.start !== newStart || prev.end !== newEnd) {
-          viewportRangeRef.current = { start: newStart, end: newEnd };
+        const last = lastCommittedVpRef.current;
+        if (!last || Math.abs(newStart - last.start) >= VP_HYSTERESIS) {
+          lastCommittedVpRef.current = { start: newStart, end: newEnd };
           setViewportDayRange({ start: newStart, end: newEnd });
         }
       }
