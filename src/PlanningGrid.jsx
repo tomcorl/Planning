@@ -149,6 +149,24 @@ const CellContent = React.memo(function CellContent({
       })()}
     </div>
   );
+}, function areEqual(prev, next) {
+  if (prev.realIdx !== next.realIdx || prev.baseClassName !== next.baseClassName) return false;
+  if (prev.isSelected !== next.isSelected || prev.isDragPreview !== next.isDragPreview || prev.isResizePreview !== next.isResizePreview) return false;
+  if (prev.vpStart !== next.vpStart || prev.vpEnd !== next.vpEnd) return false;
+  if (prev.cellWidth !== next.cellWidth || prev.blocH !== next.blocH || prev.blocT !== next.blocT) return false;
+  if (prev.dayEq !== next.dayEq || prev.dayDa !== next.dayDa) return false;
+  if (prev.canEdit !== next.canEdit) return false;
+  if (prev.segments !== next.segments || prev.congeItems !== next.congeItems) return false;
+  if (prev.conducteurs !== next.conducteurs) return false;
+  if (prev.dayIdxMap !== next.dayIdxMap) return false;
+
+  const ps = prev.selectedItem, ns = next.selectedItem;
+  if (ps?.type !== ns?.type || ps?.id !== ns?.id) return false;
+
+  const pr = prev.resize, nr = next.resize;
+  if (pr?.id !== nr?.id || pr?.delta !== nr?.delta || pr?.previewStart !== nr?.previewStart || pr?.previewEquipe !== nr?.previewEquipe) return false;
+
+  return true;
 });
 
 const PlanningGrid = React.memo(function PlanningGrid({
@@ -176,7 +194,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const lastHoverRef = React.useRef(null);
   const totalDays = visibleDays.length;
   const { start: vpStart, end: vpEnd } = viewportDayRange || { start: 0, end: totalDays - 1 };
-  const visibleDaysSlice = visibleDays.slice(vpStart, vpEnd + 1);
+  const visibleDaysSlice = React.useMemo(() => visibleDays.slice(vpStart, vpEnd + 1), [visibleDays, vpStart, vpEnd]);
   const sliceCount = visibleDaysSlice.length;
   const gridTemplateColumns = `260px repeat(${sliceCount}, ${cellWidth}px)`;
   const paddingLeft = vpStart * cellWidth;

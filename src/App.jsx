@@ -153,6 +153,9 @@ export default function App() {
   const dragThrottle = useRef(null);
   const selectionThrottle = useRef(null);
   const scrollThrottleRef = useRef(null);
+  const expandRightRef = useRef(null);
+  const expandLeftRef = useRef(null);
+  const localStorageThrottleRef = useRef(null);
   const gridCallbacksRef = useRef({});
   const [viewportDayRange, setViewportDayRange] = useState(null);
   const lastCommittedVpRef = useRef(null);
@@ -1235,9 +1238,16 @@ export default function App() {
     if (raf) cancelAnimationFrame(raf);
     scrollThrottleRef.current = requestAnimationFrame(() => {
       scrollThrottleRef.current = null;
-      try {
-        localStorage.setItem('scrollPos', JSON.stringify({ left: el.scrollLeft, top: el.scrollTop }));
-      } catch { }
+
+      // Throttle localStorage writes to max 1/s (synchronous IO is slow)
+      if (!localStorageThrottleRef.current) {
+        localStorageThrottleRef.current = setTimeout(() => {
+          localStorageThrottleRef.current = null;
+          try {
+            localStorage.setItem('scrollPos', JSON.stringify({ left: el.scrollLeft, top: el.scrollTop }));
+          } catch { }
+        }, 1000);
+      }
 
       const totalDays = visibleDays.length;
       if (totalDays) {
@@ -1260,17 +1270,34 @@ export default function App() {
         }
       }
 
+      // Right-edge expansion: debounced, only fires 250ms after scroll settles
       if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
-        setCalendarLength((prev) => prev + 15);
+        if (!expandRightRef.current) {
+          expandRightRef.current = setTimeout(() => {
+            expandRightRef.current = null;
+            setCalendarLength((prev) => prev + 30);
+          }, 250);
+        }
+      } else if (expandRightRef.current) {
+        clearTimeout(expandRightRef.current);
+        expandRightRef.current = null;
       }
 
+      // Left-edge expansion: debounced, only fires 250ms after scroll settles
       if (el.scrollLeft < 200) {
-        setCalendarStart((prev) => addDays(prev, -30));
-        setCalendarLength((prev) => prev + 15);
-
-        setTimeout(() => {
-          el.scrollLeft += 30 * cellWidth;
-        }, 0);
+        if (!expandLeftRef.current) {
+          expandLeftRef.current = setTimeout(() => {
+            expandLeftRef.current = null;
+            setCalendarStart((prev) => addDays(prev, -30));
+            setCalendarLength((prev) => prev + 30);
+            setTimeout(() => {
+              if (scrollRef.current) scrollRef.current.scrollLeft += 30 * CELL_WIDTH;
+            }, 0);
+          }, 250);
+        }
+      } else if (expandLeftRef.current) {
+        clearTimeout(expandLeftRef.current);
+        expandLeftRef.current = null;
       }
     });
   }
