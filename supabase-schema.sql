@@ -43,14 +43,14 @@ CREATE TABLE IF NOT EXISTS equipes (
   UNIQUE (company_id, nom)
 );
 
--- 5. CONDUCTEURS
+-- 5. CONDUCTEURS (globaux — partagés entre toutes les entreprises)
 CREATE TABLE IF NOT EXISTS conducteurs (
   id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  nom TEXT NOT NULL,
-  color TEXT NOT NULL DEFAULT '#2563eb',
-  UNIQUE (company_id, nom)
+  nom TEXT NOT NULL UNIQUE,
+  color TEXT NOT NULL DEFAULT '#2563eb'
 );
+-- Migration : supprimer company_id (ancien modèle multi-lignes)
+ALTER TABLE conducteurs DROP COLUMN IF EXISTS company_id;
 
 -- 6. CHANTIERS
 CREATE TABLE IF NOT EXISTS chantiers (
@@ -107,18 +107,12 @@ BEGIN
   END LOOP;
 END $$;
 
--- Conducteurs (3 par entreprise)
-INSERT INTO conducteurs (company_id, nom, color) VALUES
-  ('noree', 'Conducteur 1', '#2563eb'),
-  ('noree', 'Conducteur 2', '#16a34a'),
-  ('noree', 'Conducteur 3', '#dc2626'),
-  ('couvran', 'Conducteur 1', '#2563eb'),
-  ('couvran', 'Conducteur 2', '#16a34a'),
-  ('couvran', 'Conducteur 3', '#dc2626'),
-  ('rat', 'Conducteur 1', '#2563eb'),
-  ('rat', 'Conducteur 2', '#16a34a'),
-  ('rat', 'Conducteur 3', '#dc2626')
-ON CONFLICT DO NOTHING;
+-- Conducteurs (globaux)
+INSERT INTO conducteurs (nom, color) VALUES
+  ('Conducteur 1', '#2563eb'),
+  ('Conducteur 2', '#16a34a'),
+  ('Conducteur 3', '#dc2626')
+ON CONFLICT (nom) DO NOTHING;
 
 -- Chantiers (pour l'entreprise noree)
 INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked) VALUES
@@ -179,10 +173,8 @@ CREATE POLICY  "users can view own company data" ON equipes
     company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
   );
 
-CREATE POLICY  "users can view own company data" ON conducteurs
-  FOR SELECT USING (
-    company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
-  );
+CREATE POLICY  "users can view all conducteurs" ON conducteurs
+  FOR SELECT USING (true);
 
 CREATE POLICY  "users can view own company data" ON chantiers
   FOR SELECT USING (
@@ -233,13 +225,13 @@ CREATE POLICY  "admin delete" ON equipes FOR DELETE USING (
 );
 
 CREATE POLICY  "admin insert" ON conducteurs FOR INSERT WITH CHECK (
-  company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'planning'))
 );
 CREATE POLICY  "admin update" ON conducteurs FOR UPDATE USING (
-  company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'planning'))
 );
 CREATE POLICY  "admin delete" ON conducteurs FOR DELETE USING (
-  company_id IN (SELECT company_id FROM user_companies WHERE user_id = auth.uid())
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'planning'))
 );
 
 CREATE POLICY  "admin insert" ON custom_feries FOR INSERT WITH CHECK (
@@ -256,8 +248,8 @@ CREATE POLICY  "admin delete" ON custom_feries FOR DELETE USING (
 -- RPC TRANSACTIONNELS (sauvegardes atomiques)
 -- ============================================================
 
--- RPC pour conducteurs : upsert avec suppression sélective
-CREATE OR REPLACE FUNCTION upsert_conducteurs(p_company_id TEXT, p_conducteurs JSONB)
+-- RPC pour conducteurs (globaux)
+CREATE OR REPLACE FUNCTION upsert_conducteurs(p_conducteurs JSONB)
 RETURNS SETOF conducteurs LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   r JSONB;
@@ -265,19 +257,17 @@ BEGIN
   IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
     RAISE EXCEPTION 'Accès refusé : rôle lecture';
   END IF;
-  -- Supprime les conducteurs qui ne sont plus dans la liste entrante
   DELETE FROM conducteurs
-  WHERE company_id = p_company_id
-  AND id NOT IN (
+  WHERE id NOT IN (
     SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conducteurs) AS x
     WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
   );
   FOR r IN SELECT * FROM jsonb_array_elements(p_conducteurs) LOOP
-    INSERT INTO conducteurs (company_id, nom, color)
-    VALUES (p_company_id, r->>'nom', r->>'color')
-    ON CONFLICT (company_id, nom) DO UPDATE SET color = EXCLUDED.color;
+    INSERT INTO conducteurs (nom, color)
+    VALUES (r->>'nom', r->>'color')
+    ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
   END LOOP;
-  RETURN QUERY SELECT * FROM conducteurs WHERE company_id = p_company_id ORDER BY id;
+  RETURN QUERY SELECT * FROM conducteurs ORDER BY id;
 END;
 $$;
 
@@ -470,16 +460,15 @@ BEGIN
 END;
 $$;
 
--- RPC pour mettre à jour les couleurs (bypass RLS)
-CREATE OR REPLACE FUNCTION update_company_colors(p_company_id TEXT, p_chantier_colors TEXT[], p_conducteur_colors TEXT[])
+-- RPC pour mettre à jour les couleurs de toutes les entreprises
+CREATE OR REPLACE FUNCTION update_all_colors(p_chantier_colors TEXT[], p_conducteur_colors TEXT[])
 RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
     RAISE EXCEPTION 'Accès refusé : rôle lecture';
   END IF;
   UPDATE companies
-  SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors
-  WHERE id = p_company_id;
+  SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors;
 END;
 $$;
 
@@ -516,7 +505,105 @@ BEGIN
     ),
     'chantiers', (SELECT jsonb_agg(to_jsonb(ch)) FROM chantiers ch),
     'conges', (SELECT jsonb_agg(to_jsonb(co)) FROM conges co),
-    'conducteurs', (SELECT jsonb_agg(to_jsonb(cd)) FROM conducteurs cd),
+    'conducteurs', (SELECT jsonb_agg(jsonb_build_object('id', cd.id, 'nom', cd.nom, 'color', cd.color)) FROM conducteurs cd),
+    'custom_feries', (SELECT jsonb_agg(to_jsonb(cf)) FROM custom_feries cf)
+  ) INTO result;
+  RETURN result;
+END;
+$$;
+
+-- RPC batch : sauvegarde toutes les données en 1 appel
+CREATE OR REPLACE FUNCTION save_all_planning_data(
+  p_chantiers JSONB,
+  p_conges JSONB,
+  p_equipes JSONB,
+  p_conducteurs JSONB,
+  p_custom_feries JSONB,
+  p_chantier_colors TEXT[],
+  p_conducteur_colors TEXT[]
+)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  comp_id TEXT;
+  result JSONB;
+BEGIN
+  IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
+    RAISE EXCEPTION 'Accès refusé : rôle lecture';
+  END IF;
+
+  FOR comp_id IN SELECT id FROM companies LOOP
+    -- Chantiers
+    DELETE FROM chantiers
+    WHERE company_id = comp_id
+    AND id NOT IN (
+      SELECT (x->>'id')::INT FROM jsonb_array_elements(p_chantiers) AS x
+      WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
+      AND (x->>'company_id') = comp_id
+    );
+    INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
+    SELECT COALESCE((x->>'id')::INT, nextval('chantiers_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT, (x->>'start')::TEXT, (x->>'duree')::INT,
+           (x->>'nom')::TEXT, (x->>'conducteurId')::INT, (x->>'color')::TEXT, (x->>'note')::TEXT,
+           (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT, COALESCE((x->>'force_aout')::INT, 0)
+    FROM jsonb_array_elements(p_chantiers) AS x
+    WHERE (x->>'company_id') = comp_id
+    ON CONFLICT (id) DO UPDATE SET
+      company_id = EXCLUDED.company_id, equipe = EXCLUDED.equipe, start = EXCLUDED.start,
+      duree = EXCLUDED.duree, nom = EXCLUDED.nom, "conducteurId" = EXCLUDED."conducteurId",
+      color = EXCLUDED.color, note = EXCLUDED.note, termine = EXCLUDED.termine,
+      linked = EXCLUDED.linked, detail = EXCLUDED.detail, force_aout = EXCLUDED.force_aout;
+
+    -- Conges
+    DELETE FROM conges
+    WHERE company_id = comp_id
+    AND id NOT IN (
+      SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conges) AS x
+      WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
+      AND (x->>'company_id') = comp_id
+    );
+    INSERT INTO conges (id, company_id, equipe, start, duree, nom, all_equipes)
+    SELECT COALESCE((x->>'id')::INT, nextval('conges_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT,
+           (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT, COALESCE((x->>'all_equipes')::INT, 0)
+    FROM jsonb_array_elements(p_conges) AS x
+    WHERE (x->>'company_id') = comp_id
+    ON CONFLICT (id) DO UPDATE SET
+      company_id = EXCLUDED.company_id, equipe = EXCLUDED.equipe, start = EXCLUDED.start,
+      duree = EXCLUDED.duree, nom = EXCLUDED.nom, all_equipes = EXCLUDED.all_equipes;
+
+    -- Equipes
+    DELETE FROM equipes WHERE company_id = comp_id;
+    INSERT INTO equipes (company_id, nom, ordre)
+    SELECT (x->>'company_id')::TEXT, (x->>'nom')::TEXT, COALESCE((x->>'ordre')::INT, 1)
+    FROM jsonb_array_elements(p_equipes) AS x
+    WHERE (x->>'company_id') = comp_id;
+
+    -- Custom feries
+    DELETE FROM custom_feries WHERE company_id = comp_id;
+    INSERT INTO custom_feries (company_id, nom, date)
+    SELECT (x->>'company_id')::TEXT, (x->>'nom')::TEXT, (x->>'date')::TEXT
+    FROM jsonb_array_elements(p_custom_feries) AS x
+    WHERE (x->>'company_id') = comp_id;
+  END LOOP;
+
+  -- Conducteurs (globaux)
+  DELETE FROM conducteurs
+  WHERE id NOT IN (
+    SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conducteurs) AS x
+    WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
+  );
+  INSERT INTO conducteurs (nom, color)
+  SELECT r->>'nom', r->>'color'
+  FROM jsonb_array_elements(p_conducteurs) AS r
+  ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
+
+  -- Couleurs (appliquées à toutes les entreprises)
+  UPDATE companies SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors;
+
+  -- Retourne les données à jour
+  SELECT jsonb_build_object(
+    'chantiers', (SELECT jsonb_agg(to_jsonb(ch)) FROM chantiers ch),
+    'conges', (SELECT jsonb_agg(to_jsonb(co)) FROM conges co),
+    'equipes', (SELECT jsonb_agg(jsonb_build_object('nom', e.nom, 'company_id', e.company_id, 'ordre', e.ordre)) FROM equipes e ORDER BY ordre),
+    'conducteurs', (SELECT jsonb_agg(jsonb_build_object('id', cd.id, 'nom', cd.nom, 'color', cd.color)) FROM conducteurs cd),
     'custom_feries', (SELECT jsonb_agg(to_jsonb(cf)) FROM custom_feries cf)
   ) INTO result;
   RETURN result;

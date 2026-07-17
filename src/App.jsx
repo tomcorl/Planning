@@ -296,65 +296,39 @@ export default function App() {
   // Debounced persistence to Supabase (runs 800ms after data settles)
   useEffect(() => {
     if (!loadedRef.current || !session || !companies.length) return;
-    const timer = setTimeout(() => {
-      for (const comp of companies) {
-        const compChantiers = chantiers.filter((c) => c.company_id === comp.id);
-        api.upsertChantiers(compChantiers, comp.id).catch(console.error);
-        const compConges = conges.filter((c) => {
-          if (c.allEquipes && c.companyId) return c.companyId === comp.id;
-          const t = teams[c.equipe];
-          return t && t.companyId === comp.id;
-        });
-        api.upsertConges(compConges, comp.id).catch(console.error);
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [chantiers, conges, session, companies, teams]);
-
-  useEffect(() => {
-    if (!loadedRef.current || !session || !companies.length) return;
     const timer = setTimeout(async () => {
-      for (const comp of companies) {
-        const compNames = teams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
-        api.upsertEquipes(compNames, comp.id).catch(console.error);
-      }
-      // Save all conducteurs to all companies (shared — same conducteurs for all)
-      let lastResult;
-      for (const comp of companies) {
-        lastResult = await api.upsertConducteurs(conducteurs, comp.id).catch(console.error);
-      }
-      if (lastResult) {
-        setConducteurs(prev => {
-          const nomToId = new Map(lastResult.map(r => [r.nom, r.id]));
-          let changed = false;
-          const updated = prev.map(c => {
-            const dbId = nomToId.get(c.nom);
-            if (dbId && c.id !== dbId) {
-              changed = true;
-              return { ...c, id: dbId };
-            }
-            return c;
-          });
-          return changed ? updated : prev;
+      try {
+        const result = await api.saveAllPlanningData({
+          chantiers,
+          conges: conges.map(c => ({ ...c, company_id: c.companyId || (teams[c.equipe]?.companyId) })),
+          equipes: teams,
+          conducteurs,
+          customFeries,
+          chantierColors,
+          conducteurColors,
         });
-      }
-      for (const comp of companies) {
-        const compFeries = customFeries.filter((f) => f.companyId === comp.id);
-        api.upsertCustomFeries(compFeries, comp.id).catch(console.error);
+        // Update conducteur IDs from DB response (new rows get real IDs)
+        if (result?.conducteurs) {
+          const nomToId = new Map(result.conducteurs.map(r => [r.nom, r.id]));
+          setConducteurs(prev => {
+            let changed = false;
+            const updated = prev.map(c => {
+              const dbId = nomToId.get(c.nom);
+              if (dbId && c.id !== dbId) {
+                changed = true;
+                return { ...c, id: dbId };
+              }
+              return c;
+            });
+            return changed ? updated : prev;
+          });
+        }
+      } catch (e) {
+        console.error('saveAllPlanningData failed', e);
       }
     }, 800);
     return () => clearTimeout(timer);
-  }, [teams, conducteurs, customFeries, session, companies]);
-
-  useEffect(() => {
-    if (!loadedRef.current || !session || !companies.length) return;
-    const timer = setTimeout(() => {
-      for (const comp of companies) {
-        api.updateCompanyColors(comp.id, chantierColors, conducteurColors).catch(console.error);
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [chantierColors, conducteurColors, session, companies]);
+  }, [chantiers, conges, teams, conducteurs, customFeries, chantierColors, conducteurColors, session, companies]);
 
   async function loadAllCompanyData() {
     setDataLoading(true);
@@ -378,9 +352,7 @@ export default function App() {
         }
       }
 
-      setConducteurs(allData.conducteurs.length > 0
-        ? [...new Map(allData.conducteurs.map(c => [c.nom, c])).values()]
-        : []);
+      setConducteurs(allData.conducteurs);
       setChantiers(allData.chantiers);
       setConges(allData.conges);
       setCustomFeries(allData.customFeries);
@@ -513,7 +485,7 @@ export default function App() {
 
   async function addUser(email, password, nom, role) {
     try {
-      const newUser = await api.createUser(email, password, nom, role);
+      const newUser = await api.createUser(email, password, nom, role, companies.map(c => c.id));
       setUsers((prev) => [...prev, newUser]);
       return newUser;
     } catch (err) {

@@ -40,17 +40,16 @@ export async function loadPlanningData() {
   return {
     companies: data.companies || [],
     equipes: (data.equipes || []).map((e) => ({ nom: e.nom, companyId: e.company_id, ordre: e.ordre })),
-    conducteurs: (data.conducteurs || []).map((c) => ({ id: c.id, nom: c.nom, color: c.color, companyId: c.company_id })),
+    conducteurs: (data.conducteurs || []).map((c) => ({ id: c.id, nom: c.nom, color: c.color })),
     chantiers: dedupedChantiers,
     conges: dedupedConges,
     customFeries: (data.custom_feries || []).map((f) => ({ ...f, companyId: f.company_id })),
   };
 }
 
-export async function updateCompanyColors(companyId, chantierColors, conducteurColors) {
+export async function updateAllColors(chantierColors, conducteurColors) {
   const { error } = await supabase
-    .rpc('update_company_colors', {
-      p_company_id: companyId,
+    .rpc('update_all_colors', {
       p_chantier_colors: chantierColors,
       p_conducteur_colors: conducteurColors,
     });
@@ -170,7 +169,7 @@ export async function upsertEquipes(equipes, companyId) {
   if (error) { console.error('replace_equipes error', error); throw error; }
 }
 
-export async function upsertConducteurs(conducteurs, companyId) {
+export async function upsertConducteurs(conducteurs) {
   const rows = conducteurs.map((c) => {
     const row = { nom: c.nom, color: c.color };
     if (Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647) row.id = c.id;
@@ -181,13 +180,12 @@ export async function upsertConducteurs(conducteurs, companyId) {
     const { error: delErr } = await supabase
       .from('conducteurs')
       .delete()
-      .eq('company_id', companyId);
+      .neq('id', 0);
     if (delErr) { console.error('delete conducteurs error', delErr); throw delErr; }
     return [];
   }
 
   const { data, error } = await supabase.rpc('upsert_conducteurs', {
-    p_company_id: companyId,
     p_conducteurs: rows,
   });
 
@@ -240,13 +238,52 @@ export async function updateUserProfile(userId, updates) {
   if (error) { console.error('update user profile', error); throw error; }
 }
 
-export async function createUser(email, password, nom, role) {
+export async function saveAllPlanningData(data) {
+  const { chantiers, conges, equipes, conducteurs, customFeries, chantierColors, conducteurColors } = data;
+  const mapRows = (items, companyId) => items.map(c => ({ ...c, company_id: companyId }));
+  const chantierRows = chantiers.map(c => ({
+    id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
+    company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
+    nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
+    note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,
+    detail: c.detail || '', force_aout: c.force_aout ? 1 : 0,
+  }));
+  const congeRows = conges.map(c => ({
+    id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
+    company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
+    nom: c.nom || 'Congé', all_equipes: c.allEquipes ? 1 : 0,
+  }));
+  const equipeRows = equipes.map(e => ({
+    company_id: e.companyId, nom: e.nom, ordre: e.ordre,
+  }));
+  const conducteurRows = conducteurs.map(c => ({
+    id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
+    nom: c.nom, color: c.color,
+  }));
+  const ferieRows = customFeries.map(f => ({
+    company_id: f.companyId, nom: f.nom, date: f.date,
+  }));
+
+  const { data: result, error } = await supabase.rpc('save_all_planning_data', {
+    p_chantiers: chantierRows,
+    p_conges: congeRows,
+    p_equipes: equipeRows,
+    p_conducteurs: conducteurRows,
+    p_custom_feries: ferieRows,
+    p_chantier_colors: chantierColors,
+    p_conducteur_colors: conducteurColors,
+  });
+  if (error) { console.error('save_all_planning_data', error); throw error; }
+  return result;
+}
+
+export async function createUser(email, password, nom, role, companyIds) {
   const { data, error } = await supabase.rpc('create_user', {
     p_email: email,
     p_password: password,
     p_nom: nom,
     p_role: role,
-    p_company_ids: ['noree'],
+    p_company_ids: companyIds,
   });
   if (error) { console.error('create_user RPC', error); throw error; }
   return data;

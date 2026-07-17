@@ -295,7 +295,6 @@ export default function Modals({
                       id: nextLocalId(),
                       nom: `Conducteur ${prev.length + 1}`,
                       color: conducteurColors[prev.length % conducteurColors.length] || conducteurColors[0] || '#2563eb',
-                      companyId: companies[0]?.id || 'noree',
                     },
                   ])}>+ Ajouter un conducteur</button>
                 </div>
