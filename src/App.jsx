@@ -5,7 +5,7 @@ const AdminUsersPage = lazy(() => import('./AdminUsersPage.jsx'));
 const Modals = lazy(() => import('./Modals.jsx'));
 const LoginPage = lazy(() => import('./LoginPage.jsx'));
 const PasswordChangePage = lazy(() => import('./PasswordChangePage.jsx'));
-const PlanningGrid = lazy(() => import('./PlanningGrid.jsx'));
+import PlanningGrid from './PlanningGrid.jsx';
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
