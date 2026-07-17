@@ -3,10 +3,9 @@ import './App.css';
 
 const AdminUsersPage = lazy(() => import('./AdminUsersPage.jsx'));
 const Modals = lazy(() => import('./Modals.jsx'));
-
-import LoginPage from './LoginPage.jsx';
-import PasswordChangePage from './PasswordChangePage.jsx';
-import PlanningGrid from './PlanningGrid.jsx';
+const LoginPage = lazy(() => import('./LoginPage.jsx'));
+const PasswordChangePage = lazy(() => import('./PasswordChangePage.jsx'));
+const PlanningGrid = lazy(() => import('./PlanningGrid.jsx'));
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
@@ -1546,18 +1545,24 @@ export default function App() {
   }
 
   if (session?.mustChangePassword) {
-    return <PasswordChangePage onSubmit={handlePasswordChange} />;
+    return (
+      <Suspense fallback={<div className="loading-screen"><div className="loading-spinner" /></div>}>
+        <PasswordChangePage onSubmit={handlePasswordChange} />
+      </Suspense>
+    );
   }
 
   if (!session) {
     return (
-      <LoginPage
-        loginError={loginError}
-        loginForm={loginForm}
-        loggingIn={loggingIn}
-        onChange={setLoginForm}
-        onSubmit={handleLogin}
-      />
+      <Suspense fallback={<div className="loading-screen"><div className="loading-spinner" /></div>}>
+        <LoginPage
+          loginError={loginError}
+          loginForm={loginForm}
+          loggingIn={loggingIn}
+          onChange={setLoginForm}
+          onSubmit={handleLogin}
+        />
+      </Suspense>
     );
   }
 
