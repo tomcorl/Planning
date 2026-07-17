@@ -335,6 +335,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         dragPreview?.date === day.date
                           ? 'drag-preview'
                           : ''
+                       } ${
+                         resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex &&
+                         sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd)
+                           ? 'resize-preview'
+                           : ''
                        } ${isPending ? 'pending-cell' : ''}`}
                       data-eq={equipeIndex}
                       data-da={day.date}
@@ -389,6 +394,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                               height: blocH,
                               background: chantier.color,
                               zIndex: resize?.id === chantier.id ? 9999 : undefined,
+                              opacity: resize?.id === chantier.id ? 0.85 : undefined,
                               ...(resize?.id === chantier.id && resize.side === 'left' && resize.delta && isFirstSegment
                                 ? { left: 3 + resize.delta * cellWidth }
                                 : {}),

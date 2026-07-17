@@ -1192,11 +1192,26 @@ export default function App() {
             const oldEnd = getEndDateForChantier({ start: originalStart, duree: originalDuree, ...baseInfo });
             const newEndCal = formatDate(addDays(toDate(oldEnd), delta));
             const newDuree = Math.max(1, countWorkingDays(originalStart, newEndCal, originalEquipe, originalForceAout));
-            return prev.map((c) =>
+            let next = prev.map((c) =>
               c.id === id
                 ? { ...c, start: originalStart, duree: newDuree }
                 : c
             );
+            const updatedEnd = getEndDateForChantier({ start: originalStart, duree: newDuree, ...baseInfo });
+            let cursor = formatDate(addDays(toDate(updatedEnd), 1));
+            cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
+            const changed = new Map();
+            const sorted = next
+              .filter((c) => c.id !== id && c.equipe === originalEquipe && toDate(c.start) > toDate(originalStart))
+              .sort((a, b) => toDate(a.start) - toDate(b.start));
+            for (const c of sorted) {
+              if (toDate(c.start) >= toDate(cursor)) break;
+              const newStart = nextWorkingDay(cursor, originalEquipe, originalForceAout);
+              changed.set(c.id, { ...c, start: newStart });
+              cursor = formatDate(addDays(toDate(getEndDateForChantier({ ...c, start: newStart })), 1));
+              cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
+            }
+            return next.map((c) => changed.get(c.id) || c);
           }
           return prev.map((c) => {
             if (c.id !== id) return c;
