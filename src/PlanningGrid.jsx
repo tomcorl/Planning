@@ -318,6 +318,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                   const realIdx = vpStart + _idx;
                   const segments = chantiersParCellule.get(`${equipeIndex}-${realIdx}`) || [];
                   const congeItems = (congeSegments.get(`${equipeIndex}-${realIdx}`) || []);
+                  const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
+                  const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
 
                   return (
                     <div
@@ -333,11 +335,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         dragPreview?.date === day.date
                           ? 'drag-preview'
                           : ''
-                       } ${
-                         resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex &&
-                         sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd)
-                           ? 'resize-preview'
-                           : ''
                        } ${isPending ? 'pending-cell' : ''}`}
                       data-eq={equipeIndex}
                       data-da={day.date}
@@ -361,8 +358,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           }
                         }
                         const isLongestSeg = segLen === longestLen;
-                        const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
-                        const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
                         const clippedLeft = seg.start < vpStart;
                         const clippedRight = seg.end > vpEnd;
 
@@ -481,6 +476,29 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         </div>
                         );
                       })}
+
+                      {resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex && (() => {
+                        const pStart = dayIndex(resize.previewStart);
+                        const pEnd = dayIndex(resize.previewEnd);
+                        if (pStart === -1 || pEnd === -1) return null;
+                        const visiblePStart = Math.max(pStart, vpStart);
+                        const visiblePEnd = Math.min(pEnd, vpEnd);
+                        if (realIdx !== visiblePStart) return null;
+                        const pLen = visiblePEnd - visiblePStart + 1;
+                        const pClippedLeft = pStart < vpStart;
+                        return (
+                          <div
+                            className={`bloc resize-preview-bloc${pClippedLeft ? ' bloc-clipped-left' : ''}`}
+                            style={{
+                              width: pLen * cellWidth - 8,
+                              top: blocT,
+                              height: blocH,
+                              left: pClippedLeft ? 0 : 3,
+                              zIndex: 10000,
+                            }}
+                          />
+                        );
+                      })()}
                     </div>
                   );
                 })}
