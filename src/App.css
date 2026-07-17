@@ -517,7 +517,6 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .cell {
-  content-visibility: auto;
   border-right: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
   position: relative;
