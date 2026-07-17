@@ -355,11 +355,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         const isFirstSegment = segIndex === 0;
                         const isLastSegment = segIndex === segCount - 1;
                         let width = segLen * cellWidth - 8;
-                        if (resize?.id === chantier.id && resize.delta) {
-                          if (resize.side === 'right' && isLastSegment) {
-                            width += resize.delta * cellWidth;
-                          } else if (resize.side === 'left' && isFirstSegment) {
-                            width -= resize.delta * cellWidth;
+                        if (resize?.id === chantier.id && resize.delta && resize.previewStart && resize.previewEnd) {
+                          const pStart = dayIndex(resize.previewStart);
+                          const pEnd = dayIndex(resize.previewEnd);
+                          if (pStart >= 0 && pEnd >= 0) {
+                            width = (pEnd - pStart + 1) * cellWidth - 8;
                           }
                         }
                         const isLongestSeg = segLen === longestLen;
@@ -395,8 +395,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                               background: chantier.color,
                               zIndex: resize?.id === chantier.id ? 9999 : undefined,
                               opacity: resize?.id === chantier.id ? 0.85 : undefined,
-                              ...(resize?.id === chantier.id && resize.side === 'left' && resize.delta && isFirstSegment
-                                ? { left: 3 + resize.delta * cellWidth }
+                              ...(resize?.id === chantier.id && resize.previewStart && isFirstSegment
+                                ? { left: 3 + (dayIndex(resize.previewStart) - seg.start) * cellWidth }
                                 : {}),
                             }}
                             title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
