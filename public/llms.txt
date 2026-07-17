@@ -1,0 +1,11 @@
+# Planning Noree
+
+> Application de planning et gestion de chantiers pour entreprises de construction. Permet de visualiser, créer et modifier des chantiers et congés sur un calendrier, avec gestion des équipes, conducteurs et couleurs.
+
+L'application est construite avec React et Supabase. Fonctionnalités : visualisation calendrier avec navigation par date, création et modification de chantiers (drag & drop, redimensionnement), gestion des congés par équipe ou toutes équipes, barre de conducteurs, gestion des équipes, jours fériés personnalisés, mode sombre, et gestion des utilisateurs (admin).
+
+## Pages
+
+- [Planning](https://planning.tomcorl.xyz/): Vue principale du planning avec le calendrier des chantiers et congés
+- [Connexion](https://planning.tomcorl.xyz/): Page de connexion à l'application
+- [Administration](https://planning.tomcorl.xyz/): Gestion des utilisateurs (admin uniquement)
