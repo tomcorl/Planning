@@ -75,6 +75,7 @@ export default function Modals({
                 <div className="color-manager-swatch" style={{ background: colorManager.color }} />
                 <input
                   type="color"
+                  aria-label="Couleur"
                   value={colorManager.color}
                   onChange={(e) => setColorManager({ ...colorManager, color: e.target.value })}
                 />
@@ -83,6 +84,7 @@ export default function Modals({
                 type="text"
                 value={colorManager.color}
                 className="color-manager-hex"
+                aria-label="Code hexadécimal"
                 onChange={(e) => {
                   const v = e.target.value;
                   if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setColorManager({ ...colorManager, color: v });
@@ -118,10 +120,12 @@ export default function Modals({
                 <input
                   value={ferieForm.date}
                   type="date"
+                  aria-label="Date du jour férié"
                   onChange={(e) => setFerieForm({ ...ferieForm, date: e.target.value })}
                 />
                 <input
                   value={ferieForm.nom}
+                  aria-label="Nom du jour férié"
                   onChange={(e) => setFerieForm({ ...ferieForm, nom: e.target.value })}
                 />
                 <button className="modal-btn-primary" onClick={addCustomFerie}>Ajouter</button>
@@ -170,27 +174,27 @@ export default function Modals({
                   <div className="modal-date-group">
                     <div className="modal-field">
                       <label>Durée</label>
-                      <input type="number" min="1" value={form.duree} onChange={(e) => setForm({ ...form, duree: e.target.value })} />
+                      <input type="number" min="1" aria-label="Durée" value={form.duree} onChange={(e) => setForm({ ...form, duree: e.target.value })} />
                       <small>jours travaillés</small>
                     </div>
                     <div className="modal-field">
                       <label>Date de début</label>
-                      <input type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} />
+                      <input type="date" aria-label="Date de début" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} />
                     </div>
                     <div className="modal-field">
                       <label>Date de fin</label>
-                      <input type="date" value={modalEndDate} readOnly />
+                      <input type="date" aria-label="Date de fin" value={modalEndDate} readOnly />
                       <small>calculée</small>
                     </div>
                   </div>
                   <div className="modal-field">
                     <label>{modal.type === 'chantier' ? 'Nom du chantier' : 'Nom du congé'}</label>
-                    <input value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} />
+                    <input value={form.nom} aria-label={modal.type === 'chantier' ? 'Nom du chantier' : 'Nom du congé'} onChange={(e) => setForm({ ...form, nom: e.target.value })} />
                   </div>
                   <div className="modal-field">
                     <label>Équipe</label>
                     {form.allEquipes ? (
-                      <select value={form.companyId || companies[0]?.id || ''} onChange={(e) => {
+                      <select aria-label="Équipe" value={form.companyId || companies[0]?.id || ''} onChange={(e) => {
                         const compId = e.target.value;
                         const firstIdx = teams.findIndex(t => t.companyId === compId);
                         setForm({ ...form, companyId: compId, equipe: firstIdx >= 0 ? firstIdx : form.equipe });
@@ -200,7 +204,7 @@ export default function Modals({
                         ))}
                       </select>
                     ) : (
-                      <select value={form.equipe} onChange={(e) => setForm({ ...form, equipe: e.target.value })}>
+                      <select aria-label="Équipe" value={form.equipe} onChange={(e) => setForm({ ...form, equipe: e.target.value })}>
                         {companies.map((comp) => {
                           const compTeams = teams.map((t, i) => ({ ...t, index: i })).filter((t) => t.companyId === comp.id);
                           if (compTeams.length === 0) return null;
@@ -269,11 +273,11 @@ export default function Modals({
                   </div>
                   <div className="modal-field">
                     <label>Détail chantier</label>
-                    <input value={form.detail || ''} onChange={(e) => setForm({ ...form, detail: e.target.value })} />
+                    <input value={form.detail || ''} aria-label="Détail chantier" onChange={(e) => setForm({ ...form, detail: e.target.value })} />
                   </div>
                   <div className="modal-field">
                     <label>Notes</label>
-                    <textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+                    <textarea aria-label="Notes" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
                   </div>
                 </>
               )}
@@ -282,10 +286,10 @@ export default function Modals({
                   {conducteurs.map((c, i) => (
                     <div className="conducteur-edit-row" key={c.id}>
                       <div className="color-picker-wrap">
-                        <input type="color" value={c.color} onChange={(e) => setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, color: e.target.value } : x))} />
+                        <input type="color" aria-label="Couleur du conducteur" value={c.color} onChange={(e) => setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, color: e.target.value } : x))} />
                         <span className="color-swatch" style={{ background: c.color }} />
                       </div>
-                      <input value={c.nom} onChange={(e) => setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, nom: e.target.value } : x))} />
+                      <input value={c.nom} aria-label="Nom du conducteur" onChange={(e) => setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, nom: e.target.value } : x))} />
                       <button className="delete-conducteur" title="Supprimer ce conducteur" onClick={() => { if (window.confirm(`Supprimer ${c.nom} ?`)) setConducteurs((prev) => prev.filter((_, idx) => idx !== i)); }}>×</button>
                     </div>
                   ))}

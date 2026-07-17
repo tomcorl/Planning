@@ -3,10 +3,10 @@
 :root {
   --bg: #f4f7f2;
   --surface: #ffffff;
-  --surface-2: #f8faf6;
+  --surface-2: #f0f5eb;
   --surface-3: #eef4ea;
   --text: #1a2e1a;
-  --muted: #6b8060;
+  --muted: #4d7042;
   --line: #d4e2cc;
   --line-soft: #e6f0df;
   --blue: #16a34a;
@@ -66,6 +66,23 @@ textarea {
   height: 100vh;
   overflow: hidden;
   background: var(--bg);
+  position: relative;
+}
+
+.app-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  text-align: center;
+  padding: 3px 0;
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--surface);
+  border-top: 1px solid var(--line-soft);
+  z-index: 99999;
+  height: 22px;
+  line-height: 22px;
 }
 
 /* ═══════════════════════════════════════════════
@@ -179,7 +196,7 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .planning-scroll {
-  height: calc(100vh - 70px);
+  height: calc(100vh - 100px);
   overflow: scroll;
   margin: 0 10px 10px;
   border-radius: 14px;
@@ -188,6 +205,7 @@ button:active {
   border: 1px solid var(--line-soft);
   position: relative;
   isolation: isolate;
+  padding-bottom: 28px;
 }
 
 .planning-container {
@@ -373,8 +391,9 @@ button:active {
   border-right: 1px solid var(--line);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 12px;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 8px;
   box-shadow: 6px 0 16px var(--shadow);
 }
 
@@ -438,16 +457,16 @@ button:active {
 }
 
 .avatar {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   background: var(--green);
   color: white;
-  border-radius: 10px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 900;
-  font-size: 11px;
+  font-size: 10px;
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
 }
@@ -459,7 +478,8 @@ button:active {
   background: transparent;
   color: var(--text);
   font-weight: 700;
-  font-size: 13px;
+  font-size: 15px;
+  text-align: center;
 }
 
 .team-cell input:focus {

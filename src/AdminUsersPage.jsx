@@ -77,18 +77,21 @@ export default function AdminUsersPage({ users, onSaveUsers, onAddUser, onRemove
       <form className="admin-form" onSubmit={handleSubmit}>
         <input
           value={form.nom}
+          aria-label="Nom"
           onChange={(e) => setForm({ ...form, nom: e.target.value })}
           placeholder="Nom"
         />
         <input
           type="email"
           value={form.email}
+          aria-label="Email"
           onChange={(e) => setForm({ ...form, email: e.target.value })}
           placeholder="email@entreprise.fr"
         />
         <div className="admin-form-row">
           <select
             value={form.role}
+            aria-label="Rôle"
             onChange={(e) => setForm({ ...form, role: e.target.value })}
           >
             <option value="lecture">Lecture seule</option>

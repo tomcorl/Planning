@@ -1580,7 +1580,7 @@ export default function App() {
 
         {activePage === 'planning' && (
           <div className="date-nav">
-            <input type="date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
+            <input type="date" aria-label="Aller à une date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
             <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
           </div>
         )}
@@ -1627,6 +1627,7 @@ export default function App() {
         </div>
       </div>
 
+      <main>
       <Suspense fallback={null}>
       {activePage === 'users' && isAdmin && (
         <AdminUsersPage
@@ -1689,6 +1690,8 @@ export default function App() {
         </>
       )}
       </Suspense>
+      </main>
+      <footer className="app-footer">Créé par Tom Corlay</footer>
     </div>
   );
 }
