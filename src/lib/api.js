@@ -273,7 +273,7 @@ export async function saveAllPlanningData(data) {
     p_chantier_colors: chantierColors,
     p_conducteur_colors: conducteurColors,
   });
-  if (error) { console.error('save_all_planning_data', error); throw error; }
+  if (error) { console.error('save_all_planning_data RPC failed', error.message || error, error.details, error.hint); throw error; }
   return result;
 }
 

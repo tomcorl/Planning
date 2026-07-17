@@ -518,7 +518,6 @@ export default function App() {
   async function logout() {
     await api.logout();
     setSession(null);
-    setAuthScreen('login');
     setActivePage('planning');
     setLoginForm({ email: '', password: '' });
     setLoginError('');
