@@ -989,24 +989,14 @@ export default function App() {
             if (!prev || !next) continue;
             if (toDate(getEndDateForChantier(prev)) >= toDate(next.start)) {
               const newPrevEnd = formatDate(addDays(toDate(next.start), -1));
-              const newPrevStart = (() => {
-                let cnt = prev.duree;
-                let cur = toDate(newPrevEnd);
-                let safe = 0;
-                while (cnt > 0 && safe < 1200) {
-                  if (!isBlockedDay(equipe, formatDate(cur), { force_aout: prev.force_aout })) {
-                    cnt -= 1;
-                  }
-                  cur = addDays(cur, -1);
-                  safe += 1;
+              const newPrevDuree = countWorkingDays(prev.start, newPrevEnd, equipe, prev.force_aout);
+              if (newPrevDuree >= 1) {
+                const idx = result.findIndex((c) => c.id === prev.id);
+                if (idx >= 0) {
+                  result[idx] = { ...prev, duree: newPrevDuree };
+                  changed = true;
+                  stable = false;
                 }
-                return formatDate(addDays(cur, 1));
-              })();
-              const idx = result.findIndex((c) => c.id === prev.id);
-              if (idx >= 0) {
-                result[idx] = { ...prev, start: newPrevStart };
-                changed = true;
-                stable = false;
               }
             }
           }
@@ -1192,21 +1182,41 @@ export default function App() {
             }
             return next.map((c) => changed.get(c.id) || c);
           }
-          return prev.map((c) => {
-            if (c.id !== id) return c;
-            const originalEnd = addWorkingDays(originalStart, originalDuree, originalEquipe, { force_aout: originalForceAout });
-            const rawNewStart = formatDate(addDays(toDate(originalStart), delta));
-            const newStart = nextWorkingDay(rawNewStart, originalEquipe, originalForceAout);
-            const newDuree = countWorkingDays(newStart, originalEnd, originalEquipe, originalForceAout);
-            if (newDuree < 1 || (newStart === originalStart && newDuree === originalDuree)) return c;
-            return { ...c, start: newStart, duree: newDuree };
-          });
+          return (() => {
+            let next = prev.map((c) => {
+              if (c.id !== id) return c;
+              const originalEnd = addWorkingDays(originalStart, originalDuree, originalEquipe, { force_aout: originalForceAout });
+              const rawNewStart = formatDate(addDays(toDate(originalStart), delta));
+              const newStart = nextWorkingDay(rawNewStart, originalEquipe, originalForceAout);
+              const newDuree = countWorkingDays(newStart, originalEnd, originalEquipe, originalForceAout);
+              if (newDuree < 1 || (newStart === originalStart && newDuree === originalDuree)) return c;
+              return { ...c, start: newStart, duree: newDuree };
+            });
+
+            const resized = next.find(c => c.id === id);
+            if (resized && toDate(resized.start) < toDate(originalStart)) {
+              const prevItems = next
+                .filter(c => c.id !== id && c.equipe === originalEquipe && toDate(c.start) < toDate(originalStart))
+                .sort((a, b) => toDate(b.start) - toDate(a.start));
+              if (prevItems.length > 0) {
+                const prev = prevItems[0];
+                if (toDate(getEndDateForChantier(prev)) >= toDate(resized.start)) {
+                  const newPrevEnd = formatDate(addDays(toDate(resized.start), -1));
+                  const newPrevDuree = countWorkingDays(prev.start, newPrevEnd, originalEquipe, prev.force_aout);
+                  if (newPrevDuree >= 1) {
+                    next = next.map(c => c.id === prev.id ? { ...prev, duree: newPrevDuree } : c);
+                  }
+                }
+              }
+            }
+
+            return next;
+          })();
         });
       }
       commit(() => {});
       setResize(null);
       resizeRef.current = null;
-      setTimeout(reflowTeams, 0);
     }
 
     window.addEventListener('mousemove', onMouseMove);
