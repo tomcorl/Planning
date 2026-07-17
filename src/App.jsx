@@ -157,8 +157,6 @@ export default function App() {
   const expandLeftRef = useRef(null);
   const localStorageThrottleRef = useRef(null);
   const gridCallbacksRef = useRef({});
-  const [viewportDayRange, setViewportDayRange] = useState(null);
-  const lastCommittedVpRef = useRef(null);
   const resizeRef = useRef(null);
   const lastXRef = useRef(0);
   const [clipboard, setClipboard] = useState(null);
@@ -1249,27 +1247,6 @@ export default function App() {
         }, 1000);
       }
 
-      const totalDays = visibleDays.length;
-      if (totalDays) {
-        const BUFFER = 4;
-        const VP_HYSTERESIS = 8;
-        const firstVisible = Math.floor(Math.max(0, el.scrollLeft - 260) / CELL_WIDTH);
-        const visibleCount = Math.ceil(el.clientWidth / CELL_WIDTH);
-        const totalWindow = Math.max(visibleCount + BUFFER * 2, MIN_VISIBLE_DAYS);
-        const center = firstVisible + Math.floor(visibleCount / 2);
-        const halfWindow = Math.floor(totalWindow / 2);
-
-        let newStart = Math.max(0, center - halfWindow);
-        let newEnd = Math.min(totalDays - 1, newStart + totalWindow - 1);
-        newStart = Math.max(0, newEnd - totalWindow + 1);
-
-        const last = lastCommittedVpRef.current;
-        if (!last || Math.abs(newStart - last.start) >= VP_HYSTERESIS) {
-          lastCommittedVpRef.current = { start: newStart, end: newEnd };
-          setViewportDayRange({ start: newStart, end: newEnd });
-        }
-      }
-
       // Right-edge expansion: debounced, only fires 250ms after scroll settles
       if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
         if (!expandRightRef.current) {
@@ -1684,7 +1661,6 @@ export default function App() {
         callbacksRef={gridCallbacksRef}
         dragThrottle={dragThrottle}
         scrollRef={scrollRef}
-        viewportDayRange={viewportDayRange}
       />
 
         <Modals
