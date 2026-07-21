@@ -154,6 +154,7 @@ export default function App() {
   const scrollThrottleRef = useRef(null);
   const expandRightRef = useRef(null);
   const expandLeftRef = useRef(null);
+  const expandCooldownRef = useRef(null);
   const localStorageThrottleRef = useRef(null);
   const gridCallbacksRef = useRef({});
   const resizeRef = useRef(null);
@@ -1246,12 +1247,13 @@ export default function App() {
         }, 1000);
       }
 
-      // Right-edge expansion: debounced, only fires 250ms after scroll settles
+      // Right-edge expansion: debounced, cooldown 2s after each expansion
       if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
-        if (!expandRightRef.current) {
+        if (!expandRightRef.current && !expandCooldownRef.current) {
           expandRightRef.current = setTimeout(() => {
             expandRightRef.current = null;
-            setCalendarLength((prev) => prev + 30);
+            expandCooldownRef.current = setTimeout(() => { expandCooldownRef.current = null; }, 2000);
+            setCalendarLength((prev) => prev + 100);
           }, 250);
         }
       } else if (expandRightRef.current) {
@@ -1259,15 +1261,16 @@ export default function App() {
         expandRightRef.current = null;
       }
 
-      // Left-edge expansion: debounced, only fires 250ms after scroll settles
+      // Left-edge expansion: debounced, cooldown 2s after each expansion
       if (el.scrollLeft < 200) {
-        if (!expandLeftRef.current) {
+        if (!expandLeftRef.current && !expandCooldownRef.current) {
           expandLeftRef.current = setTimeout(() => {
             expandLeftRef.current = null;
-            setCalendarStart((prev) => addDays(prev, -30));
-            setCalendarLength((prev) => prev + 30);
+            expandCooldownRef.current = setTimeout(() => { expandCooldownRef.current = null; }, 2000);
+            setCalendarStart((prev) => addDays(prev, -100));
+            setCalendarLength((prev) => prev + 100);
             setTimeout(() => {
-              if (scrollRef.current) scrollRef.current.scrollLeft += 30 * CELL_WIDTH;
+              if (scrollRef.current) scrollRef.current.scrollLeft += 100 * CELL_WIDTH;
             }, 0);
           }, 250);
         }
