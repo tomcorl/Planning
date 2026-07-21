@@ -411,6 +411,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                     <>
                       <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.numInCompany}</div>
                       <input
+                        key={`name-${row.name}`}
                         defaultValue={row.name}
                         aria-label="Nom de l'équipe"
                         onBlur={(e) => cb.updateTeam(row.teamIndex, e.target.value)}
