@@ -179,6 +179,8 @@ export default function App() {
     [calendarStart, calendarLength]
   );
 
+  const teamById = useMemo(() => new Map(teams.map(t => [t.id, t])), [teams]);
+
   const holidays = useMemo(() => {
     const years = new Set(allDays.map((d) => toDate(d.date).getFullYear()));
     const base = Array.from(years).flatMap((year) => getFrenchHolidays(year));
@@ -202,10 +204,11 @@ export default function App() {
       let safety = 0;
       while (sameOrBefore(cur, end) && safety < 1200) {
         if (c.allEquipes) {
-          const compId = c.companyId || teams[c.equipe]?.companyId;
-          for (let t = 0; t < teams.length; t++) {
-            if (teams[t].companyId === compId) {
-              set.add(`${t}-${cur}`);
+          const team = teamById.get(c.equipe);
+          const compId = c.companyId || team?.companyId;
+          for (const t of teams) {
+            if (t.companyId === compId) {
+              set.add(`${t.id}-${cur}`);
             }
           }
         } else {
@@ -254,16 +257,14 @@ export default function App() {
     for (let c = 0; c < companies.length; c++) {
       const comp = companies[c];
       rows.push({ type: 'company-header', name: comp.nom, id: `ch-${comp.id}` });
-      const companyTeams = teams
-        .map((t, i) => ({ ...t, index: i }))
-        .filter((t) => t.companyId === comp.id);
+      const companyTeams = teams.filter((t) => t.companyId === comp.id);
       companyTeams.forEach((t, idx) => {
-        rows.push({ type: 'team', teamIndex: t.index, name: t.nom, numInCompany: idx + 1 });
+        rows.push({ type: 'team', teamId: t.id, name: t.nom, numInCompany: idx + 1 });
       });
-      const baseOffset = teams.length + c * 3;
-      rows.push({ type: 'pending', id: `p-${c}-0`, equipeIndex: baseOffset });
-      rows.push({ type: 'pending', id: `p-${c}-1`, equipeIndex: baseOffset + 1 });
-      rows.push({ type: 'pending', id: `p-${c}-2`, equipeIndex: baseOffset + 2 });
+      const offset = teams.reduce((max, t) => Math.max(max, t.id), 0) + 1 + c * 3;
+      rows.push({ type: 'pending', id: `p-${c}-0`, equipeIndex: offset });
+      rows.push({ type: 'pending', id: `p-${c}-1`, equipeIndex: offset + 1 });
+      rows.push({ type: 'pending', id: `p-${c}-2`, equipeIndex: offset + 2 });
       rows.push({ type: 'separator', id: `s-${c}` });
     }
     return rows;
@@ -309,7 +310,7 @@ export default function App() {
       try {
         const result = await api.saveAllPlanningData({
           chantiers,
-          conges: conges.map(c => ({ ...c, company_id: c.companyId || (teams[c.equipe]?.companyId) })),
+          conges: conges.map(c => ({ ...c, company_id: c.companyId || (teamById.get(c.equipe)?.companyId) })),
           equipes: teams,
           conducteurs,
           customFeries,
@@ -345,22 +346,66 @@ export default function App() {
       const allData = await api.loadPlanningData();
       setCompanies(allData.companies);
 
-      if (allData.equipes.length > 0) {
-        setTeams(allData.equipes);
-      } else {
-        const defaultTeams = [];
+      let teams = allData.equipes.length > 0 ? [...allData.equipes] : [];
+
+      if (teams.length === 0) {
         for (const comp of allData.companies) {
           for (let i = 0; i < DEFAULT_TEAMS_COUNT; i++) {
-            defaultTeams.push({ nom: `Équipe ${i + 1}`, companyId: comp.id, ordre: i });
+            teams.push({ id: nextLocalId(), nom: `Équipe ${i + 1}`, companyId: comp.id, ordre: i });
           }
         }
-        setTeams(defaultTeams);
+        setTeams(teams);
         for (const comp of allData.companies) {
-          const names = defaultTeams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
-          await api.upsertEquipes(names, comp.id);
+          const names = teams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
+          const result = await api.upsertEquipes(names, comp.id);
+          if (result) {
+            for (const row of result) {
+              const t = teams.find(t => t.nom === row.nom && t.companyId === row.company_id);
+              if (t) t.id = row.id;
+            }
+          }
+        }
+        setTeams([...teams]);
+      }
+
+      // Migration one-shot: convertir equipe index → equipe id
+      const unmigrated = Object.entries(allData.companiesMigrated || {})
+        .filter(([, v]) => !v)
+        .map(([k]) => k);
+
+      if (unmigrated.length > 0) {
+        const idxToId = {};
+        teams.forEach((t, i) => { idxToId[i] = t.id; });
+
+        allData.chantiers = allData.chantiers.map(c =>
+          unmigrated.includes(c.company_id)
+            ? { ...c, equipe: idxToId[c.equipe] ?? c.equipe }
+            : c
+        );
+        allData.conges = allData.conges.map(c =>
+          unmigrated.includes(c.company_id)
+            ? { ...c, equipe: idxToId[c.equipe] ?? c.equipe }
+            : c
+        );
+
+        try {
+          await api.saveAllPlanningData({
+            chantiers: allData.chantiers,
+            conges: allData.conges.map(c => ({ ...c, company_id: c.company_id || c.companyId })),
+            equipes: teams,
+            conducteurs: allData.conducteurs,
+            customFeries: allData.customFeries,
+            chantierColors: allData.companies[0]?.chantier_colors || [],
+            conducteurColors: allData.companies[0]?.conducteur_colors || [],
+          });
+          const { error } = await supabase.rpc('mark_equipes_migrated', { p_company_ids: unmigrated });
+          if (error) console.error('mark_equipes_migrated error', error);
+        } catch (e) {
+          console.error('Échec migration equipe_id', e);
         }
       }
 
+      setTeams(teams);
       setConducteurs(allData.conducteurs);
       setChantiers(allData.chantiers);
       setConges(allData.conges);
@@ -737,9 +782,9 @@ export default function App() {
     return segments;
   }
 
-  function updateTeam(index, value) {
+  function updateTeam(id, value) {
     commit(() => {
-      setTeams((prev) => prev.map((t, i) => (i === index ? { ...t, nom: value } : t)));
+      setTeams((prev) => prev.map((t) => (t.id === id ? { ...t, nom: value } : t)));
     });
   }
 
@@ -762,7 +807,7 @@ export default function App() {
     });
   }
 
-  function deleteTeam(index) {
+  function deleteTeam(id) {
     if (
       !window.confirm(
         'Supprimer cette équipe ? Les chantiers et congés de cette ligne seront aussi supprimés.'
@@ -771,18 +816,14 @@ export default function App() {
       return;
 
     commit(() => {
-      setTeams((prev) => prev.filter((_, i) => i !== index));
+      setTeams((prev) => prev.filter((t) => t.id !== id));
 
       setChantiers((prev) =>
-        prev
-          .filter((c) => c.equipe !== index)
-          .map((c) => (c.equipe > index ? { ...c, equipe: c.equipe - 1 } : c))
+        prev.filter((c) => c.equipe !== id)
       );
 
       setConges((prev) =>
-        prev
-          .filter((c) => c.equipe !== index)
-          .map((c) => (c.equipe > index ? { ...c, equipe: c.equipe - 1 } : c))
+        prev.filter((c) => c.equipe !== id)
       );
     });
   }
@@ -827,7 +868,7 @@ export default function App() {
 
     setForm({
       id: null,
-      company_id: teams[selection.equipe]?.companyId || companies[0]?.id,
+      company_id: teamById.get(selection.equipe)?.companyId || companies[0]?.id,
       equipe: selection.equipe,
       start: nextWorkingDay(start, selection.equipe),
       duree: workingCount,
@@ -886,7 +927,7 @@ export default function App() {
       if (modal.type === 'chantier') {
         const item = {
           id: form.id || nextLocalId(),
-          company_id: form.company_id || teams[Number(form.equipe)]?.companyId || companies[0]?.id,
+          company_id: form.company_id || teamById.get(Number(form.equipe))?.companyId || companies[0]?.id,
           equipe: Number(form.equipe),
           start: nextWorkingDay(form.start, Number(form.equipe)),
           duree: Number(form.duree),
@@ -1435,7 +1476,7 @@ export default function App() {
       if (end === -1) continue;
       const seg = { start, end: Math.max(start, end) };
       const eqs = c.allEquipes
-        ? teams.map((_, t) => t).filter(t => teams[t].companyId === (c.companyId || teams[c.equipe]?.companyId))
+        ? teams.filter(t => t.companyId === (c.companyId || teamById.get(c.equipe)?.companyId)).map(t => t.id)
         : [c.equipe];
       for (const eq of eqs) {
         for (let d = seg.start; d <= seg.end; d++) {
