@@ -233,22 +233,7 @@ button:active {
   z-index: 50;
 }
 
-.main-grid {
-  position: relative;
-}
 
-.main-grid::before {
-  content: '';
-  grid-column: 2 / -1;
-  grid-row: 1 / -1;
-  background: repeating-linear-gradient(
-    to right,
-    transparent 0 25px,
-    var(--line-soft) 25px 26px
-  );
-  pointer-events: none;
-  z-index: 100;
-}
 
 /* ═══════════════════════════════════════════════
    CORNERS (sticky)
@@ -404,7 +389,6 @@ button:active {
   z-index: 10001;
   background: var(--surface);
   border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -553,6 +537,7 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .cell {
+  border-right: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line-soft);
   position: relative;
   background: var(--surface);
