@@ -446,7 +446,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                   <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
                     {isPending ? null : (
                       <>
-                        <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.numInCompany}</div>
+                        <div className="avatar">{row.numInCompany}</div>
                         <input
                           key={`name-${row.name}`}
                           defaultValue={row.name}
