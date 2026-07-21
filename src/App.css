@@ -353,15 +353,19 @@ button:active {
 }
 
 .month-even {
-  background: #d4edda;
+  background: #dbeafe;
 }
 
 [data-theme='dark'] .month-even {
-  background: #1a3a1a;
+  background: #1e3a5f;
 }
 
 .month-odd {
-  background: var(--surface);
+  background: #f3f4f6;
+}
+
+[data-theme='dark'] .month-odd {
+  background: #1f2937;
 }
 
 /* ═══════════════════════════════════════════════
@@ -505,7 +509,7 @@ button:active {
   background: transparent;
   color: var(--text);
   font-weight: 700;
-  font-size: 19px;
+  font-size: 21px;
   text-align: center;
 }
 
