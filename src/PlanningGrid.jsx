@@ -401,11 +401,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
               );
             }
 
-            const equipeIndex = row.type === 'pending' ? row.equipeIndex : row.teamIndex;
+            const equipeIndex = row.type === 'pending' ? row.equipeIndex : row.teamId;
             const isPending = row.type === 'pending';
 
             return (
-              <React.Fragment key={isPending ? row.id : `team-${row.teamIndex}`}>
+              <React.Fragment key={isPending ? row.id : `team-${row.teamId}`}>
                 <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
                   {isPending ? null : (
                     <>
@@ -414,12 +414,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
                         key={`name-${row.name}`}
                         defaultValue={row.name}
                         aria-label="Nom de l'équipe"
-                        onBlur={(e) => cb.updateTeam(row.teamIndex, e.target.value)}
+                        onBlur={(e) => cb.updateTeam(row.teamId, e.target.value)}
                         style={{ fontSize: Math.round(13 + (cellWidth - 26) * 3 / 26) }}
                       />
                       {canEdit && <button
                         className="delete-team"
-                        onClick={() => cb.deleteTeam(row.teamIndex)}
+                        onClick={() => cb.deleteTeam(row.teamId)}
                       >×</button>}
                     </>
                   )}
