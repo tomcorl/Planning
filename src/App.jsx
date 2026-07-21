@@ -1408,7 +1408,13 @@ export default function App() {
   const deferredConges = useDeferredValue(conges);
   const deferredVisibleDays = useDeferredValue(visibleDays);
 
+  const congeSegmentsCacheRef = useRef(null);
   const congeSegmentsMap = useMemo(() => {
+    const cache = congeSegmentsCacheRef.current;
+    const depsKey = `${conges.length}|${visibleDays.length}|${teams.length}|${teams.map(t=>t.companyId).join(',')}`;
+    if (cache && cache.depsKey === depsKey) return cache.map;
+
+    const prevMap = cache ? cache.map : null;
     const map = new Map();
     for (const c of conges) {
       const start = dayIndex(c.start);
@@ -1423,11 +1429,29 @@ export default function App() {
       for (const eq of eqs) {
         for (let d = seg.start; d <= seg.end; d++) {
           const key = `${eq}-${d}`;
-          if (!map.has(key)) map.set(key, []);
-          map.get(key).push({ conge: c, seg });
+          if (!map.has(key)) map.set(key, [{ conge: c, seg }]);
+          else map.get(key).push({ conge: c, seg });
         }
       }
     }
+
+    if (prevMap) {
+      for (const [key, arr] of map) {
+        const prev = prevMap.get(key);
+        if (prev && prev.length === arr.length) {
+          let same = true;
+          for (let i = 0; i < arr.length; i++) {
+            if (prev[i].conge.id !== arr[i].conge.id || prev[i].seg.start !== arr[i].seg.start || prev[i].seg.end !== arr[i].seg.end) {
+              same = false;
+              break;
+            }
+          }
+          if (same) map.set(key, prev);
+        }
+      }
+    }
+
+    congeSegmentsCacheRef.current = { depsKey, map };
     return map;
   }, [conges, visibleDays, teams]);
 
