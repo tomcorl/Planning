@@ -179,6 +179,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const totalDays = visibleDays.length;
   const gridTemplateColumns = `260px repeat(${totalDays}, ${cellWidth}px)`;
   const rowHeight = Math.round(56 + (cellWidth - 26) * (78 - 56) / 26);
+  const dateGridH = Math.round(28 + (cellWidth - 26) * (44 - 28) / 26);
+  const headerHeight = 28 + 30 + dateGridH;
 
   const dayIdxMemo = React.useMemo(() => {
     const map = new Map();
@@ -352,7 +354,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
             ))}
           </div>
 
-          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: Math.round(28 + (cellWidth - 26) * (44 - 28) / 26) }}>
+          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH }}>
             <div className="corner date-corner"></div>
             {visibleDays.map((d) => (
               <div
@@ -393,7 +395,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
             if (row.type === 'company-header') {
               return (
                 <React.Fragment key={row.id}>
-                  <div className="team-cell company-header-cell"><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
+                  <div className="team-cell company-header-cell" style={{ top: headerHeight }}><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
                   {visibleDays.map((day) => (
                     <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
                   ))}
