@@ -551,8 +551,6 @@ button:active {
   border-bottom: 1px solid var(--line-soft);
   position: relative;
   background: var(--surface);
-  overflow: hidden;
-  contain: layout paint style;
 }
 
 .cell.odd {
