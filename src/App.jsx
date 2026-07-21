@@ -1380,7 +1380,7 @@ export default function App() {
   function handleContextMenu(e, type, id) {
     e.preventDefault();
     e.stopPropagation();
-    setSelectedItem({ type, id });
+    if (id != null) setSelectedItem({ type, id });
     setContextMenu({ x: e.clientX, y: e.clientY, type, id });
   }
 

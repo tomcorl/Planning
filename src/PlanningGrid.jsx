@@ -176,6 +176,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const lastHoverRef = React.useRef(null);
   const totalDays = visibleDays.length;
   const gridTemplateColumns = `260px repeat(${totalDays}, ${cellWidth}px)`;
+  const rowHeight = Math.round(56 + (cellWidth - 26) * (78 - 56) / 26);
 
   const dayIdxMemo = React.useMemo(() => {
     const map = new Map();
@@ -283,6 +284,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
     const equipe = Number(cell.dataset.eq);
     const date = cell.dataset.da;
 
+    if (type === 'contextmenu') {
+      e.preventDefault();
+      cb.handleContextMenu(e, 'cell');
+      return;
+    }
+
     if (type === 'mousedown') {
       cb.startSelection(e, equipe, date);
       return;
@@ -360,8 +367,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           </div>
         </div>
 
-        <div className="grid main-grid"
-          style={{ gridTemplateColumns, gridAutoRows: Math.round(56 + (cellWidth - 26) * (78 - 56) / 26) }}
+        <div className="main-grid"
           onMouseDown={handleGridEvent}
           onMouseOver={handleGridEvent}
           onDragOver={handleGridEvent}
@@ -372,23 +378,23 @@ const PlanningGrid = React.memo(function PlanningGrid({
           {gridRows.map((row) => {
             if (row.type === 'separator') {
               return (
-                <React.Fragment key={row.id}>
+                <div key={row.id} className="grid-row" style={{ gridTemplateColumns, gridAutoRows: rowHeight }}>
                   <div className="team-cell separator-row" />
                   {visibleDays.map((day) => (
                     <div key={`sep-${day.date}`} className="cell separator-cell" />
                   ))}
-                </React.Fragment>
+                </div>
               );
             }
 
             if (row.type === 'company-header') {
               return (
-                <React.Fragment key={row.id}>
+                <div key={row.id} className="grid-row" style={{ gridTemplateColumns, gridAutoRows: rowHeight }}>
                   <div className="team-cell company-header-cell"><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
                   {visibleDays.map((day) => (
                     <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
                   ))}
-                </React.Fragment>
+                </div>
               );
             }
 
@@ -396,7 +402,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
             const isPending = row.type === 'pending';
 
             return (
-              <React.Fragment key={isPending ? row.id : `team-${row.teamIndex}`}>
+              <div key={isPending ? row.id : `team-${row.teamIndex}`} className="grid-row" style={{ gridTemplateColumns, gridAutoRows: rowHeight }}>
                 <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
                   {isPending ? null : (
                     <>
@@ -450,7 +456,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                     />
                   );
                 })}
-              </React.Fragment>
+              </div>
             );
           })}
         </div>

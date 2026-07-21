@@ -35,15 +35,17 @@ export default function Modals({
     <>
       {contextMenu && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
-          <button onClick={() => {
-            const item = contextMenu.type === 'chantier'
-              ? chantiers.find((c) => c.id === contextMenu.id)
-              : conges.find((c) => c.id === contextMenu.id);
-            if (item) setClipboard({ ...item, sourceType: contextMenu.type });
-            setContextMenu(null);
-          }}>
-            Copier
-          </button>
+          {contextMenu.type !== 'cell' && (
+            <button onClick={() => {
+              const item = contextMenu.type === 'chantier'
+                ? chantiers.find((c) => c.id === contextMenu.id)
+                : conges.find((c) => c.id === contextMenu.id);
+              if (item) setClipboard({ ...item, sourceType: contextMenu.type });
+              setContextMenu(null);
+            }}>
+              Copier
+            </button>
+          )}
           {clipboard && canEdit && (
             <button onClick={() => {
               pasteClipboard();
@@ -52,7 +54,7 @@ export default function Modals({
               Coller
             </button>
           )}
-          {canEdit && (
+          {canEdit && contextMenu.type !== 'cell' && (
             <button onClick={() => {
               deleteSelectedItem();
               setContextMenu(null);
