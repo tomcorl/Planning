@@ -1267,10 +1267,10 @@ export default function App() {
           expandLeftRef.current = setTimeout(() => {
             expandLeftRef.current = null;
             expandCooldownRef.current = setTimeout(() => { expandCooldownRef.current = null; }, 2000);
-            setCalendarStart((prev) => addDays(prev, -100));
-            setCalendarLength((prev) => prev + 100);
+            setCalendarStart((prev) => addDays(prev, -30));
+            setCalendarLength((prev) => prev + 30);
             setTimeout(() => {
-              if (scrollRef.current) scrollRef.current.scrollLeft += 100 * CELL_WIDTH;
+              if (scrollRef.current) scrollRef.current.scrollLeft += 30 * CELL_WIDTH;
             }, 0);
           }, 250);
         }
