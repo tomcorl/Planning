@@ -283,9 +283,9 @@ button:active {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--line);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 900;
 }
 
@@ -440,14 +440,14 @@ button:active {
 .company-header-cell {
   background: var(--surface-3) !important;
   font-weight: 900;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--text);
   border-bottom: 2px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 8px;
   box-shadow: none !important;
   z-index: 3;
 }
