@@ -176,6 +176,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
 }) {
   const cb = callbacksRef.current;
   const lastHoverRef = React.useRef(null);
+  const resizeDragRef = React.useRef(false);
   const totalDays = visibleDays.length;
   const gridTemplateColumns = `260px repeat(${totalDays}, ${cellWidth}px)`;
   const rowHeight = Math.round(56 + (cellWidth - 26) * (78 - 56) / 26);
@@ -223,12 +224,16 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (deleteBtn) return;
     if (teamInput) return;
 
-    if (resizeHandle && type === 'dragstart') {
-      e.preventDefault();
-      return;
+    if (type === 'dragstart') {
+      if (resizeDragRef.current) {
+        resizeDragRef.current = false;
+        e.preventDefault();
+        return;
+      }
     }
 
     if (resizeHandle && type === 'mousedown') {
+      resizeDragRef.current = true;
       const ch = chantierBloc || resizeHandle.closest('[data-ch]');
       if (ch) {
         const side = resizeHandle.dataset.rs;
