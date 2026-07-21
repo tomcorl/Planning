@@ -226,8 +226,6 @@ button:active {
 .grid-row {
   display: grid;
   min-width: max-content;
-  content-visibility: auto;
-  contain-intrinsic-block-size: 56px;
 }
 
 .month-grid {

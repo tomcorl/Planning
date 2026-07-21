@@ -1,5 +1,7 @@
 import React from 'react';
 
+const EMPTY = [];
+
 function sameOrAfter(a, b) {
   if (!a || !b) return false;
   return a >= b;
@@ -422,8 +424,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 </div>
 
                 {visibleDays.map((day, dayIdx) => {
-                  const segments = chantiersParCellule.get(`${equipeIndex}-${dayIdx}`) || [];
-                  const congeItems = (congeSegments.get(`${equipeIndex}-${dayIdx}`) || []);
+                  const segments = chantiersParCellule.get(`${equipeIndex}-${dayIdx}`) || EMPTY;
+                  const congeItems = (congeSegments.get(`${equipeIndex}-${dayIdx}`) || EMPTY);
                   const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                   const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
 
