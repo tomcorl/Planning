@@ -704,7 +704,6 @@ export default function App() {
   function splitChantier(chantier) {
     const endDate = getEndDateForChantier(chantier);
     const days = visibleDays
-      .map((d, i) => ({ ...d, i }))
       .filter(
         (d) =>
           sameOrAfter(d.date, chantier.start) && sameOrBefore(d.date, endDate)
@@ -713,25 +712,26 @@ export default function App() {
     if (days.length === 0) return [];
 
     const segments = [];
-    let segStart = null;
+    let segStartDate = null;
 
-    for (const d of days) {
+    for (let i = 0; i < days.length; i++) {
+      const d = days[i];
       const blockedFerie = isFerie(d.date);
       const blockedAout = !chantier.force_aout && isAugustClosure(d.date);
       const blockedConge = isCongeForTeam(chantier.equipe, d.date);
 
       if (blockedFerie || blockedAout || blockedConge) {
-        if (segStart !== null) {
-          segments.push({ start: segStart, end: d.i - 1 });
-          segStart = null;
+        if (segStartDate !== null) {
+          segments.push({ startDate: segStartDate, endDate: days[i - 1].date });
+          segStartDate = null;
         }
       } else {
-        if (segStart === null) segStart = d.i;
+        if (segStartDate === null) segStartDate = d.date;
       }
     }
 
-    if (segStart !== null) {
-      segments.push({ start: segStart, end: days[days.length - 1].i });
+    if (segStartDate !== null) {
+      segments.push({ startDate: segStartDate, endDate: days[days.length - 1].date });
     }
 
     return segments;
@@ -1247,13 +1247,17 @@ export default function App() {
         }, 1000);
       }
 
-      // Right-edge expansion: debounced, cooldown 2s after each expansion
+      // Right-edge expansion: sliding window — shift right, total stays at 500
       if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
         if (!expandRightRef.current && !expandCooldownRef.current) {
           expandRightRef.current = setTimeout(() => {
             expandRightRef.current = null;
             expandCooldownRef.current = setTimeout(() => { expandCooldownRef.current = null; }, 2000);
-            setCalendarLength((prev) => prev + 100);
+            setCalendarLength(500);
+            setCalendarStart((prev) => addDays(prev, 100));
+            setTimeout(() => {
+              if (scrollRef.current) scrollRef.current.scrollLeft -= 100 * CELL_WIDTH;
+            }, 0);
           }, 250);
         }
       } else if (expandRightRef.current) {
@@ -1261,16 +1265,16 @@ export default function App() {
         expandRightRef.current = null;
       }
 
-      // Left-edge expansion: debounced, cooldown 2s after each expansion
+      // Left-edge expansion: sliding window — shift left, total stays at 500
       if (el.scrollLeft < 200) {
         if (!expandLeftRef.current && !expandCooldownRef.current) {
           expandLeftRef.current = setTimeout(() => {
             expandLeftRef.current = null;
             expandCooldownRef.current = setTimeout(() => { expandCooldownRef.current = null; }, 2000);
-            setCalendarStart((prev) => addDays(prev, -30));
-            setCalendarLength((prev) => prev + 30);
+            setCalendarLength(500);
+            setCalendarStart((prev) => addDays(prev, -100));
             setTimeout(() => {
-              if (scrollRef.current) scrollRef.current.scrollLeft += 30 * CELL_WIDTH;
+              if (scrollRef.current) scrollRef.current.scrollLeft += 100 * CELL_WIDTH;
             }, 0);
           }, 250);
         }
@@ -1294,8 +1298,8 @@ export default function App() {
     const idx = dayIndex(date);
     const el = scrollRef.current;
     if (idx < 0) {
-      setCalendarStart(addDays(toDate(date), -30));
-      setCalendarLength(120);
+      setCalendarStart(addDays(toDate(date), -140));
+      setCalendarLength(500);
       setTimeout(() => {
         const el2 = scrollRef.current;
         if (el2) el2.scrollLeft = 30 * cellWidth;
@@ -1408,81 +1412,45 @@ export default function App() {
   const deferredConges = useDeferredValue(conges);
   const deferredVisibleDays = useDeferredValue(visibleDays);
 
+  function getDatesBetween(start, end) {
+    const dates = [];
+    let current = start;
+    while (sameOrBefore(current, end)) {
+      dates.push(current);
+      current = addDays(current, 1);
+    }
+    return dates;
+  }
+
   const congeSegmentsMap = useMemo(() => {
     const map = new Map();
     for (const c of conges) {
-      const start = dayIndex(c.start);
-      if (start === -1) continue;
       const endDate = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
-      const end = dayIndex(endDate);
-      if (end === -1) continue;
-      const seg = { start, end: Math.max(start, end) };
+      const seg = { startDate: c.start, endDate };
       const eqs = c.allEquipes
         ? teams.map((_, t) => t).filter(t => teams[t].companyId === (c.companyId || teams[c.equipe]?.companyId))
         : [c.equipe];
       for (const eq of eqs) {
-        for (let d = seg.start; d <= seg.end; d++) {
-          const key = `${eq}-${d}`;
+        for (const date of getDatesBetween(seg.startDate, seg.endDate)) {
+          const key = `${eq}-${date}`;
           if (!map.has(key)) map.set(key, []);
           map.get(key).push({ conge: c, seg });
         }
       }
     }
     return map;
-  }, [conges, visibleDays, teams]);
+  }, [conges, teams]);
 
-  const chantiersParCelluleCacheRef = useRef(null);
+  const chantiersParCelluleRef = useRef(new Map());
+  const chantiersParCelluleVersionRef = useRef(null);
 
   const chantiersParCellule = useMemo(() => {
-    const cache = chantiersParCelluleCacheRef.current;
-    const depsKey = `${deferredConges.length}|${holidays.size}|${deferredVisibleDays[0]?.date}-${deferredVisibleDays[deferredVisibleDays.length-1]?.date}`;
+    const cache = chantiersParCelluleRef.current;
+    const dataKey = `${deferredChantiers.length}|${holidays.size}|${deferredConges.length}`;
 
-    if (cache && cache.depsKey === depsKey) {
-      const newByTeam = {};
-      deferredChantiers.forEach(c => {
-        if (!newByTeam[c.equipe]) newByTeam[c.equipe] = [];
-        newByTeam[c.equipe].push(c.id);
-      });
-      const allTeams = new Set([...Object.keys(cache.byTeam || {}).map(Number), ...Object.keys(newByTeam).map(Number)]);
-      const changedTeams = new Set();
-      allTeams.forEach(t => {
-        const old = (cache.byTeam[t] || []).sort((a, b) => a - b).join(',');
-        const nw = (newByTeam[t] || []).sort((a, b) => a - b).join(',');
-        if (old !== nw) changedTeams.add(t);
-      });
-
-      if (changedTeams.size > 0 && changedTeams.size <= allTeams.size * 0.75) {
-        const map = new Map(cache.map);
-        for (const key of cache.map.keys()) {
-          const team = Number(key.split('-')[0]);
-          if (changedTeams.has(team)) map.delete(key);
-        }
-        const byEquipe = {};
-        deferredChantiers.filter(c => changedTeams.has(c.equipe)).forEach((chantier) => {
-          const segments = splitChantier(chantier).filter(Boolean);
-          const segLens = segments.map(s => s.end - s.start + 1);
-          const maxSegLen = segLens.length ? Math.max(...segLens) : 0;
-          segments.forEach((seg, si) => {
-            if (!byEquipe[chantier.equipe]) byEquipe[chantier.equipe] = [];
-            byEquipe[chantier.equipe].push({ chantier, seg, segIndex: si, segCount: segments.length, longestLen: maxSegLen });
-          });
-        });
-        Object.values(byEquipe).forEach((items) => {
-          items.sort((a, b) => a.seg.start - b.seg.start);
-          let lastEnd = -1;
-          items.forEach(({ chantier, seg, segIndex, segCount, longestLen }) => {
-            if (seg.start <= lastEnd) return;
-            for (let d = seg.start; d <= seg.end; d++) {
-              const key = `${chantier.equipe}-${d}`;
-              if (!map.has(key)) map.set(key, []);
-              map.get(key).push({ chantier, seg, i: 0, stack: 0, segIndex, segCount, longestLen });
-            }
-            lastEnd = seg.end;
-          });
-        });
-        chantiersParCelluleCacheRef.current = { depsKey, map, byTeam: newByTeam };
-        return map;
-      }
+    if (dataKey !== chantiersParCelluleVersionRef.current) {
+      chantiersParCelluleVersionRef.current = dataKey;
+      cache.clear();
     }
 
     const map = new Map();
@@ -1490,7 +1458,7 @@ export default function App() {
 
     deferredChantiers.forEach((chantier) => {
       const segments = splitChantier(chantier).filter(Boolean);
-      const segLens = segments.map(s => s.end - s.start + 1);
+      const segLens = segments.map(s => dayIndex(s.endDate) - dayIndex(s.startDate) + 1);
       const maxSegLen = segLens.length ? Math.max(...segLens) : 0;
       segments.forEach((seg, si) => {
         if (!byEquipe[chantier.equipe]) byEquipe[chantier.equipe] = [];
@@ -1499,25 +1467,23 @@ export default function App() {
     });
 
     Object.values(byEquipe).forEach((items) => {
-      items.sort((a, b) => a.seg.start - b.seg.start);
-      let lastEnd = -1;
+      items.sort((a, b) => a.seg.startDate < b.seg.startDate ? -1 : a.seg.startDate > b.seg.startDate ? 1 : 0);
+      let lastEndDate = '';
       items.forEach(({ chantier, seg, segIndex, segCount, longestLen }) => {
-        if (seg.start <= lastEnd) return;
-        for (let d = seg.start; d <= seg.end; d++) {
-          const key = `${chantier.equipe}-${d}`;
-          if (!map.has(key)) map.set(key, []);
-          map.get(key).push({ chantier, seg, i: 0, stack: 0, segIndex, segCount, longestLen });
+        if (seg.startDate <= lastEndDate) return;
+        for (const date of getDatesBetween(seg.startDate, seg.endDate)) {
+          const key = `${chantier.equipe}-${date}`;
+          if (!cache.has(key)) cache.set(key, []);
+          const arr = cache.get(key);
+          if (!arr.some(item => item.chantier.id === chantier.id && item.seg.startDate === seg.startDate)) {
+            arr.push({ chantier, seg, i: 0, stack: 0, segIndex, segCount, longestLen });
+          }
+          map.set(key, arr);
         }
-        lastEnd = seg.end;
+        lastEndDate = seg.endDate;
       });
     });
 
-    const byTeam = {};
-    deferredChantiers.forEach(c => {
-      if (!byTeam[c.equipe]) byTeam[c.equipe] = [];
-      byTeam[c.equipe].push(c.id);
-    });
-    chantiersParCelluleCacheRef.current = { depsKey, map, byTeam };
     return map;
   }, [deferredChantiers, conges, holidays, deferredVisibleDays]);
 

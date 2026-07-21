@@ -23,7 +23,7 @@ function getConducteur(conducteurs, id) {
 
 const CellContent = React.memo(function CellContent({
   baseClassName, isSelected, isDragPreview, isResizePreview,
-  segments, congeItems, dayIdx,
+  segments, congeItems,
   cellWidth, blocH, blocT,
   selectedItem, conducteurs, canEdit, resize,
   cb, dayEq, dayDa, dayIdxMap,
@@ -39,9 +39,9 @@ const CellContent = React.memo(function CellContent({
 
   return (
     <div className={cellClassName} data-eq={dayEq} data-da={dayDa}>
-      {segments.filter(({ seg }) => dayIdx === seg.start && dayIdx <= seg.end).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
+      {segments.filter(({ seg }) => dayDa === seg.startDate).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
         const conducteur = getConducteur(conducteurs, chantier.conducteurId);
-        const segLen = seg.end - seg.start + 1;
+        const segLen = dayIndex(seg.endDate) - dayIndex(seg.startDate) + 1;
         const isFirstSegment = segIndex === 0;
         const isLastSegment = segIndex === segCount - 1;
         let width = segLen * cellWidth - 8;
@@ -73,7 +73,7 @@ const CellContent = React.memo(function CellContent({
               zIndex: resize?.id === chantier.id ? 9999 : undefined,
               opacity: resize?.id === chantier.id ? 0.85 : undefined,
               ...(resize?.id === chantier.id && resize.previewStart && isFirstSegment
-                ? { left: 3 + (dayIndex(resize.previewStart) - seg.start) * cellWidth }
+                ? { left: 3 + (dayIndex(resize.previewStart) - dayIndex(seg.startDate)) * cellWidth }
                 : {}),
             }}
             title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
@@ -96,8 +96,8 @@ const CellContent = React.memo(function CellContent({
         );
       })}
 
-      {congeItems.filter(({ seg }) => dayIdx === seg.start && dayIdx <= seg.end).map(({ conge, seg }) => {
-        const segLen = seg.end - seg.start + 1;
+      {congeItems.filter(({ seg }) => dayDa === seg.startDate).map(({ conge, seg }) => {
+        const segLen = dayIndex(seg.endDate) - dayIndex(seg.startDate) + 1;
         const cH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
         const cT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
         return (
@@ -119,10 +119,10 @@ const CellContent = React.memo(function CellContent({
       })}
 
       {resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === dayEq && (() => {
+        if (dayDa !== resize.previewStart) return null;
         const pStart = dayIndex(resize.previewStart);
         const pEnd = dayIndex(resize.previewEnd);
         if (pStart === -1 || pEnd === -1) return null;
-        if (dayIdx !== pStart) return null;
         const pLen = pEnd - pStart + 1;
         return (
           <div className="bloc resize-preview-bloc"
@@ -136,7 +136,7 @@ const CellContent = React.memo(function CellContent({
     </div>
   );
 }, function areEqual(prev, next) {
-  if (prev.dayIdx !== next.dayIdx || prev.baseClassName !== next.baseClassName) return false;
+  if (prev.baseClassName !== next.baseClassName) return false;
   if (prev.isSelected !== next.isSelected || prev.isDragPreview !== next.isDragPreview || prev.isResizePreview !== next.isResizePreview) return false;
   if (prev.cellWidth !== next.cellWidth || prev.blocH !== next.blocH || prev.blocT !== next.blocT) return false;
   if (prev.dayEq !== next.dayEq || prev.dayDa !== next.dayDa) return false;
@@ -425,8 +425,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 </div>
 
                 {visibleDays.map((day, dayIdx) => {
-                  const segments = chantiersParCellule.get(`${equipeIndex}-${dayIdx}`) || EMPTY;
-                  const congeItems = (congeSegments.get(`${equipeIndex}-${dayIdx}`) || EMPTY);
+                  const segments = chantiersParCellule.get(`${equipeIndex}-${day.date}`) || EMPTY;
+                  const congeItems = (congeSegments.get(`${equipeIndex}-${day.date}`) || EMPTY);
                   const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                   const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
 
@@ -444,7 +444,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                       isResizePreview={res}
                       segments={segments}
                       congeItems={congeItems}
-                      dayIdx={dayIdx}
                       cellWidth={cellWidth}
                       blocH={blocH}
                       blocT={blocT}
