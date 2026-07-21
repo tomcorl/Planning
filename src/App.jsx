@@ -429,8 +429,6 @@ export default function App() {
     } catch (e) {
       console.error('Failed to load company data:', e);
       throw e;
-    } finally {
-      setDataLoading(false);
     }
   }
 

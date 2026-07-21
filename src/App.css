@@ -219,6 +219,29 @@ button:active {
   min-width: max-content;
 }
 
+.main-grid {
+  display: flex;
+  flex-direction: column;
+  min-width: max-content;
+}
+
+.grid-row {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.grid-row.company-header-row {
+  position: sticky;
+  z-index: 10003;
+  background: var(--surface-3);
+  height: 34px;
+}
+
+.grid-row-body {
+  display: flex;
+  min-width: max-content;
+}
+
 .month-grid {
   grid-auto-rows: 28px;
 }
@@ -230,7 +253,7 @@ button:active {
 .planning-header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 10002;
 }
 
 
@@ -395,6 +418,8 @@ button:active {
   gap: 8px;
   padding: 0 8px;
   box-shadow: 6px 0 16px var(--shadow);
+  width: 260px;
+  flex-shrink: 0;
 }
 
 .team-cell.odd {
@@ -422,7 +447,6 @@ button:active {
   gap: 8px;
   padding: 0 12px;
   box-shadow: none !important;
-  z-index: 10002;
   z-index: 3;
 }
 
@@ -543,6 +567,8 @@ button:active {
   position: relative;
   background: var(--surface);
   overflow: visible;
+  width: var(--cell-w, 26px);
+  flex: 0 0 var(--cell-w, 26px);
 }
 
 .cell.odd {

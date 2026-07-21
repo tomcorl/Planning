@@ -371,8 +371,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           </div>
         </div>
 
-        <div className="grid main-grid"
-          style={{ gridTemplateColumns, gridAutoRows: rowHeight }}
+        <div className="main-grid"
           onMouseDown={handleGridEvent}
           onMouseOver={handleGridEvent}
           onDragOver={handleGridEvent}
@@ -384,10 +383,14 @@ const PlanningGrid = React.memo(function PlanningGrid({
             if (row.type === 'separator') {
               return (
                 <React.Fragment key={row.id}>
-                  <div className="team-cell separator-row" />
-                  {visibleDays.map((day) => (
-                    <div key={`sep-${day.date}`} className="cell separator-cell" />
-                  ))}
+                  <div className="grid-row">
+                    <div className="team-cell separator-row" />
+                    <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px` }}>
+                      {visibleDays.map((day) => (
+                        <div key={`sep-${day.date}`} className="cell separator-cell" />
+                      ))}
+                    </div>
+                  </div>
                 </React.Fragment>
               );
             }
@@ -395,10 +398,14 @@ const PlanningGrid = React.memo(function PlanningGrid({
             if (row.type === 'company-header') {
               return (
                 <React.Fragment key={row.id}>
-                  <div className="team-cell company-header-cell" style={{ top: headerHeight }}><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
-                  {visibleDays.map((day) => (
-                    <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
-                  ))}
+                  <div className="grid-row company-header-row" style={{ top: headerHeight }}>
+                    <div className="team-cell company-header-cell"><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
+                    <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px` }}>
+                      {visibleDays.map((day) => (
+                        <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
+                      ))}
+                    </div>
+                  </div>
                 </React.Fragment>
               );
             }
@@ -408,60 +415,64 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
             return (
               <React.Fragment key={isPending ? row.id : `team-${row.teamId}`}>
-                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
-                  {isPending ? null : (
-                    <>
-                      <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.numInCompany}</div>
-                      <input
-                        key={`name-${row.name}`}
-                        defaultValue={row.name}
-                        aria-label="Nom de l'équipe"
-                        onBlur={(e) => cb.updateTeam(row.teamId, e.target.value)}
-                        style={{ fontSize: Math.round(13 + (cellWidth - 26) * 3 / 26) }}
-                      />
-                      {canEdit && <button
-                        className="delete-team"
-                        onClick={() => cb.deleteTeam(row.teamId)}
-                      >×</button>}
-                    </>
-                  )}
+                <div className="grid-row" style={{ height: rowHeight }}>
+                  <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
+                    {isPending ? null : (
+                      <>
+                        <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.numInCompany}</div>
+                        <input
+                          key={`name-${row.name}`}
+                          defaultValue={row.name}
+                          aria-label="Nom de l'équipe"
+                          onBlur={(e) => cb.updateTeam(row.teamId, e.target.value)}
+                          style={{ fontSize: Math.round(13 + (cellWidth - 26) * 3 / 26) }}
+                        />
+                        {canEdit && <button
+                          className="delete-team"
+                          onClick={() => cb.deleteTeam(row.teamId)}
+                        >×</button>}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px` }}>
+                    {visibleDays.map((day, dayIdx) => {
+                      const segments = chantiersParCellule.get(`${equipeIndex}-${dayIdx}`) || EMPTY;
+                      const congeItems = (congeSegments.get(`${equipeIndex}-${dayIdx}`) || EMPTY);
+                      const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
+                      const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
+
+                      const baseClassName = `cell${equipeIndex % 2 ? ' odd' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${isAugustClosure(day.date) ? ' august-closure' : ''}${day.date === today ? ' today' : ''}${isPending ? ' pending-cell' : ''}`;
+                      const sel = isSelected(equipeIndex, day.date);
+                      const drag = dragPreview?.equipe === equipeIndex && dragPreview?.date === day.date;
+                      const res = resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex && sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd);
+
+                      return (
+                        <CellContent
+                          key={`${equipeIndex}-${day.date}`}
+                          baseClassName={baseClassName}
+                          isSelected={sel}
+                          isDragPreview={drag}
+                          isResizePreview={res}
+                          segments={segments}
+                          congeItems={congeItems}
+                          dayIdx={dayIdx}
+                          cellWidth={cellWidth}
+                          blocH={blocH}
+                          blocT={blocT}
+                          selectedItem={selectedItem}
+                          conducteurs={conducteurs}
+                          canEdit={canEdit}
+                          resize={resize}
+                          cb={cb}
+                          dayEq={equipeIndex}
+                          dayDa={day.date}
+                          dayIdxMap={dayIdxMemo}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
-
-                {visibleDays.map((day, dayIdx) => {
-                  const segments = chantiersParCellule.get(`${equipeIndex}-${dayIdx}`) || EMPTY;
-                  const congeItems = (congeSegments.get(`${equipeIndex}-${dayIdx}`) || EMPTY);
-                  const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
-                  const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
-
-                  const baseClassName = `cell${equipeIndex % 2 ? ' odd' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${isAugustClosure(day.date) ? ' august-closure' : ''}${day.date === today ? ' today' : ''}${isPending ? ' pending-cell' : ''}`;
-                  const sel = isSelected(equipeIndex, day.date);
-                  const drag = dragPreview?.equipe === equipeIndex && dragPreview?.date === day.date;
-                  const res = resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex && sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd);
-
-                  return (
-                    <CellContent
-                      key={`${equipeIndex}-${day.date}`}
-                      baseClassName={baseClassName}
-                      isSelected={sel}
-                      isDragPreview={drag}
-                      isResizePreview={res}
-                      segments={segments}
-                      congeItems={congeItems}
-                      dayIdx={dayIdx}
-                      cellWidth={cellWidth}
-                      blocH={blocH}
-                      blocT={blocT}
-                      selectedItem={selectedItem}
-                      conducteurs={conducteurs}
-                      canEdit={canEdit}
-                      resize={resize}
-                      cb={cb}
-                      dayEq={equipeIndex}
-                      dayDa={day.date}
-                      dayIdxMap={dayIdxMemo}
-                    />
-                  );
-                })}
               </React.Fragment>
             );
           })}
