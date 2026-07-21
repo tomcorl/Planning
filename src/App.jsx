@@ -131,7 +131,7 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('theme')) || 'light'; } catch { return 'light'; }
   });
   const cellWidth = CELL_WIDTH;
-  const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -60));
+  const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -40));
   const [calendarLength, setCalendarLength] = useState(400);
   const [jumpDate, setJumpDate] = useState(today);
 
