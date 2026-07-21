@@ -66,6 +66,7 @@ const CellContent = React.memo(function CellContent({
             draggable={!resize && canEdit}
             onDragStart={(e) => cb.onDragStart(e, chantier.id, 'chantier')}
             style={{
+              ...(resize?.id === chantier.id && !isFirstSegment ? { display: 'none' } : {}),
               width,
               top: blocT,
               height: blocH,
