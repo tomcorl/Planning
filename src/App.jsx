@@ -196,7 +196,11 @@ export default function App() {
     return set;
   }, [holidays]);
 
+  const congeBlockedSetRef = useRef(null);
   const congeBlockedSet = useMemo(() => {
+    const congeKey = conges.map(c => `${c.id}:${c.start}:${c.duree}:${c.equipe}:${c.allEquipes}`).join('|');
+    const key = `${congeKey}|${ferieSet.size}`;
+    if (congeBlockedSetRef.current?.key === key) return congeBlockedSetRef.current.set;
     const set = new Set();
     for (const c of conges) {
       const end = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
@@ -218,6 +222,7 @@ export default function App() {
         safety++;
       }
     }
+    congeBlockedSetRef.current = { key, set };
     return set;
   }, [conges, teams, ferieSet]);
 
@@ -1463,7 +1468,8 @@ export default function App() {
   const congeSegmentsCacheRef = useRef(null);
   const congeSegmentsMap = useMemo(() => {
     const cache = congeSegmentsCacheRef.current;
-    const depsKey = `${conges.length}|${visibleDays.length}|${teams.length}|${teams.map(t=>t.companyId).join(',')}`;
+    const congeKey = conges.map(c => `${c.id}:${c.start}:${c.duree}:${c.equipe}:${c.allEquipes}`).join('|');
+    const depsKey = `${congeKey}|${visibleDays.length}|${visibleDays[0]?.date}-${visibleDays[visibleDays.length-1]?.date}`;
     if (cache && cache.depsKey === depsKey) return cache.map;
 
     const prevMap = cache ? cache.map : null;
@@ -1527,7 +1533,11 @@ export default function App() {
         if (old !== nw) changedTeams.add(t);
       });
 
-      if (changedTeams.size > 0 && changedTeams.size <= allTeams.size * 0.75) {
+      if (changedTeams.size === 0) {
+        return cache.map;
+      }
+
+      if (changedTeams.size <= allTeams.size * 0.75) {
         const map = new Map(cache.map);
         for (const key of cache.map.keys()) {
           const team = Number(key.split('-')[0]);
