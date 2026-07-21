@@ -391,7 +391,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 title={d.date}
               >
                 {cellWidth >= 36 && <span>{d.weekday}</span>}
-                <strong style={{ fontSize: Math.max(8, Math.min(12, 8 + (cellWidth - 26) * 4 / 26)) }}>{d.dayNumber}</strong>
+                <strong>{d.dayNumber}</strong>
               </div>
             ))}
           </div>
