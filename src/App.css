@@ -197,14 +197,14 @@ button:active {
 .planning-scroll {
   height: calc(100vh - 100px);
   overflow: scroll;
-  margin: 0 10px 10px;
+  margin: 0 10px 2px;
   border-radius: 14px;
   background: var(--surface);
   box-shadow: 0 4px 24px var(--shadow), 0 0 0 1px var(--line-soft);
   border: 1px solid var(--line-soft);
   position: relative;
   isolation: isolate;
-  padding-bottom: 28px;
+  padding-bottom: 8px;
   will-change: scroll-position;
 }
 
