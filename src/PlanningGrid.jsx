@@ -223,6 +223,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (deleteBtn) return;
     if (teamInput) return;
 
+    if (resizeHandle && type === 'dragstart') {
+      e.preventDefault();
+      return;
+    }
+
     if (resizeHandle && type === 'mousedown') {
       const ch = chantierBloc || resizeHandle.closest('[data-ch]');
       if (ch) {
@@ -374,6 +379,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
         <div className="main-grid"
           onMouseDown={handleGridEvent}
           onMouseOver={handleGridEvent}
+          onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
           onDoubleClick={handleGridEvent}
