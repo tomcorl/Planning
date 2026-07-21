@@ -225,8 +225,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (teamInput) return;
 
     if (type === 'dragstart') {
-      if (resizeDragRef.current) {
-        resizeDragRef.current = false;
+      const fromResize = resizeDragRef.current;
+      resizeDragRef.current = false;
+      if (fromResize) {
         e.preventDefault();
         return;
       }
@@ -248,6 +249,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
         return;
       }
     }
+
+    // Reset resizeDragRef on any non-resize mousedown to prevent stale state
+    if (type === 'mousedown') resizeDragRef.current = false;
 
     if (chantierBloc) {
       const id = Number(chantierBloc.dataset.ch);
