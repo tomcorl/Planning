@@ -1515,7 +1515,7 @@ export default function App() {
 
   const chantiersParCellule = useMemo(() => {
     const cache = chantiersParCelluleCacheRef.current;
-    const depsKey = `${deferredConges.length}|${holidays.size}|${deferredVisibleDays[0]?.date}-${deferredVisibleDays[deferredVisibleDays.length-1]?.date}`;
+    const depsKey = `${JSON.stringify(deferredChantiers)}|${deferredConges.length}|${holidays.size}|${deferredVisibleDays[0]?.date}-${deferredVisibleDays[deferredVisibleDays.length-1]?.date}`;
 
     if (cache && cache.depsKey === depsKey) {
       const newByTeam = {};
