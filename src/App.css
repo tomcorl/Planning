@@ -204,6 +204,7 @@ button:active {
   position: relative;
   isolation: isolate;
   padding-bottom: 28px;
+  will-change: scroll-position;
 }
 
 .planning-container {
@@ -253,7 +254,6 @@ button:active {
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line-soft);
   z-index: 10;
-  box-shadow: 6px 0 16px var(--shadow);
 }
 
 .month-corner {
@@ -401,7 +401,6 @@ button:active {
   justify-content: center;
   gap: 8px;
   padding: 0 8px;
-  box-shadow: 6px 0 16px var(--shadow);
 }
 
 .team-cell.odd {
