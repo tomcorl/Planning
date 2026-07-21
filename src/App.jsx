@@ -351,7 +351,7 @@ export default function App() {
         const defaultTeams = [];
         for (const comp of allData.companies) {
           for (let i = 0; i < DEFAULT_TEAMS_COUNT; i++) {
-            defaultTeams.push({ nom: `Équipe ${i + 1}`, companyId: comp.id });
+            defaultTeams.push({ nom: `Équipe ${i + 1}`, companyId: comp.id, ordre: i });
           }
         }
         setTeams(defaultTeams);
@@ -744,10 +744,21 @@ export default function App() {
   }
 
   function addTeamToCompany(companyId) {
-    const numInCompany = teams.filter((t) => t.companyId === companyId).length + 1;
+    const companyTeams = teams.filter((t) => t.companyId === companyId);
+    const numInCompany = companyTeams.length + 1;
     const name = `Équipe ${numInCompany}`;
+    const ordre = companyTeams.reduce((max, t) => Math.max(max, t.ordre ?? 0), -1) + 1;
+    const newTeam = { nom: name, companyId, ordre };
     commit(() => {
-      setTeams((prev) => [...prev, { nom: name, companyId }]);
+      setTeams((prev) => {
+        let idx = prev.length;
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (prev[i].companyId === companyId) { idx = i + 1; break; }
+        }
+        const next = [...prev];
+        next.splice(idx, 0, newTeam);
+        return next;
+      });
     });
   }
 
