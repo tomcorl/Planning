@@ -203,9 +203,7 @@ button:active {
   box-shadow: 0 4px 24px var(--shadow), 0 0 0 1px var(--line-soft);
   border: 1px solid var(--line-soft);
   position: relative;
-  isolation: isolate;
   padding-bottom: 8px;
-  will-change: scroll-position;
 }
 
 .planning-container {
@@ -217,15 +215,6 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .grid {
-  display: grid;
-  min-width: max-content;
-}
-
-.main-grid {
-  display: block;
-}
-
-.grid-row {
   display: grid;
   min-width: max-content;
 }
@@ -255,6 +244,7 @@ button:active {
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line-soft);
   z-index: 10;
+  box-shadow: 6px 0 16px var(--shadow);
 }
 
 .month-corner {
@@ -402,6 +392,7 @@ button:active {
   justify-content: center;
   gap: 8px;
   padding: 0 8px;
+  box-shadow: 6px 0 16px var(--shadow);
 }
 
 .team-cell.odd {
