@@ -39,12 +39,11 @@ export async function loadPlanningData() {
 
   return {
     companies: data.companies || [],
-    equipes: (data.equipes || []).map((e) => ({ id: e.id, nom: e.nom, companyId: e.company_id, ordre: e.ordre })),
+    equipes: (data.equipes || []).map((e) => ({ nom: e.nom, companyId: e.company_id, ordre: e.ordre })),
     conducteurs: (data.conducteurs || []).map((c) => ({ id: c.id, nom: c.nom, color: c.color })),
     chantiers: dedupedChantiers,
     conges: dedupedConges,
     customFeries: (data.custom_feries || []).map((f) => ({ ...f, companyId: f.company_id })),
-    companiesMigrated: data.companies_migrated || {},
   };
 }
 
@@ -255,7 +254,6 @@ export async function saveAllPlanningData(data) {
     nom: c.nom || 'Congé', all_equipes: c.allEquipes ? 1 : 0,
   }));
   const equipeRows = equipes.map(e => ({
-    id: Number.isInteger(e.id) && e.id > 0 ? e.id : undefined,
     company_id: e.companyId, nom: e.nom, ordre: e.ordre,
   }));
   const conducteurRows = conducteurs.map(c => ({

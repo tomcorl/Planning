@@ -198,8 +198,8 @@ export default function Modals({
                     {form.allEquipes ? (
                       <select aria-label="Équipe" value={form.companyId || companies[0]?.id || ''} onChange={(e) => {
                         const compId = e.target.value;
-                        const firstId = teams.find(t => t.companyId === compId)?.id;
-                        setForm({ ...form, companyId: compId, equipe: firstId ?? form.equipe });
+                        const firstIdx = teams.findIndex(t => t.companyId === compId);
+                        setForm({ ...form, companyId: compId, equipe: firstIdx >= 0 ? firstIdx : form.equipe });
                       }}>
                         {companies.map((comp) => (
                           <option key={comp.id} value={comp.id}>{comp.nom}</option>
@@ -208,12 +208,12 @@ export default function Modals({
                     ) : (
                       <select aria-label="Équipe" value={form.equipe} onChange={(e) => setForm({ ...form, equipe: e.target.value })}>
                         {companies.map((comp) => {
-                          const compTeams = teams.filter((t) => t.companyId === comp.id);
+                          const compTeams = teams.map((t, i) => ({ ...t, index: i })).filter((t) => t.companyId === comp.id);
                           if (compTeams.length === 0) return null;
                           return (
                             <optgroup key={comp.id} label={comp.nom}>
                               {compTeams.map((t) => (
-                                <option key={t.id} value={t.id}>{t.nom}</option>
+                                <option key={t.index} value={t.index}>{t.nom}</option>
                               ))}
                             </optgroup>
                           );
@@ -224,7 +224,7 @@ export default function Modals({
                       <label className="toggle-switch">
                         <input type="checkbox" checked={form.allEquipes || false} onChange={(e) => {
                           if (e.target.checked) {
-                            const team = teams.find(t => t.id === Number(form.equipe));
+                            const team = teams[form.equipe];
                             setForm({ ...form, allEquipes: true, companyId: team?.companyId || companies[0]?.id || '' });
                           } else {
                             setForm({ ...form, allEquipes: false, companyId: undefined });
