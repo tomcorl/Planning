@@ -219,6 +219,17 @@ button:active {
   min-width: max-content;
 }
 
+.main-grid {
+  display: block;
+}
+
+.grid-row {
+  display: grid;
+  min-width: max-content;
+  content-visibility: auto;
+  contain-intrinsic-block-size: 56px;
+}
+
 .month-grid {
   grid-auto-rows: 28px;
 }
