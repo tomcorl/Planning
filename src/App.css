@@ -204,6 +204,7 @@ button:active {
   border: 1px solid var(--line-soft);
   position: relative;
   padding-bottom: 8px;
+  will-change: scroll-position;
 }
 
 .planning-container {
@@ -394,6 +395,7 @@ button:active {
   justify-content: center;
   gap: 8px;
   padding: 0 8px;
+  isolation: isolate;
   box-shadow: 6px 0 16px var(--shadow);
 }
 
@@ -542,6 +544,7 @@ button:active {
   position: relative;
   background: var(--surface);
   overflow: visible;
+  contain: paint;
 }
 
 .cell.odd {
