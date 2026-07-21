@@ -160,6 +160,7 @@ export default function App() {
   const lastXRef = useRef(0);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const lastCellRef = useRef(null);
 
   const [modal, setModal] = useState({
     open: false,
@@ -777,7 +778,7 @@ export default function App() {
   function startSelection(e, equipe, date) {
     if (e.button !== 0) return;
     if (resize || modal.open) return;
-
+    lastCellRef.current = { equipe, date };
     setSelection({ equipe, startDate: date, endDate: date });
   }
 
@@ -1354,14 +1355,16 @@ export default function App() {
   function pasteClipboard(targetEquipe, targetDate) {
     const clip = keyRef.current.clipboard;
     if (!clip || !canEdit) return;
+    const cell = lastCellRef.current;
+    const equipe = targetEquipe ?? cell?.equipe ?? clip.equipe ?? 0;
+    const date = targetDate ?? cell?.date;
     commit(() => {
       if (clip.sourceType === 'chantier') {
-        const equipe = targetEquipe ?? clip.equipe ?? 0;
         const newItem = {
           ...clip,
           id: nextLocalId(),
           equipe,
-          start: targetDate ? nextWorkingDay(targetDate, equipe) : nextWorkingDay(today, equipe),
+          start: date ? nextWorkingDay(date, equipe) : nextWorkingDay(today, equipe),
         };
         setChantiers((prev) => applyInsertion(prev, newItem, equipe, newItem.start, true));
         setSelectedItem({ type: 'chantier', id: newItem.id });
@@ -1370,7 +1373,7 @@ export default function App() {
         const newItem = {
           ...clip,
           id: nextLocalId(),
-          start: targetDate || today,
+          start: date || today,
         };
         setConges((prev) => [...prev, newItem]);
         setSelectedItem({ type: 'conge', id: newItem.id });
