@@ -131,8 +131,8 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('theme')) || 'light'; } catch { return 'light'; }
   });
   const cellWidth = CELL_WIDTH;
-  const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -40));
-  const [calendarLength, setCalendarLength] = useState(400);
+  const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -140));
+  const [calendarLength, setCalendarLength] = useState(500);
   const [jumpDate, setJumpDate] = useState(today);
 
   const [companies, setCompanies] = useState([]);
