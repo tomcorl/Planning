@@ -161,16 +161,6 @@ export default function App() {
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const lastCellRef = useRef(null);
-  const VISIBLE_BUFFER = 50;
-  const visibleRangeRef = useRef({ start: 0, end: 9999 });
-  const [visibleRange, setVisibleRange] = useState(() => {
-    let savedLeft = 0;
-    try { savedLeft = JSON.parse(localStorage.getItem('scrollPos'))?.left || 0; } catch {}
-    const vp = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const start = Math.max(0, Math.floor((savedLeft - 260) / cellWidth) - VISIBLE_BUFFER);
-    const end = Math.min(9999, Math.ceil((savedLeft + vp - 260) / cellWidth) + VISIBLE_BUFFER);
-    return { start, end };
-  });
 
   const [modal, setModal] = useState({
     open: false,
@@ -1246,16 +1236,6 @@ export default function App() {
     scrollThrottleRef.current = requestAnimationFrame(() => {
       scrollThrottleRef.current = null;
 
-      const left = el.scrollLeft;
-      const cw = el.clientWidth;
-      const total = visibleDays.length;
-      const newStart = Math.max(0, Math.floor((left - 260) / cellWidth) - VISIBLE_BUFFER);
-      const newEnd = Math.min(total, Math.ceil((left + cw - 260) / cellWidth) + VISIBLE_BUFFER);
-      if (newStart !== visibleRangeRef.current.start || newEnd !== visibleRangeRef.current.end) {
-        visibleRangeRef.current = { start: newStart, end: newEnd };
-        setVisibleRange({ start: newStart, end: newEnd });
-      }
-
       // Throttle localStorage writes to max 1/s (synchronous IO is slow)
       if (!localStorageThrottleRef.current) {
         localStorageThrottleRef.current = setTimeout(() => {
@@ -1297,21 +1277,6 @@ export default function App() {
       }
     });
   }
-
-  // Correct visibleRange after expansion (visibleDays length changes)
-  useEffect(() => {
-    if (!scrollRef.current || visibleDays.length === 0) return;
-    const el = scrollRef.current;
-    const left = el.scrollLeft;
-    const cw = el.clientWidth || 1200;
-    const total = visibleDays.length;
-    const newStart = Math.max(0, Math.floor((left - 260) / cellWidth) - VISIBLE_BUFFER);
-    const newEnd = Math.min(total, Math.ceil((left + cw - 260) / cellWidth) + VISIBLE_BUFFER);
-    if (newStart !== visibleRangeRef.current.start || newEnd !== visibleRangeRef.current.end) {
-      visibleRangeRef.current = { start: newStart, end: newEnd };
-      setVisibleRange({ start: newStart, end: newEnd });
-    }
-  }, [visibleDays.length, cellWidth]);
 
   function goToday() {
     const idx = dayIndex(today);
@@ -1687,7 +1652,6 @@ export default function App() {
       <PlanningGrid
         gridRows={gridRows}
         visibleDays={visibleDays}
-        visibleRange={visibleRange}
         weekGroups={weekGroups}
         monthGroups={monthGroups}
         chantiersParCellule={chantiersParCellule}

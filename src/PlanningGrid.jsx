@@ -27,7 +27,6 @@ const CellContent = React.memo(function CellContent({
   cellWidth, blocH, blocT,
   selectedItem, conducteurs, canEdit, resize,
   cb, dayEq, dayDa, dayIdxMap,
-  style,
 }) {
   const cellClassName = baseClassName
     + (isSelected ? ' selected' : '')
@@ -39,7 +38,7 @@ const CellContent = React.memo(function CellContent({
   }
 
   return (
-    <div className={cellClassName} style={style} data-eq={dayEq} data-da={dayDa}>
+    <div className={cellClassName} data-eq={dayEq} data-da={dayDa}>
       {segments.filter(({ seg }) => dayIdx === seg.start && dayIdx <= seg.end).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
         const conducteur = getConducteur(conducteurs, chantier.conducteurId);
         const segLen = seg.end - seg.start + 1;
@@ -158,7 +157,6 @@ const CellContent = React.memo(function CellContent({
 const PlanningGrid = React.memo(function PlanningGrid({
   gridRows,
   visibleDays,
-  visibleRange,
   weekGroups,
   monthGroups,
   chantiersParCellule,
@@ -176,7 +174,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   dragThrottle,
   scrollRef,
 }) {
-  const { start: vStart, end: vEnd } = visibleRange;
   const cb = callbacksRef.current;
   const lastHoverRef = React.useRef(null);
   const totalDays = visibleDays.length;
@@ -381,15 +378,14 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
-          {gridRows.map((row, rowIndex) => {
+          {gridRows.map((row) => {
             if (row.type === 'separator') {
               return (
                 <React.Fragment key={row.id}>
-                  <div className="team-cell separator-row" style={{ gridColumn: 1, gridRow: rowIndex + 1 }} />
-                  {visibleDays.map((day, dayIdx) => {
-                    if (dayIdx < vStart || dayIdx > vEnd) return null;
-                    return <div key={`sep-${day.date}`} className="cell separator-cell" style={{ gridColumn: dayIdx + 2, gridRow: rowIndex + 1 }} />;
-                  })}
+                  <div className="team-cell separator-row" />
+                  {visibleDays.map((day) => (
+                    <div key={`sep-${day.date}`} className="cell separator-cell" />
+                  ))}
                 </React.Fragment>
               );
             }
@@ -397,11 +393,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
             if (row.type === 'company-header') {
               return (
                 <React.Fragment key={row.id}>
-                  <div className="team-cell company-header-cell" style={{ gridColumn: 1, gridRow: rowIndex + 1 }}><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
-                  {visibleDays.map((day, dayIdx) => {
-                    if (dayIdx < vStart || dayIdx > vEnd) return null;
-                    return <div key={`${row.id}-${day.date}`} className="cell company-header-day" style={{ gridColumn: dayIdx + 2, gridRow: rowIndex + 1 }} />;
-                  })}
+                  <div className="team-cell company-header-cell"><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
+                  {visibleDays.map((day) => (
+                    <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
+                  ))}
                 </React.Fragment>
               );
             }
@@ -411,7 +406,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
             return (
               <React.Fragment key={isPending ? row.id : `team-${row.teamIndex}`}>
-                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`} style={{ gridColumn: 1, gridRow: rowIndex + 1 }}>
+                <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
                   {isPending ? null : (
                     <>
                       <div className="avatar" style={{ fontSize: Math.round(10 + (cellWidth - 26) * 4 / 26) }}>{row.numInCompany}</div>
@@ -430,7 +425,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 </div>
 
                 {visibleDays.map((day, dayIdx) => {
-                  if (dayIdx < vStart || dayIdx > vEnd) return null;
                   const segments = chantiersParCellule.get(`${equipeIndex}-${dayIdx}`) || EMPTY;
                   const congeItems = (congeSegments.get(`${equipeIndex}-${dayIdx}`) || EMPTY);
                   const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
@@ -462,7 +456,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                       dayEq={equipeIndex}
                       dayDa={day.date}
                       dayIdxMap={dayIdxMemo}
-                      style={{ gridColumn: dayIdx + 2, gridRow: rowIndex + 1 }}
                     />
                   );
                 })}
