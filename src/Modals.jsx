@@ -48,7 +48,7 @@ export default function Modals({
           )}
           {clipboard && canEdit && (
             <button onClick={() => {
-              pasteClipboard();
+              pasteClipboard(contextMenu.equipe, contextMenu.date);
               setContextMenu(null);
             }}>
               Coller

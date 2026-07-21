@@ -286,7 +286,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
     if (type === 'contextmenu') {
       e.preventDefault();
-      cb.handleContextMenu(e, 'cell');
+      cb.handleContextMenu(e, 'cell', null, equipe, date);
       return;
     }
 

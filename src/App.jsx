@@ -1351,24 +1351,26 @@ export default function App() {
     if (wasChantier) setTimeout(reflowTeams, 0);
   }
 
-  function pasteClipboard() {
+  function pasteClipboard(targetEquipe, targetDate) {
     const clip = keyRef.current.clipboard;
     if (!clip || !canEdit) return;
     commit(() => {
       if (clip.sourceType === 'chantier') {
+        const equipe = targetEquipe ?? clip.equipe ?? 0;
         const newItem = {
           ...clip,
           id: nextLocalId(),
-          start: nextWorkingDay(today, clip.equipe || 0),
+          equipe,
+          start: targetDate ? nextWorkingDay(targetDate, equipe) : nextWorkingDay(today, equipe),
         };
-        setChantiers((prev) => applyInsertion(prev, newItem, newItem.equipe, newItem.start, true));
+        setChantiers((prev) => applyInsertion(prev, newItem, equipe, newItem.start, true));
         setSelectedItem({ type: 'chantier', id: newItem.id });
       }
       if (clip.sourceType === 'conge') {
         const newItem = {
           ...clip,
           id: nextLocalId(),
-          start: today,
+          start: targetDate || today,
         };
         setConges((prev) => [...prev, newItem]);
         setSelectedItem({ type: 'conge', id: newItem.id });
@@ -1377,11 +1379,11 @@ export default function App() {
     if (clip.sourceType === 'chantier') setTimeout(reflowTeams, 0);
   }
 
-  function handleContextMenu(e, type, id) {
+  function handleContextMenu(e, type, id, equipe, date) {
     e.preventDefault();
     e.stopPropagation();
     if (id != null) setSelectedItem({ type, id });
-    setContextMenu({ x: e.clientX, y: e.clientY, type, id });
+    setContextMenu({ x: e.clientX, y: e.clientY, type, id, equipe, date });
   }
 
   // Close context menu on click anywhere
