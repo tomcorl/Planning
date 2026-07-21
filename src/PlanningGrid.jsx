@@ -178,7 +178,18 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const cb = callbacksRef.current;
   const lastHoverRef = React.useRef(null);
   const resizeDragRef = React.useRef(false);
+  const initialScrolled = React.useRef(false);
   const totalDays = visibleDays.length;
+
+  React.useEffect(() => {
+    if (initialScrolled.current) return;
+    initialScrolled.current = true;
+    const idx = dayIndex(today);
+    if (idx < 0) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollLeft = Math.max(0, idx * cellWidth - 500);
+  }, []);
   const gridTemplateColumns = `260px repeat(${totalDays}, ${cellWidth}px)`;
   const rowHeight = Math.round(56 + (cellWidth - 26) * (78 - 56) / 26);
   const dateGridH = Math.round(28 + (cellWidth - 26) * (44 - 28) / 26);

@@ -291,21 +291,10 @@ export default function App() {
   // Persist UI preferences to localStorage (client-side only)
   useEffect(() => localStorage.setItem('theme', JSON.stringify(theme)), [theme]);
 
-  // Restore scroll position or jump to today after data loads
+  // Jump to today after data loads
   useEffect(() => {
     if (!loadedRef.current || dataLoading) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    requestAnimationFrame(() => {
-      const saved = (() => { try { return JSON.parse(localStorage.getItem('scrollPos')); } catch { return null; } })();
-      if (saved) {
-        const max = Math.max(0, el.scrollWidth - el.clientWidth);
-        el.scrollLeft = Math.min(max, saved.left || 0);
-        el.scrollTop = Math.min(Math.max(0, saved.top || 0), el.scrollHeight - el.clientHeight);
-      } else {
-        goToday();
-      }
-    });
+    goToday();
   }, [dataLoading]);
 
   // Debounced persistence to Supabase (runs 800ms after data settles)
