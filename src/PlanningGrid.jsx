@@ -367,7 +367,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
           </div>
         </div>
 
-        <div className="main-grid"
+        <div className="grid main-grid"
+          style={{ gridTemplateColumns, gridAutoRows: rowHeight }}
           onMouseDown={handleGridEvent}
           onMouseOver={handleGridEvent}
           onDragOver={handleGridEvent}
@@ -378,23 +379,23 @@ const PlanningGrid = React.memo(function PlanningGrid({
           {gridRows.map((row) => {
             if (row.type === 'separator') {
               return (
-                <div key={row.id} className="grid-row" style={{ gridTemplateColumns, gridAutoRows: rowHeight }}>
+                <React.Fragment key={row.id}>
                   <div className="team-cell separator-row" />
                   {visibleDays.map((day) => (
                     <div key={`sep-${day.date}`} className="cell separator-cell" />
                   ))}
-                </div>
+                </React.Fragment>
               );
             }
 
             if (row.type === 'company-header') {
               return (
-                <div key={row.id} className="grid-row" style={{ gridTemplateColumns, gridAutoRows: rowHeight }}>
+                <React.Fragment key={row.id}>
                   <div className="team-cell company-header-cell"><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
                   {visibleDays.map((day) => (
                     <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
                   ))}
-                </div>
+                </React.Fragment>
               );
             }
 
@@ -402,7 +403,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
             const isPending = row.type === 'pending';
 
             return (
-              <div key={isPending ? row.id : `team-${row.teamIndex}`} className="grid-row" style={{ gridTemplateColumns, gridAutoRows: rowHeight }}>
+              <React.Fragment key={isPending ? row.id : `team-${row.teamIndex}`}>
                 <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
                   {isPending ? null : (
                     <>
@@ -456,7 +457,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                     />
                   );
                 })}
-              </div>
+              </React.Fragment>
             );
           })}
         </div>
