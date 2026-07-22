@@ -680,11 +680,10 @@ button:active {
 
 .chantier-content {
   height: 100%;
-  padding: 5px 8px 16px 8px;
+  padding: 5px 8px 22px 8px;
   position: relative;
   pointer-events: none;
   overflow: hidden;
-  z-index: 2;
 }
 
 .chantier-title-row {
@@ -716,18 +715,26 @@ button:active {
 }
 
 .chantier-detail {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 18px;
+  z-index: 1;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 700;
   color: #000;
+  line-height: 18px;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.2;
+  pointer-events: none;
 }
 
 .chantier-content small {
   position: absolute;
-  bottom: 16px;
+  bottom: 22px;
   right: 8px;
   font-size: 10px;
   font-weight: 900;
@@ -738,7 +745,7 @@ button:active {
   position: absolute;
   bottom: 0;
   left: 0;
-  height: 10px;
+  height: 18px;
   width: 100%;
   border-radius: 0 0 8px 8px;
 }
