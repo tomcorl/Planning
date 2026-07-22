@@ -1075,13 +1075,6 @@ export default function App() {
     });
   }
 
-  useEffect(() => {
-    if (!loadedRef.current || !session) return;
-    if (skipNextReflowRef.current) { skipNextReflowRef.current = false; return; }
-    const timer = setTimeout(reflowTeams, 200);
-    return () => clearTimeout(timer);
-  }, [customFeries, conges, session]);
-
   function onDragStart(e, id, type) {
     e.dataTransfer.setData('itemId', String(id));
     e.dataTransfer.setData('itemType', type || 'chantier');
@@ -1110,7 +1103,6 @@ export default function App() {
     commit(() => {
       setChantiers((prev) => applyInsertion(prev, item, equipe, start));
     });
-    setTimeout(reflowTeams, 0);
   }
 
   function startResize(e, chantier, side) {
@@ -1392,7 +1384,6 @@ export default function App() {
     });
     if (ref.modalOpen) closeModal();
     setSelectedItem(null);
-    if (wasChantier) setTimeout(reflowTeams, 0);
   }
 
   function pasteClipboard(targetEquipe, targetDate) {
@@ -1422,7 +1413,6 @@ export default function App() {
         setSelectedItem({ type: 'conge', id: newItem.id });
       }
     });
-    if (clip.sourceType === 'chantier') setTimeout(reflowTeams, 0);
   }
 
   function handleContextMenu(e, type, id, equipe, date) {
