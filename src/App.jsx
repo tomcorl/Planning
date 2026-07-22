@@ -281,6 +281,7 @@ export default function App() {
 
   // ── Supabase Auth + Data Loading ──
   const loadedRef = useRef(false);
+  const skipNextReflowRef = useRef(true);
   const localIdRef = useRef(0);
 
   function nextLocalId() {
@@ -414,7 +415,6 @@ export default function App() {
       setHistory({ past: [], future: [] });
       setSelection(null);
       setSelectedItem(null);
-      setTimeout(reflowTeams, 0);
     } catch (e) {
       console.error('Failed to load company data:', e);
       throw e;
@@ -1083,6 +1083,7 @@ export default function App() {
 
   useEffect(() => {
     if (!loadedRef.current || !session) return;
+    if (skipNextReflowRef.current) { skipNextReflowRef.current = false; return; }
     const timer = setTimeout(reflowTeams, 200);
     return () => clearTimeout(timer);
   }, [customFeries, conges, session]);
