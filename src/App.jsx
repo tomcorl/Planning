@@ -1351,10 +1351,11 @@ export default function App() {
   }
 
   function quickAdd() {
+    const firstTeamId = teams[0]?.id ?? 0;
     setForm({
       id: null,
-      equipe: 0,
-      start: nextWorkingDay(today, 0),
+      equipe: firstTeamId,
+      start: nextWorkingDay(today, firstTeamId),
       duree: 3,
       nom: '',
       conducteurId: conducteurs[0]?.id || null,
