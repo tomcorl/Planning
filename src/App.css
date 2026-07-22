@@ -606,7 +606,7 @@ button:active {
 }
 
 .selected {
-  background: rgba(22, 163, 74, 0.08) !important;
+  background: rgba(22, 163, 74, 0.25) !important;
 }
 
 /* ═══════════════════════════════════════════════
