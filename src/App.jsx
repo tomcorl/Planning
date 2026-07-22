@@ -953,7 +953,6 @@ export default function App() {
     });
 
     closeModal();
-    setTimeout(reflowTeams, 0);
   }
 
   function applyInsertion(
