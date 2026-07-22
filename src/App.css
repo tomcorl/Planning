@@ -684,6 +684,7 @@ button:active {
   position: relative;
   pointer-events: none;
   overflow: hidden;
+  z-index: 2;
 }
 
 .chantier-title-row {
