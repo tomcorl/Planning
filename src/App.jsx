@@ -638,11 +638,6 @@ export default function App() {
 
       const { selectedItem: sel, modalOpen, clipboard: clip, canEdit: ce } = keyRef.current;
 
-      if ((key === 'Delete' || key === 'Backspace') && sel && !modalOpen && ce) {
-        e.preventDefault();
-        deleteSelectedItem();
-      }
-
       if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'c' && sel && !modalOpen) {
         e.preventDefault();
         const item = sel.type === 'chantier'
