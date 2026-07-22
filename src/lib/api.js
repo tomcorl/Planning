@@ -256,7 +256,7 @@ export async function saveAllPlanningData(data) {
     nom: c.nom || 'Congé', all_equipes: c.allEquipes ? 1 : 0,
   }));
   const equipeRows = equipes.map(e => ({
-    id: Number.isInteger(e.id) && e.id > 0 ? e.id : undefined,
+    id: Number.isInteger(e.id) && e.id !== 0 ? e.id : undefined,
     company_id: e.companyId, nom: e.nom, ordre: e.ordre,
   }));
   const conducteurRows = conducteurs.map(c => ({

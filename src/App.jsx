@@ -328,6 +328,20 @@ export default function App() {
             return changed ? updated : prev;
           });
         }
+        // Update equipe IDs from DB response (new rows get real IDs)
+        if (result?.equipes) {
+          const eqNomCompanyIdToId = new Map(result.equipes.map(r => [`${r.nom}-${r.company_id}`, r.id]));
+          const idMap = new Map();
+          teams.forEach(t => {
+            const dbId = eqNomCompanyIdToId.get(`${t.nom}-${t.companyId}`);
+            if (dbId && t.id !== dbId) idMap.set(t.id, dbId);
+          });
+          if (idMap.size > 0) {
+            setTeams(prev => prev.map(t => idMap.has(t.id) ? { ...t, id: idMap.get(t.id) } : t));
+            setChantiers(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
+            setConges(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
+          }
+        }
       } catch (e) {
         console.error('saveAllPlanningData failed', e);
       }
@@ -780,7 +794,7 @@ export default function App() {
     const numInCompany = companyTeams.length + 1;
     const name = `Équipe ${numInCompany}`;
     const ordre = companyTeams.reduce((max, t) => Math.max(max, t.ordre ?? 0), -1) + 1;
-    const newTeam = { nom: name, companyId, ordre };
+    const newTeam = { id: nextLocalId(), nom: name, companyId, ordre };
     commit(() => {
       setTeams((prev) => {
         let idx = prev.length;
