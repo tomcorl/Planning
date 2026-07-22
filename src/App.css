@@ -680,7 +680,7 @@ button:active {
 
 .chantier-content {
   height: 100%;
-  padding: 5px 8px 22px 8px;
+  padding: 5px 8px 18px 8px;
   position: relative;
   pointer-events: none;
   overflow: hidden;
@@ -717,15 +717,15 @@ button:active {
 .chantier-detail {
   position: absolute;
   bottom: 0;
-  left: 0;
+  left: 4px;
   right: 0;
-  height: 18px;
+  height: 12px;
   z-index: 1;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: #000;
-  line-height: 18px;
-  text-align: center;
+  line-height: 12px;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -734,7 +734,7 @@ button:active {
 
 .chantier-content small {
   position: absolute;
-  bottom: 22px;
+  bottom: 18px;
   right: 8px;
   font-size: 10px;
   font-weight: 900;
@@ -745,7 +745,7 @@ button:active {
   position: absolute;
   bottom: 0;
   left: 0;
-  height: 18px;
+  height: 12px;
   width: 100%;
   border-radius: 0 0 8px 8px;
 }
