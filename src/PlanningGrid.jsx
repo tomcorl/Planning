@@ -87,8 +87,8 @@ const CellContent = React.memo(function CellContent({
             <div className="chantier-content">
               <div className="chantier-title-row">
                 <strong>{chantier.nom}</strong>
-                {(isLongestSeg || segLen > 15) && chantier.detail && <em>{chantier.detail}</em>}
               </div>
+              {chantier.detail && <div className="chantier-detail">{chantier.detail}</div>}
               {isLastSegment && <small>{chantier.duree} j</small>}
             </div>
             <div className="conducteur-bar" style={{ background: conducteur?.color || '#64748b' }} />
