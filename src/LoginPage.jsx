@@ -38,7 +38,7 @@ export default function LoginPage({
         /* ── LEFT PANEL (image side) ── */
         .login-image {
           position: relative;
-          flex: 0.9;
+          flex: 0.4;
           display: flex;
           flex-direction: column;
           justify-content: flex-end;
@@ -176,7 +176,7 @@ export default function LoginPage({
 
         /* ── RIGHT PANEL (form side) ── */
         .login-form-panel {
-          flex: 0.9;
+          flex: 1.6;
           display: flex;
           flex-direction: column;
           justify-content: center;
@@ -375,10 +375,13 @@ export default function LoginPage({
 
         @media (max-width: 900px) {
           .login-root { flex-direction: column; }
-          .login-image { flex: none; min-height: 240px; padding: 32px; justify-content: flex-end; }
-          .image-title { font-size: 28px; }
+          .login-image { display: none; }
           .login-form-panel { flex: none; padding: 32px 24px; }
           .form-inner { max-width: 100%; }
+        }
+        @media (min-width: 901px) and (max-width: 1100px) {
+          .login-image { flex: 0.3; }
+          .login-form-panel { flex: 1; }
         }
       `}</style>
 
@@ -430,7 +433,6 @@ export default function LoginPage({
                 value={loginForm.email}
                 onChange={(e) => onChange({ ...loginForm, email: e.target.value })}
                 autoComplete="username"
-                placeholder="ex: admin@demo.fr"
               />
             </div>
             <div className="field">
@@ -441,7 +443,6 @@ export default function LoginPage({
                 value={loginForm.password}
                 onChange={(e) => onChange({ ...loginForm, password: e.target.value })}
                 autoComplete="current-password"
-                placeholder="1234 pour tester"
               />
             </div>
             {loginError && <div className="login-error">{loginError}</div>}
