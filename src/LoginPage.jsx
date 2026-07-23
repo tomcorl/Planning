@@ -180,14 +180,14 @@ export default function LoginPage({
           display: flex;
           flex-direction: column;
           justify-content: center;
-          padding: 48px 56px;
+          padding: 48px 80px;
           background: #fff;
           position: relative;
         }
 
         .form-inner {
           width: 100%;
-          max-width: 380px;
+          max-width: 480px;
           margin: 0 auto;
         }
 
@@ -251,7 +251,7 @@ export default function LoginPage({
 
         .form-header h2 {
           font-family: 'DM Serif Display', Georgia, serif;
-          font-size: 26px;
+          font-size: 30px;
           font-weight: 400;
           color: #142033;
           margin: 0;
@@ -288,12 +288,12 @@ export default function LoginPage({
 
         .field input {
           width: 100%;
-          padding: 12px 16px;
+          padding: 14px 18px;
           border: 1.5px solid #e2e8f0;
           border-radius: 10px;
           background: #fcfcfc;
           color: #142033;
-          font-size: 15px;
+          font-size: 16px;
           font-family: inherit;
           outline: none;
           transition: border-color 180ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
