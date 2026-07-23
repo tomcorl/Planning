@@ -187,44 +187,8 @@ export default function LoginPage({
 
         .form-inner {
           width: 100%;
-          max-width: 480px;
+          max-width: 560px;
           margin: 0 auto;
-        }
-
-        .form-logo {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          margin-bottom: 40px;
-          opacity: 0;
-          transform: translateY(12px);
-          transition: opacity 0.5s cubic-bezier(0.23, 1, 0.32, 1), transform 0.5s cubic-bezier(0.23, 1, 0.32, 1);
-        }
-
-        .form-logo.visible {
-          opacity: 1;
-          transform: translateY(0);
-        }
-
-        .form-logo-box {
-          width: 32px;
-          height: 32px;
-          background: #16a34a;
-          border-radius: 8px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #fff;
-          font-weight: 700;
-          font-size: 14px;
-          flex-shrink: 0;
-        }
-
-        .form-logo-text {
-          font-weight: 700;
-          font-size: 18px;
-          letter-spacing: -0.3px;
-          color: #142033;
         }
 
         .form-header {
@@ -413,11 +377,6 @@ export default function LoginPage({
       {/* ── RIGHT: Form side ── */}
       <div className="login-form-panel">
         <div className="form-inner">
-
-          <div className={`form-logo ${loaded ? 'visible' : ''}`}>
-            <div className="form-logo-box">PP</div>
-            <span className="form-logo-text">PlanPro</span>
-          </div>
 
           <div className={`form-header ${loaded ? 'visible' : ''}`}>
             <div className="label">Connexion</div>
