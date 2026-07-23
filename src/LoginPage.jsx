@@ -257,78 +257,6 @@ export default function LoginPage({
           margin: 0;
         }
 
-        .demo-section {
-          margin-bottom: 28px;
-          opacity: 0;
-          transform: translateY(12px);
-          transition: opacity 0.5s cubic-bezier(0.23, 1, 0.32, 1), transform 0.5s cubic-bezier(0.23, 1, 0.32, 1);
-          transition-delay: 0.2s;
-        }
-
-        .demo-section.visible {
-          opacity: 1;
-          transform: translateY(0);
-        }
-
-        .demo-label {
-          font-size: 11px;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.8px;
-          color: #94a3b8;
-          margin-bottom: 10px;
-        }
-
-        .demo-grid {
-          display: flex;
-          gap: 8px;
-        }
-
-        .demo-grid {
-          display: flex;
-          gap: 10px;
-        }
-
-        .demo-chip {
-          flex: 1;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 16px;
-          border-radius: 12px;
-          background: #f0fdf4;
-          border: 1.5px solid #bbf7d0;
-          cursor: pointer;
-          font-family: inherit;
-          font-size: 13px;
-          font-weight: 600;
-          color: #166534;
-          transition: background 150ms cubic-bezier(0.23, 1, 0.32, 1), border-color 150ms cubic-bezier(0.23, 1, 0.32, 1), transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
-        }
-
-        .demo-chip:hover {
-          background: #dcfce7;
-          border-color: #86efac;
-        }
-
-        .demo-chip:active {
-          transform: scale(0.97);
-        }
-
-        .demo-chip .mail {
-          color: #166534;
-        }
-
-        .demo-chip .sep {
-          color: #86efac;
-          flex-shrink: 0;
-        }
-
-        .demo-chip .pw {
-          color: #4ade80;
-          flex-shrink: 0;
-        }
-
         /* ── Form ── */
         .login-form {
           opacity: 0;
@@ -451,7 +379,6 @@ export default function LoginPage({
           .image-title { font-size: 28px; }
           .login-form-panel { flex: none; padding: 32px 24px; }
           .form-inner { max-width: 100%; }
-          .demo-grid { flex-direction: column; }
         }
       `}</style>
 
@@ -492,22 +419,6 @@ export default function LoginPage({
           <div className={`form-header ${loaded ? 'visible' : ''}`}>
             <div className="label">Connexion</div>
             <h2>Accéder à votre espace</h2>
-          </div>
-
-          <div className={`demo-section ${loaded ? 'visible' : ''}`}>
-            <div className="demo-label">Comptes de démonstration</div>
-            <div className="demo-grid">
-              <button type="button" className="demo-chip" onClick={() => onChange({ email: 'admin@demo.fr', password: '1234' })}>
-                <span className="mail">admin@demo.fr</span>
-                <span className="sep">/</span>
-                <span className="pw">1234</span>
-              </button>
-              <button type="button" className="demo-chip" onClick={() => onChange({ email: 'planning@demo.fr', password: '1234' })}>
-                <span className="mail">planning@demo.fr</span>
-                <span className="sep">/</span>
-                <span className="pw">1234</span>
-              </button>
-            </div>
           </div>
 
           <form className={`login-form ${loaded ? 'visible' : ''}`} onSubmit={handleSubmit}>
