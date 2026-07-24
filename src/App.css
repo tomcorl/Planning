@@ -1936,7 +1936,7 @@ button:active {
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 8px 24px var(--shadow-md);
-  z-index: 9999;
+  z-index: 10003;
 }
 
 .personal-dropdown-item {

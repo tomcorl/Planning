@@ -321,6 +321,7 @@ export async function loadPersonalPlans(userId) {
       duree: it.duree,
       nom: it.nom,
       color: it.color,
+      note: it.note || '',
     })),
   }));
 }
@@ -365,21 +366,21 @@ export async function savePersonalPlan(planId, rows, items) {
     await supabase.from('personal_plan_rows').delete().eq('plan_id', planId);
   }
 
-  // 2. Upsert rows one by one to capture temp -> real ID mapping
+  // 2. Insert new rows / update existing rows, capture temp -> real ID mapping
   const tempToReal = new Map();
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
-    const payload = { plan_id: planId, nom: r.nom, ordre: i };
-    if (r.id > 0) payload.id = r.id;
-
-    const { data, error } = await supabase
-      .from('personal_plan_rows')
-      .upsert(payload, { onConflict: 'id' })
-      .select('id')
-      .single();
-    if (error) { console.error('savePersonalPlan row', error); throw error; }
-    if (r.id < 0 && data) {
-      tempToReal.set(r.id, data.id);
+    if (r.id > 0) {
+      await supabase.from('personal_plan_rows')
+        .update({ nom: r.nom, ordre: i })
+        .eq('id', r.id);
+    } else {
+      const { data, error } = await supabase.from('personal_plan_rows')
+        .insert({ plan_id: planId, nom: r.nom, ordre: i })
+        .select('id')
+        .single();
+      if (error) { console.error('savePersonalPlan row insert', error); throw error; }
+      if (data) tempToReal.set(r.id, data.id);
     }
   }
 
@@ -394,22 +395,17 @@ export async function savePersonalPlan(planId, rows, items) {
     await supabase.from('personal_plan_items').delete().eq('plan_id', planId);
   }
 
-  // 4. Upsert items with resolved row IDs
+  // 4. Insert new items / update existing items with resolved row IDs
   for (const it of items) {
     const realRowId = tempToReal.get(it.rowId) || it.rowId;
-    const payload = {
-      plan_id: planId,
-      row_id: realRowId,
-      start: it.start,
-      duree: it.duree,
-      nom: it.nom || '',
-      color: it.color || '#b7c6d8',
-    };
-    if (it.id > 0) payload.id = it.id;
-
-    const { error } = await supabase
-      .from('personal_plan_items')
-      .upsert(payload, { onConflict: 'id' });
-    if (error) { console.error('savePersonalPlan item', error); throw error; }
+    if (it.id > 0) {
+      await supabase.from('personal_plan_items')
+        .update({ row_id: realRowId, start: it.start, duree: it.duree, nom: it.nom || '', color: it.color || '#b7c6d8', note: it.note || '' })
+        .eq('id', it.id);
+    } else {
+      const { error } = await supabase.from('personal_plan_items')
+        .insert({ plan_id: planId, row_id: realRowId, start: it.start, duree: it.duree, nom: it.nom || '', color: it.color || '#b7c6d8', note: it.note || '' });
+      if (error) { console.error('savePersonalPlan item insert', error); throw error; }
+    }
   }
 }
