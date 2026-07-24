@@ -1884,3 +1884,318 @@ button:active {
 .bloc-clipped-left.bloc-clipped-right {
   border-radius: 0;
 }
+
+/* ────────────────────────────────────────────
+   PERSONAL PLANNING – "Mes chantiers"
+   ──────────────────────────────────────────── */
+
+.personal-planning {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 52px);
+  overflow: hidden;
+}
+
+.personal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  flex-wrap: wrap;
+}
+
+.personal-plan-selector { position: relative; }
+
+.personal-plan-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: var(--surface, #fff);
+  color: var(--text, #1f2937);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.personal-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  z-index: 9999;
+}
+
+.personal-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border, #f3f4f6);
+}
+.personal-dropdown-item:last-child { border-bottom: none; }
+.personal-dropdown-item:hover { background: var(--hover, #f9fafb); }
+.personal-dropdown-item.active { background: rgba(22,163,74,0.12); font-weight: 600; }
+
+.personal-dropdown-name { flex: 1; }
+
+.personal-dropdown-delete {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.personal-dropdown-delete:hover { color: #dc2626; }
+
+.personal-dropdown-empty {
+  padding: 12px 14px;
+  color: #9ca3af;
+  font-size: 13px;
+  text-align: center;
+}
+
+.personal-add-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(22,163,74,0.4);
+  background: rgba(22,163,74,0.08);
+  color: #16a34a;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.personal-add-btn:hover { background: rgba(22,163,74,0.18); }
+
+.personal-plan-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text, #1f2937);
+  padding: 0 8px;
+}
+
+.personal-rename-input {
+  font-size: 16px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--text, #1f2937);
+  width: 200px;
+}
+
+.personal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+  color: #9ca3af;
+  gap: 16px;
+}
+.personal-empty p { font-size: 18px; margin: 0; }
+
+.personal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #9ca3af;
+  font-size: 16px;
+}
+
+.personal-scroll {
+  flex: 1;
+  overflow: auto;
+  overflow-y: auto;
+}
+
+.personal-grid {
+  display: grid;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.personal-corner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  border-right: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+  color: var(--text-muted, #6b7280);
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  min-width: 160px;
+}
+
+.personal-week-corner { height: 24px; }
+
+.personal-month-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  border-right: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.personal-week-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  border-right: 1px solid var(--border, #e5e7eb);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+
+.personal-date-grid { z-index: 5; position: sticky; top: 56px; }
+
+.personal-date-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  border-right: 1px solid var(--border, #e5e7eb);
+  font-size: 12px;
+  line-height: 1.1;
+  background: var(--surface, #fff);
+}
+.personal-date-cell .personal-date-weekday { font-size: 10px; color: #9ca3af; text-transform: capitalize; }
+.personal-date-cell strong { font-size: 13px; }
+
+.personal-date-cell.weekend { background: var(--weekend, #f9fafb); }
+.personal-date-cell.today { background: rgba(22,163,74,0.08); }
+.personal-date-cell.today strong { color: #16a34a; }
+
+.personal-row {
+  display: grid;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.personal-row-label {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 12px;
+  background: var(--surface, #fff);
+  border-right: 1px solid var(--border, #e5e7eb);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #1f2937);
+  min-width: 160px;
+  user-select: none;
+}
+
+.personal-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.personal-add-row {
+  cursor: pointer;
+  color: #16a34a;
+  font-weight: 500;
+  font-size: 12px;
+}
+.personal-add-row:hover { text-decoration: underline; }
+
+.personal-row-body {
+  display: grid;
+  grid-template-columns: repeat(120, var(--cell-w, 26px));
+}
+
+.personal-cell {
+  height: 38px;
+  border-right: 1px solid var(--border, #e5e7eb);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  position: relative;
+  overflow: visible;
+}
+.personal-cell.weekend { background: var(--weekend, #f9fafb); }
+.personal-cell.today { background: rgba(22,163,74,0.04); }
+
+.personal-bloc {
+  position: absolute;
+  top: 3px;
+  left: 1px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(0,0,0,0.75);
+  cursor: grab;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  z-index: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.personal-bloc:active { cursor: grabbing; }
+
+.personal-bloc-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.personal-context {
+  position: fixed;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  z-index: 99999;
+  min-width: 160px;
+  padding: 4px 0;
+}
+.personal-context > div {
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.personal-context > div:hover { background: var(--hover, #f3f4f6); }
+.personal-context > div.danger { color: #dc2626; }
+.personal-context > div.danger:hover { background: #fef2f2; }
+
+/* Week-boundary right border for personal planning */
+.personal-cell.week-boundary,
+.personal-date-cell.week-boundary {
+  border-right: 2px solid rgba(20, 83, 45, 0.25) !important;
+}

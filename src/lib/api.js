@@ -305,3 +305,106 @@ export async function updatePassword(newPassword) {
   });
   if (error) { console.error('update_password RPC', error); throw error; }
 }
+
+// ─── PERSONAL PLANS ────────────────────────────────────────
+
+export async function loadPersonalPlans(userId) {
+  const { data, error } = await supabase.rpc('get_personal_plans', { p_user_id: userId });
+  if (error) { console.error('loadPersonalPlans', error); throw error; }
+  return (data || []).map((plan) => ({
+    ...plan,
+    rows: (plan.rows || []).map((r) => ({ id: r.id, nom: r.nom, ordre: r.ordre })),
+    items: (plan.items || []).map((it) => ({
+      id: it.id,
+      rowId: it.row_id,
+      start: it.start,
+      duree: it.duree,
+      nom: it.nom,
+      color: it.color,
+    })),
+  }));
+}
+
+export async function createPersonalPlan(userId, nom, startDate) {
+  const { data, error } = await supabase
+    .from('personal_plans')
+    .insert({ user_id: userId, nom, start_date: startDate })
+    .select()
+    .single();
+  if (error) { console.error('createPersonalPlan', error); throw error; }
+  return data;
+}
+
+export async function deletePersonalPlan(planId) {
+  const { error } = await supabase
+    .from('personal_plans')
+    .delete()
+    .eq('id', planId);
+  if (error) { console.error('deletePersonalPlan', error); throw error; }
+}
+
+export async function renamePersonalPlan(planId, nom) {
+  const { error } = await supabase
+    .from('personal_plans')
+    .update({ nom })
+    .eq('id', planId);
+  if (error) { console.error('renamePersonalPlan', error); throw error; }
+}
+
+export async function savePersonalPlan(planId, rows, items) {
+  // Step 1: Upsert rows and collect ID mapping (temp -> real)
+  const tempToReal = new Map();
+  const rowRows = rows.map((r, i) => ({
+    id: r.id > 0 && r.id <= 2147483647 ? r.id : undefined,
+    plan_id: planId,
+    nom: r.nom,
+    ordre: i,
+  }));
+
+  const { data: upsertedRows, error: rowErr } = await supabase
+    .from('personal_plan_rows')
+    .upsert(rowRows, { onConflict: 'id' })
+    .select('id, nom, ordre');
+  if (rowErr) { console.error('savePersonalPlan rows', rowErr); throw rowErr; }
+
+  // Map temp IDs -> real IDs by matching nom+ordre
+  for (const dbRow of (upsertedRows || [])) {
+    const srcRow = rows[dbRow.ordre];
+    if (srcRow && srcRow.id < 0) {
+      tempToReal.set(srcRow.id, dbRow.id);
+    }
+  }
+
+  // Step 2: Build items with resolved row_id
+  const itemRows = items.map((it) => {
+    const realRowId = tempToReal.get(it.rowId) || it.rowId;
+    return {
+      id: it.id > 0 && it.id <= 2147483647 ? it.id : undefined,
+      row_id: realRowId,
+      start: it.start,
+      duree: it.duree,
+      nom: it.nom || '',
+      color: it.color || '#b7c6d8',
+    };
+  });
+
+  const { error: itemErr } = await supabase
+    .from('personal_plan_items')
+    .upsert(itemRows, { onConflict: 'id' });
+  if (itemErr) { console.error('savePersonalPlan items', itemErr); throw itemErr; }
+
+  // Step 3: Clean up deleted items (items in DB but not in our list)
+  const keepIds = itemRows.filter(r => r.id).map(r => r.id);
+  if (keepIds.length > 0) {
+    await supabase
+      .from('personal_plan_items')
+      .delete()
+      .eq('plan_id', planId)
+      .not('id', 'in', `(${keepIds.join(',')})`);
+  } else {
+    await supabase
+      .from('personal_plan_items')
+      .delete()
+      .eq('plan_id', planId);
+  }
+}

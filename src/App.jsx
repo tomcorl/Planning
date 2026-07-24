@@ -6,6 +6,7 @@ const AdminUsersPage = lazy(() => import('./AdminUsersPage.jsx'));
 const Modals = lazy(() => import('./Modals.jsx'));
 const LoginPage = lazy(() => import('./LoginPage.jsx'));
 const PasswordChangePage = lazy(() => import('./PasswordChangePage.jsx'));
+const PersonalPlanning = lazy(() => import('./PersonalPlanning.jsx'));
 import PlanningGrid from './PlanningGrid.jsx';
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
@@ -1719,6 +1720,12 @@ export default function App() {
             >
               Planning
             </button>
+            <button
+              className={activePage === 'personal' ? 'active-nav' : ''}
+              onClick={() => setActivePage('personal')}
+            >
+              Mes chantiers
+            </button>
             {isAdmin && (
               <button
                 className={activePage === 'users' ? 'active-nav' : ''}
@@ -1762,6 +1769,10 @@ export default function App() {
           onRemoveUser={removeUser}
           users={users}
         />
+      )}
+
+      {activePage === 'personal' && (
+        <PersonalPlanning user={session} />
       )}
 
       {activePage === 'planning' && (
