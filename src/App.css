@@ -230,7 +230,7 @@ button:active {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 5;
+  z-index: 0;
 }
 
 .week-separator-line {
@@ -238,8 +238,8 @@ button:active {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--line);
-  opacity: 0.5;
+  background: #14532d;
+  opacity: 0.35;
 }
 
 .grid-row {
@@ -257,6 +257,8 @@ button:active {
 .grid-row-body {
   display: flex;
   min-width: max-content;
+  position: relative;
+  z-index: 1;
 }
 
 .month-grid {
@@ -287,11 +289,13 @@ button:active {
   border-bottom: 1px solid var(--line-soft);
   z-index: 10;
   box-shadow: 6px 0 16px var(--shadow);
+  overflow: visible;
 }
 
 .month-corner {
   height: 28px;
   z-index: 3;
+  overflow: visible;
 }
 
 .week-corner {
@@ -304,6 +308,9 @@ button:active {
   border-bottom: 1px solid var(--line);
   font-size: 15px;
   font-weight: 900;
+  overflow: visible;
+  position: sticky;
+  left: 0;
 }
 
 .week-corner button {
@@ -620,10 +627,8 @@ button:active {
 }
 
 .conducteur-filter-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 100;
+  position: fixed;
+  z-index: 9999;
   min-width: 220px;
   max-height: 320px;
   overflow-y: auto;

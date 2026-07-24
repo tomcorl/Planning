@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 const EMPTY = [];
 
@@ -187,6 +188,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const totalDays = visibleDays.length;
 
   const [filterOpen, setFilterOpen] = React.useState(false);
+  const [filterPos, setFilterPos] = React.useState({ top: 0, left: 0 });
+  const filterBtnRef = React.useRef(null);
 
   React.useEffect(() => {
     if (!filterOpen) return;
@@ -439,37 +442,21 @@ const PlanningGrid = React.memo(function PlanningGrid({
               <strong>Équipes</strong>
               <div style={{ position: 'relative', marginLeft: 'auto' }}>
                 <button
+                  ref={filterBtnRef}
                   className="conducteur-filter-btn"
-                  onClick={() => setFilterOpen((v) => !v)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = filterBtnRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      setFilterPos({ top: rect.bottom + 4, left: rect.left });
+                    }
+                    setFilterOpen((v) => !v);
+                  }}
                 >
                   {filterConducteurIds.length > 0
                     ? `Filtrer (${filterConducteurIds.length})`
                     : 'Filtrer'}
                 </button>
-                {filterOpen && (
-                  <div className="conducteur-filter-dropdown">
-                    <div className="conducteur-filter-item" onClick={() => setFilterConducteurIds([])}>
-                      <span className={!filterConducteurIds.length ? 'active' : ''}>●</span>
-                      Tous les conducteurs
-                    </div>
-                    {conducteurs.map((c) => (
-                      <div
-                        key={c.id}
-                        className={`conducteur-filter-item ${filterConducteurIds.includes(c.id) ? 'active' : ''}`}
-                        onClick={() => {
-                          setFilterConducteurIds((prev) =>
-                            prev.includes(c.id)
-                              ? prev.filter((x) => x !== c.id)
-                              : [...prev, c.id]
-                          );
-                        }}
-                      >
-                        <span className="filter-check">{filterConducteurIds.includes(c.id) ? '✓' : ''}</span>
-                        {c.prenom} {c.nom}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
             {weekGroups.map((g, i) => (
@@ -615,6 +602,31 @@ const PlanningGrid = React.memo(function PlanningGrid({
           })}
         </div>
       </div>
+      {filterOpen && createPortal(
+        <div className="conducteur-filter-dropdown" style={{ top: filterPos.top, left: filterPos.left }} onClick={(e) => e.stopPropagation()}>
+          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterOpen(false); }}>
+            <span className={!filterConducteurIds.length ? 'active' : ''}>●</span>
+            Tous les conducteurs
+          </div>
+          {conducteurs.map((c) => (
+            <div
+              key={c.id}
+              className={`conducteur-filter-item ${filterConducteurIds.includes(c.id) ? 'active' : ''}`}
+              onClick={() => {
+                setFilterConducteurIds((prev) =>
+                  prev.includes(c.id)
+                    ? prev.filter((x) => x !== c.id)
+                    : [...prev, c.id]
+                );
+              }}
+            >
+              <span className="filter-check">{filterConducteurIds.includes(c.id) ? '✓' : ''}</span>
+              {c.prenom} {c.nom}
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
     </div>
   );
 });
