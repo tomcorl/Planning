@@ -1889,6 +1889,18 @@ button:active {
    PERSONAL PLANNING – "Mes chantiers"
    ──────────────────────────────────────────── */
 
+.personal-planning-wrap {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 58px);
+  overflow: hidden;
+}
+
+.personal-planning-wrap .planning-scroll {
+  height: calc(100vh - 58px - 52px);
+  flex: 1;
+}
+
 .personal-header {
   display: flex;
   align-items: center;

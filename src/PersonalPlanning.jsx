@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from './lib/supabase.js';
 import {
   loadPersonalPlans,
@@ -9,59 +10,61 @@ import {
 } from './lib/api.js';
 
 const CELL_W = 26;
-const ROW_LABEL_W = 160;
+const ROW_H = 52;
+const PERSONAL_COLORS = [
+  '#2563eb', '#93c5fd', '#eab308', '#15803d', '#6b7280',
+  '#f97316', '#7dd3fc', '#a78bfa', '#f472b6', '#34d399',
+];
+
+let nextTempId = -1;
 
 function addDays(dateStr, n) {
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + n);
   return d.toISOString().split('T')[0];
 }
-function diffDays(a, b) {
-  const da = new Date(a + 'T00:00:00');
-  const db = new Date(b + 'T00:00:00');
-  return Math.round((da - db) / 86400000);
-}
-function weekNumber(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-  const week1 = new Date(d.getFullYear(), 0, 4);
-  return 1 + Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+
+function formatDate(d) {
+  return d.toISOString().split('T')[0];
 }
 
-const PERSONAL_COLORS = [
-  '#b7c6d8', '#c7f9c7', '#f9f9c7', '#f9c7c7', '#c7e6f9',
-  '#e6c7f9', '#f9e6c7', '#c7f9f9', '#d8c7f9', '#f9c7e6',
-];
+function isWeekend(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const dow = d.getDay();
+  return dow === 0 || dow === 6;
+}
 
-let nextTempId = -1;
+function getIsoWeek(dateStr) {
+  const date = new Date(dateStr + 'T12:00:00');
+  const tmp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+  return Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+}
 
-function generateDays(startStr, count) {
-  const result = [];
-  for (let i = 0; i < count; i++) {
-    const date = addDays(startStr, i);
-    const dt = new Date(date + 'T00:00:00');
-    const dow = dt.getDay();
-    result.push({
+function generateDays(start, count) {
+  return Array.from({ length: count }, (_, i) => {
+    const d = addDays(start, i);
+    const date = d;
+    const dt = new Date(date + 'T12:00:00');
+    const monthShort = dt.toLocaleDateString('fr-FR', { month: 'short' });
+    const yearStr = String(dt.getFullYear()).slice(-2);
+    return {
       date,
       dayNumber: dt.getDate(),
       weekday: dt.toLocaleDateString('fr-FR', { weekday: 'short' }),
-      monthShort: dt.toLocaleDateString('fr-FR', { month: 'short' }),
+      weekend: isWeekend(date),
+      week: getIsoWeek(date),
       monthKey: `${dt.getFullYear()}-${dt.getMonth()}`,
-      monthLabel: dt.toLocaleDateString('fr-FR', { month: 'short' }) + ' ' + String(dt.getFullYear()).slice(-2),
-      weekend: dow === 0 || dow === 6,
-      week: weekNumber(date),
-    });
-  }
-  return result;
+      monthLabel: monthShort.charAt(0).toUpperCase() + monthShort.slice(1).replace('.', '') + '-' + yearStr,
+    };
+  });
 }
 
 export default function PersonalPlanning({ user }) {
   const scrollRef = useRef(null);
-  const today = useMemo(() => {
-    const d = new Date();
-    return d.toISOString().split('T')[0];
-  }, []);
+  const today = useMemo(() => formatDate(new Date()), []);
 
   const [plans, setPlans] = useState([]);
   const [activePlanId, setActivePlanId] = useState(null);
@@ -73,24 +76,32 @@ export default function PersonalPlanning({ user }) {
   const [renameInput, setRenameInput] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
+  const [calendarStart, setCalendarStart] = useState(() => addDays(today, -140));
+  const [calendarLength, setCalendarLength] = useState(500);
+
+  const [selection, setSelection] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [modal, setModal] = useState({ open: false, mode: 'creation' });
+  const [form, setForm] = useState(null);
+
   const saveTimerRef = useRef(null);
   const dragRef = useRef(null);
   const initialScrolled = useRef(false);
+  const selectionThrottle = useRef(null);
+  const expandRightRef = useRef(null);
+  const expandLeftRef = useRef(null);
+  const expandCooldownRef = useRef(null);
+  const scrollThrottleRef = useRef(null);
+  const lastCellRef = useRef(null);
 
   const activePlan = plans.find((p) => p.id === activePlanId);
-
-  const calendarStart = useMemo(() => addDays(today, -140), [today]);
-  const [calendarLength, setCalendarLength] = useState(400);
 
   const allDays = useMemo(
     () => generateDays(calendarStart, calendarLength),
     [calendarStart, calendarLength]
   );
 
-  const visibleDays = useMemo(() => {
-    if (!activePlan) return [];
-    return allDays;
-  }, [allDays, activePlan]);
+  const visibleDays = useMemo(() => allDays, [allDays]);
 
   const monthGroups = useMemo(() => {
     const groups = [];
@@ -137,11 +148,15 @@ export default function PersonalPlanning({ user }) {
   }, [weekGroups, visibleDays]);
 
   const gridTemplateColumns = useMemo(
-    () => `${ROW_LABEL_W}px repeat(${visibleDays.length}, ${CELL_W}px)`,
+    () => `260px repeat(${visibleDays.length}, ${CELL_W}px)`,
     [visibleDays.length]
   );
 
-  const itemsByRowAndDate = useMemo(() => {
+  const dateGridH = 38;
+
+  const rowByIdMap = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows]);
+
+  const itemsByRowDate = useMemo(() => {
     const m = new Map();
     for (const it of items) {
       const key = `${it.rowId}-${it.start}`;
@@ -151,7 +166,59 @@ export default function PersonalPlanning({ user }) {
     return m;
   }, [items]);
 
-  const headerHeight = 28 + 30 + 38;
+  function dayIndex(date) {
+    return dayIdxMap.get(date) ?? -1;
+  }
+
+  function visibleDateByIndex(index) {
+    if (!visibleDays.length) return today;
+    if (index < 0) return visibleDays[0].date;
+    if (index >= visibleDays.length) return visibleDays[visibleDays.length - 1].date;
+    return visibleDays[index].date;
+  }
+
+  const headerHeight = 28 + 30 + dateGridH;
+
+  function dayKey(date) {
+    return date;
+  }
+
+  function nextLocalId() {
+    nextTempId -= 1;
+    return nextTempId;
+  }
+
+  function getItemEndDate(item) {
+    const d = new Date(item.start + 'T00:00:00');
+    d.setDate(d.getDate() + item.duree - 1);
+    return formatDate(d);
+  }
+
+  function splitItem(item) {
+    const startIdx = dayIndex(item.start);
+    if (startIdx === -1) return [];
+    const endStr = getItemEndDate(item);
+    const endIdx = dayIndex(endStr);
+    if (endIdx === -1) {
+      return [{ start: startIdx, end: visibleDays.length - 1 }];
+    }
+    return [{ start: startIdx, end: endIdx }];
+  }
+
+  const itemsParCellule = useMemo(() => {
+    const map = new Map();
+    for (const item of items) {
+      const segments = splitItem(item);
+      for (const seg of segments) {
+        for (let d = seg.start; d <= seg.end; d++) {
+          const key = `${item.rowId}-${d}`;
+          if (!map.has(key)) map.set(key, []);
+          map.get(key).push({ item, seg });
+        }
+      }
+    }
+    return map;
+  }, [items, visibleDays]);
 
   const loadPlans = useCallback(async () => {
     if (!user?.id) return [];
@@ -189,7 +256,7 @@ export default function PersonalPlanning({ user }) {
     const idx = dayIdxMap.get(today);
     if (idx != null) {
       initialScrolled.current = true;
-      scrollRef.current.scrollLeft = Math.max(0, idx * CELL_W - 400);
+      scrollRef.current.scrollLeft = Math.max(0, idx * CELL_W - 500);
     }
   }, [dayIdxMap, today]);
 
@@ -249,7 +316,7 @@ export default function PersonalPlanning({ user }) {
   }
 
   function handleAddRow() {
-    const newRows = [...rows, { id: nextTempId--, nom: 'Nouvelle tâche', ordre: rows.length }];
+    const newRows = [...rows, { id: nextLocalId(), nom: `Tâche ${rows.length + 1}`, ordre: rows.length }];
     setRows(newRows);
     doSave(newRows, items);
   }
@@ -269,27 +336,106 @@ export default function PersonalPlanning({ user }) {
     doSave(newRows, items);
   }
 
-  function handleAddItem(rowId, date) {
-    const newItem = {
-      id: nextTempId--,
+  function openCreateItem(rowId, startDate, duree) {
+    setForm({
+      id: null,
       rowId,
-      start: date,
-      duree: 5,
+      start: startDate,
+      duree: duree || 5,
       nom: '',
       color: PERSONAL_COLORS[Math.floor(Math.random() * PERSONAL_COLORS.length)],
-    };
-    const newItems = [...items, newItem];
-    setItems(newItems);
-    doSave(rows, newItems);
+    });
+    setModal({ open: true, mode: 'creation' });
   }
 
-  function handleDeleteItem(itemId) {
-    const newItems = items.filter((it) => it.id !== itemId);
-    setItems(newItems);
-    doSave(rows, newItems);
+  function openEditItem(item) {
+    setForm({ ...item });
+    setModal({ open: true, mode: 'modification' });
+    setSelectedItem({ type: 'item', id: item.id });
   }
 
-  function handleDragStart(e, itemId) {
+  function saveModal() {
+    if (!form?.nom?.trim()) {
+      alert('Il faut donner un nom.');
+      return;
+    }
+    if (modal.mode === 'creation') {
+      const newItem = {
+        id: nextLocalId(),
+        rowId: form.rowId,
+        start: form.start,
+        duree: Number(form.duree) || 5,
+        nom: form.nom,
+        color: form.color || PERSONAL_COLORS[0],
+      };
+      const newItems = [...items, newItem];
+      setItems(newItems);
+      doSave(rows, newItems);
+    } else {
+      const newItems = items.map((it) => it.id === form.id ? { ...it, ...form, duree: Number(form.duree) || 5 } : it);
+      setItems(newItems);
+      doSave(rows, newItems);
+    }
+    setModal({ open: false, mode: 'creation' });
+    setForm(null);
+  }
+
+  function closeModal() {
+    setModal({ open: false, mode: 'creation' });
+    setForm(null);
+    setSelection(null);
+  }
+
+  function deleteSelectedItem() {
+    if (!selectedItem || selectedItem.type !== 'item') return;
+    const newItems = items.filter((it) => it.id !== selectedItem.id);
+    setItems(newItems);
+    doSave(rows, newItems);
+    setSelectedItem(null);
+  }
+
+  function startSelection(e, rowId, date) {
+    if (e.button !== 0) return;
+    lastCellRef.current = { rowId, date };
+    setSelection({ rowId, startDate: date, endDate: date });
+  }
+
+  function updateSelection(rowId, date) {
+    if (selectionThrottle.current) return;
+    selectionThrottle.current = requestAnimationFrame(() => {
+      setSelection((prev) => {
+        if (!prev || prev.rowId !== rowId) return prev;
+        return { ...prev, endDate: date };
+      });
+      selectionThrottle.current = null;
+    });
+  }
+
+  function endSelection() {
+    if (!selection || modal.open) return;
+    const startIdx = dayIndex(selection.startDate);
+    const endIdx = dayIndex(selection.endDate);
+    const a = Math.min(startIdx, endIdx);
+    const b = Math.max(startIdx, endIdx);
+    if (a === b) { setSelection(null); return; }
+
+    const start = visibleDateByIndex(a);
+    const duree = b - a + 1;
+    openCreateItem(selection.rowId, start, duree);
+    setSelection(null);
+  }
+
+  function isSelected(rowId, date) {
+    if (!selection || selection.rowId !== rowId) return false;
+    const idx = dayIndex(date);
+    const a = dayIndex(selection.startDate);
+    const b = dayIndex(selection.endDate);
+    return idx >= Math.min(a, b) && idx <= Math.max(a, b);
+  }
+
+  function onDragStart(e, itemId) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(itemId));
     const item = items.find((it) => it.id === itemId);
     if (!item) return;
     dragRef.current = {
@@ -298,21 +444,19 @@ export default function PersonalPlanning({ user }) {
       origStart: item.start,
       origDuree: item.duree,
     };
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(itemId));
   }
 
-  function handleDrop(e, targetRowId, targetDate) {
+  function onDrop(e, rowId, date) {
     e.preventDefault();
     e.stopPropagation();
     const drag = dragRef.current;
     if (!drag) return;
-    const dayOffset = diffDays(targetDate, drag.origStart);
+    const dayOffset = dayIndex(date) - dayIndex(drag.origStart);
     const newItems = items.map((it) => {
       if (it.id !== drag.id) return it;
       return {
         ...it,
-        rowId: targetRowId,
+        rowId,
         start: addDays(it.start, dayOffset),
       };
     });
@@ -321,36 +465,140 @@ export default function PersonalPlanning({ user }) {
     dragRef.current = null;
   }
 
-  function handleDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+  function handleGridEvent(e) {
+    const type = e.type;
+    const cell = e.target.closest('[data-eq]');
+    const bloc = e.target.closest('[data-item]');
+
+    if (bloc) {
+      const id = Number(bloc.dataset.item);
+      if (type === 'mousedown') {
+        e.stopPropagation();
+        setSelectedItem({ type: 'item', id });
+        return;
+      }
+      if (type === 'dblclick') {
+        const item = items.find((it) => it.id === id);
+        if (item) openEditItem(item);
+        return;
+      }
+      if (type === 'contextmenu') {
+        e.preventDefault();
+        const item = items.find((it) => it.id === id);
+        if (item) setContextMenu({ x: e.clientX, y: e.clientY, type: 'item', item });
+        return;
+      }
+    }
+
+    if (!cell) return;
+    const rowId = Number(cell.dataset.eq);
+    const date = cell.dataset.da;
+
+    if (type === 'contextmenu') {
+      e.preventDefault();
+      const row = rows.find((r) => r.id === rowId);
+      if (row) setContextMenu({ x: e.clientX, y: e.clientY, type: 'row', row });
+      return;
+    }
+    if (type === 'mousedown') {
+      startSelection(e, rowId, date);
+      return;
+    }
+    if (type === 'mouseover') {
+      updateSelection(rowId, date);
+      return;
+    }
+    if (type === 'dblclick') {
+      openCreateItem(rowId, date, 5);
+      return;
+    }
+    if (type === 'dragover') {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      return;
+    }
+    if (type === 'drop') {
+      onDrop(e, rowId, date);
+      return;
+    }
   }
 
-  function handleItemContextMenu(e, item) {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, type: 'item', item });
+  function goToday() {
+    const idx = dayIndex(today);
+    const el = scrollRef.current;
+    if (el && idx >= 0) el.scrollLeft = Math.max(0, idx * CELL_W - 500);
   }
 
-  function handleRowContextMenu(e, row) {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, type: 'row', row });
+  function handleScroll(e) {
+    const el = e.currentTarget;
+    if (scrollThrottleRef.current) cancelAnimationFrame(scrollThrottleRef.current);
+    scrollThrottleRef.current = requestAnimationFrame(() => {
+      scrollThrottleRef.current = null;
+      if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
+        if (!expandRightRef.current && !expandCooldownRef.current) {
+          expandRightRef.current = setTimeout(() => {
+            expandRightRef.current = null;
+            expandCooldownRef.current = setTimeout(() => { expandCooldownRef.current = null; }, 2000);
+            setCalendarLength((prev) => prev + 100);
+          }, 250);
+        }
+      } else if (expandRightRef.current) {
+        clearTimeout(expandRightRef.current);
+        expandRightRef.current = null;
+      }
+      if (el.scrollLeft < 200) {
+        if (!expandLeftRef.current && !expandCooldownRef.current) {
+          expandLeftRef.current = setTimeout(() => {
+            expandLeftRef.current = null;
+            expandCooldownRef.current = setTimeout(() => { expandCooldownRef.current = null; }, 2000);
+            setCalendarStart((prev) => addDays(prev, -30));
+            setCalendarLength((prev) => prev + 30);
+            setTimeout(() => {
+              if (scrollRef.current) scrollRef.current.scrollLeft += 30 * CELL_W;
+            }, 0);
+          }, 250);
+        }
+      } else if (expandLeftRef.current) {
+        clearTimeout(expandLeftRef.current);
+        expandLeftRef.current = null;
+      }
+    });
   }
 
   useEffect(() => {
     if (!contextMenu) return;
-    function close() { setContextMenu(null); }
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
   }, [contextMenu]);
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      const key = e.key || '';
+      if (key === 'Delete' || key === 'Backspace') {
+        if (selectedItem && !modal.open) {
+          deleteSelectedItem();
+        }
+      }
+      if (key === 'Escape') {
+        if (modal.open) closeModal();
+        setSelectedItem(null);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedItem, modal.open, items]);
 
   if (loading) {
     return <div className="loading-screen"><div className="loading-spinner" /><p>Chargement...</p></div>;
   }
 
   return (
-    <div className="planning-container">
+    <div className="personal-planning-wrap" onMouseUp={endSelection}>
       <div className="personal-header">
         <div className="personal-plan-selector" style={{ position: 'relative' }}>
           <button className="personal-plan-btn" onClick={() => setDropdownOpen((v) => !v)}>
@@ -366,10 +614,7 @@ export default function PersonalPlanning({ user }) {
                   onClick={() => { setActivePlanId(p.id); setDropdownOpen(false); }}
                 >
                   <span className="personal-dropdown-name">{p.nom}</span>
-                  <button
-                    className="personal-dropdown-delete"
-                    onClick={(e) => { e.stopPropagation(); handleDeletePlan(p.id); }}
-                  >×</button>
+                  <button className="personal-dropdown-delete" onClick={(e) => { e.stopPropagation(); handleDeletePlan(p.id); }}>×</button>
                 </div>
               ))}
               {plans.length === 0 && <div className="personal-dropdown-empty">Aucun planning</div>}
@@ -381,6 +626,7 @@ export default function PersonalPlanning({ user }) {
 
         {activePlan && (
           <>
+            <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
             <span className="personal-plan-name" onDoubleClick={() => setRenameInput(planName)}>
               {renameInput != null ? (
                 <input
@@ -403,132 +649,133 @@ export default function PersonalPlanning({ user }) {
           <button className="personal-add-btn" onClick={handleCreatePlan}>Créer un planning</button>
         </div>
       ) : (
-        <div className="planning-scroll" ref={scrollRef}>
-          <div className="planning-header">
-            <div className="grid month-grid" style={{ gridTemplateColumns }}>
-              <div className="corner month-corner" />
-              {monthGroups.map((g) => (
-                <div className="month-cell month-even" key={g.monthKey} style={{ gridColumn: `span ${g.count}` }}>
-                  {g.monthLabel}
-                </div>
-              ))}
+        <div className="planning-container">
+          <div className="planning-scroll" ref={scrollRef} onScroll={handleScroll}>
+            <div className="planning-header">
+              <div className="grid month-grid" style={{ gridTemplateColumns }}>
+                <div className="corner month-corner" />
+                {monthGroups.map((g) => (
+                  <div className="month-cell month-even" key={g.monthKey} style={{ gridColumn: `span ${g.count}` }}>
+                    {g.monthLabel}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid week-grid" style={{ gridTemplateColumns }}>
+                <div className="corner week-corner"><strong>Tâches</strong></div>
+                {weekGroups.map((g, i) => (
+                  <div className="week-cell" key={i} style={{ gridColumn: `span ${g.count}` }}>
+                    S{g.week}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH }}>
+                <div className="corner date-corner" />
+                {visibleDays.map((d) => (
+                  <div
+                    key={d.date}
+                    className={`date-cell${weekBoundarySet.has(d.date) ? ' week-boundary' : ''}${d.weekend ? ' weekend' : ''}${d.date === today ? ' today' : ''}`}
+                  >
+                    {d.weekend ? null : <span>{d.weekday}</span>}
+                    <strong>{d.dayNumber}</strong>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="grid week-grid" style={{ gridTemplateColumns }}>
-              <div className="corner week-corner"><strong>Tâches</strong></div>
-              {weekGroups.map((g, i) => (
-                <div className="week-cell" key={i} style={{ gridColumn: `span ${g.count}` }}>
-                  S{g.week}
+            <div
+              className="main-grid"
+              onMouseDown={handleGridEvent}
+              onMouseOver={handleGridEvent}
+              onDragStart={handleGridEvent}
+              onDragOver={handleGridEvent}
+              onDrop={handleGridEvent}
+              onDragEnd={() => { dragRef.current = null; }}
+              onDoubleClick={handleGridEvent}
+              onContextMenu={handleGridEvent}
+            >
+              {rows.map((row) => (
+                <div className="grid-row" key={row.id} style={{ height: ROW_H }}>
+                  <div className="team-cell">
+                    <input
+                      key={`name-${row.id}`}
+                      defaultValue={row.nom}
+                      aria-label="Nom de la tâche"
+                      onBlur={(e) => handleRenameRow(row.id, e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                      style={{ fontSize: 13 }}
+                    />
+                    <button
+                      className="delete-team"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteRow(row.id); }}
+                    >×</button>
+                  </div>
+                  <div className="grid-row-body" style={{ '--cell-w': `${CELL_W}px` }}>
+                    {visibleDays.map((day, dayIdx) => {
+                      const cellItems = itemsParCellule.get(`${row.id}-${dayIdx}`) || [];
+                      const baseClassName = `cell${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}${day.weekend ? ' weekend' : ''}${day.date === today ? ' today' : ''}`;
+                      const sel = isSelected(row.id, day.date);
+
+                      return (
+                        <div
+                          key={`${row.id}-${day.date}`}
+                          className={baseClassName + (sel ? ' selected' : '')}
+                          data-eq={row.id}
+                          data-da={day.date}
+                        >
+                          {cellItems.filter(({ seg }) => dayIdx === seg.start && dayIdx <= seg.end).map(({ item, seg }) => {
+                            const segLen = seg.end - seg.start + 1;
+                            const width = segLen * CELL_W - 8;
+                            return (
+                              <div
+                                key={item.id}
+                                className={`bloc chantier${selectedItem?.type === 'item' && selectedItem.id === item.id ? ' active-item' : ''}`}
+                                data-item={item.id}
+                                draggable
+                                onDragStart={(e) => { e.stopPropagation(); onDragStart(e, item.id); }}
+                                style={{
+                                  width,
+                                  top: 8,
+                                  height: 36,
+                                  background: item.color,
+                                  zIndex: 2,
+                                }}
+                                title={`${item.nom} (${item.duree}j)`}
+                              >
+                                <div className="chantier-content">
+                                  <div className="chantier-title-row">
+                                    <strong>{item.nom}</strong>
+                                  </div>
+                                  <small>{item.duree} j</small>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ))}
-            </div>
 
-            <div className="grid date-grid" style={{ gridTemplateColumns }}>
-              <div className="corner date-corner" />
-              {visibleDays.map((d) => (
-                <div
-                  key={d.date}
-                  className={`date-cell${weekBoundarySet.has(d.date) ? ' week-boundary' : ''}${d.weekend ? ' weekend' : ''}${d.date === today ? ' today' : ''}`}
-                >
-                  {d.weekend ? null : <span>{d.weekday}</span>}
-                  <strong>{d.dayNumber}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="main-grid">
-            {rows.map((row) => (
-              <div className="grid-row" key={row.id} style={{ height: 52 }}>
+              <div className="grid-row" style={{ height: 40 }}>
                 <div
                   className="team-cell"
-                  onContextMenu={(e) => handleRowContextMenu(e, row)}
-                  style={{ cursor: 'context-menu' }}
+                  onClick={handleAddRow}
+                  style={{ cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--green)', width: 260 }}
                 >
-                  <input
-                    key={`name-${row.id}`}
-                    defaultValue={row.nom}
-                    aria-label="Nom de la tâche"
-                    onBlur={(e) => handleRenameRow(row.id, e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
-                  />
+                  + Ajouter une tâche
                 </div>
-                <div
-                  className="grid-row-body"
-                  style={{ '--cell-w': `${CELL_W}px` }}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const x = e.clientX - rect.left + scrollRef.current.scrollLeft - ROW_LABEL_W;
-                    const dayIdx = Math.floor(x / CELL_W);
-                    const date = visibleDays[Math.max(0, Math.min(dayIdx, visibleDays.length - 1))]?.date;
-                    if (date) handleDrop(e, row.id, date);
-                  }}
-                  onDoubleClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const x = e.clientX - rect.left + scrollRef.current.scrollLeft - ROW_LABEL_W;
-                    const dayIdx = Math.floor(x / CELL_W);
-                    const date = visibleDays[Math.max(0, Math.min(dayIdx, visibleDays.length - 1))]?.date;
-                    if (date) handleAddItem(row.id, date);
-                  }}
-                >
-                  {visibleDays.map((day) => {
-                    const isStart = items.some((it) => it.rowId === row.id && it.start === day.date);
-                    return (
-                      <div
-                        key={day.date}
-                        className={`cell${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}${day.weekend ? ' weekend' : ''}${day.date === today ? ' today' : ''}`}
-                        data-eq={row.id}
-                        data-da={day.date}
-                      >
-                        {isStart && items.filter((it) => it.rowId === row.id && it.start === day.date).map((item) => {
-                          const width = item.duree * CELL_W - 8;
-                          return (
-                            <div
-                              key={item.id}
-                              className="bloc chantier"
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, item.id)}
-                              onContextMenu={(e) => handleItemContextMenu(e, item)}
-                              style={{
-                                width,
-                                top: 8,
-                                height: 36,
-                                background: item.color,
-                              }}
-                              title={`${item.nom || 'Bloc'} (${item.duree}j)`}
-                            >
-                              <div className="chantier-content">
-                                <div className="chantier-title-row">
-                                  <strong>{item.nom || `${item.duree}j`}</strong>
-                                </div>
-                                <small>{item.duree} j</small>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
+                <div className="grid-row-body" style={{ '--cell-w': `${CELL_W}px` }} />
               </div>
-            ))}
-
-            <div className="grid-row" style={{ height: 40 }}>
-              <div
-                className="team-cell"
-                onClick={handleAddRow}
-                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, color: 'var(--green)' }}
-              >
-                + Ajouter une tâche
-              </div>
-              <div className="grid-row-body" style={{ '--cell-w': `${CELL_W}px` }} />
             </div>
           </div>
         </div>
       )}
 
-      {contextMenu && (
+      {/* Context menu */}
+      {contextMenu && createPortal(
         <div className="personal-context" style={{ left: contextMenu.x, top: contextMenu.y }}>
           {contextMenu.type === 'item' && (
             <>
@@ -559,7 +806,12 @@ export default function PersonalPlanning({ user }) {
                 }
                 setContextMenu(null);
               }}>Durée</div>
-              <div className="danger" onClick={() => { handleDeleteItem(contextMenu.item.id); setContextMenu(null); }}>Supprimer</div>
+              <div className="danger" onClick={() => {
+                const newItems = items.filter((it) => it.id !== contextMenu.item.id);
+                setItems(newItems);
+                doSave(rows, newItems);
+                setContextMenu(null);
+              }}>Supprimer</div>
             </>
           )}
           {contextMenu.type === 'row' && (
@@ -572,7 +824,76 @@ export default function PersonalPlanning({ user }) {
               <div className="danger" onClick={() => { handleDeleteRow(contextMenu.row.id); setContextMenu(null); }}>Supprimer la tâche</div>
             </>
           )}
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal */}
+      {modal.open && form && createPortal(
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 99998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{
+            background: 'var(--surface)',
+            borderRadius: 14,
+            padding: '24px 28px',
+            minWidth: 340,
+            maxWidth: 420,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+            border: '1px solid var(--line)',
+          }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
+              {modal.mode === 'creation' ? 'Nouveau bloc' : 'Modifier le bloc'}
+            </h3>
+
+            <label style={{ display: 'block', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Nom</span>
+              <input
+                autoFocus
+                value={form.nom}
+                onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveModal(); }}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
+                placeholder="Nom du bloc"
+              />
+            </label>
+
+            <label style={{ display: 'block', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Durée (jours)</span>
+              <input
+                type="number"
+                min="1"
+                value={form.duree}
+                onChange={(e) => setForm({ ...form, duree: e.target.value })}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
+              />
+            </label>
+
+            <label style={{ display: 'block', marginBottom: 16 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Couleur</span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {PERSONAL_COLORS.map((c) => (
+                  <div
+                    key={c}
+                    onClick={() => setForm({ ...form, color: c })}
+                    style={{
+                      width: 28, height: 28, borderRadius: 6, background: c, cursor: 'pointer',
+                      border: form.color === c ? '3px solid var(--text)' : '3px solid transparent',
+                    }}
+                  />
+                ))}
+              </div>
+            </label>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={closeModal} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer', fontSize: 14 }}>
+                Annuler
+              </button>
+              <button onClick={saveModal} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--green)', background: 'var(--green)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+                {modal.mode === 'creation' ? 'Créer' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
