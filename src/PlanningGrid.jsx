@@ -180,6 +180,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const resizeDragRef = React.useRef(false);
   const initialScrolled = React.useRef(false);
   const prevDragCellRef = React.useRef(null);
+  const prevTargetDateRef = React.useRef(null);
+  const indicatorRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -205,6 +207,28 @@ const PlanningGrid = React.memo(function PlanningGrid({
     visibleDays.forEach((d, i) => map.set(d.date, i));
     return map;
   }, [visibleDays]);
+
+  function highlightTargetDate(date) {
+    if (prevTargetDateRef.current) {
+      prevTargetDateRef.current.classList.remove('target-day');
+      prevTargetDateRef.current = null;
+    }
+    if (!date) {
+      if (indicatorRef.current) indicatorRef.current.style.opacity = '0';
+      return;
+    }
+    const cell = document.querySelector(`.date-cell[title="${date}"]`);
+    if (cell) {
+      cell.classList.add('target-day');
+      prevTargetDateRef.current = cell;
+    }
+    const idx = dayIdxMemo.get(date);
+    const ind = indicatorRef.current;
+    if (ind && idx != null) {
+      ind.style.left = (idx * cellWidth + cellWidth / 2) + 'px';
+      ind.style.opacity = '1';
+    }
+  }
 
   function dayIndex(date) {
     return dayIdxMemo.get(date) ?? -1;
@@ -346,6 +370,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           }
           if (next) next.classList.add('drag-preview');
           prevDragCellRef.current = next || null;
+          highlightTargetDate(date);
           dragThrottle.current = null;
         });
       }
@@ -357,6 +382,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
         prevDragCellRef.current.classList.remove('drag-preview');
         prevDragCellRef.current = null;
       }
+      highlightTargetDate(null);
       cb.onDrop(e, equipe, date);
       return;
     }
@@ -394,7 +420,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
             ))}
           </div>
 
-          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH }}>
+          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH, position: 'relative' }}>
             <div className="corner date-corner"></div>
             {visibleDays.map((d) => (
               <div
@@ -409,6 +435,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 {d.date === targetDate && <span className="day-indicator" />}
               </div>
             ))}
+            <span ref={indicatorRef} className="day-indicator" style={{ position: 'absolute', bottom: 2, opacity: 0, pointerEvents: 'none' }} />
           </div>
         </div>
 
@@ -418,7 +445,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } }}
+          onDragEnd={() => { if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >

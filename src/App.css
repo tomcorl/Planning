@@ -390,6 +390,7 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .date-cell {
+  position: relative;
   background: var(--surface-2);
   border-right: 1px solid var(--line-soft);
   border-bottom: 1px solid var(--line);
