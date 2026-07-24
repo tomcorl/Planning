@@ -1,5 +1,4 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 
 const EMPTY = [];
 
@@ -163,8 +162,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   chantiersParCellule,
   congeSegments,
   conducteurs,
-  filterConducteurIds,
-  setFilterConducteurIds,
   selectedItem,
   selection,
   cellWidth,
@@ -186,21 +183,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const isDraggingRef = React.useRef(false);
   const dateCellRefs = React.useRef([]);
   const totalDays = visibleDays.length;
-
-  const [filterOpen, setFilterOpen] = React.useState(false);
-  const [filterPos, setFilterPos] = React.useState({ top: 0, left: 0 });
-  const filterBtnRef = React.useRef(null);
-
-  React.useEffect(() => {
-    if (!filterOpen) return;
-    function close(e) {
-      if (!e.target.closest('.conducteur-filter-btn') && !e.target.closest('.conducteur-filter-dropdown')) {
-        setFilterOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [filterOpen]);
 
   React.useEffect(() => {
     if (initialScrolled.current) return;
@@ -226,17 +208,17 @@ const PlanningGrid = React.memo(function PlanningGrid({
     return map;
   }, [visibleDays]);
 
-  const weekSeparators = React.useMemo(() => {
-    const lines = [];
-    let x = 260;
-    for (let i = 0; i < weekGroups.length; i++) {
-      x += weekGroups[i].count * cellWidth;
-      if (i < weekGroups.length - 1) {
-        lines.push(x);
+  const weekBoundarySet = React.useMemo(() => {
+    const s = new Set();
+    let idx = 0;
+    for (const g of weekGroups) {
+      idx += g.count;
+      if (idx <= visibleDays.length) {
+        s.add(visibleDays[idx - 1].date);
       }
     }
-    return lines;
-  }, [weekGroups, cellWidth]);
+    return s;
+  }, [weekGroups, visibleDays]);
 
   function highlightTargetDate(date) {
     if (prevTargetDateRef.current?.date === date) return;
@@ -440,24 +422,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
           <div className="grid week-grid" style={{ gridTemplateColumns }}>
             <div className="corner week-corner">
               <strong>Équipes</strong>
-              <div style={{ position: 'relative', marginLeft: 'auto' }}>
-                <button
-                  ref={filterBtnRef}
-                  className="conducteur-filter-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const rect = filterBtnRef.current?.getBoundingClientRect();
-                    if (rect) {
-                      setFilterPos({ top: rect.bottom + 4, left: rect.left });
-                    }
-                    setFilterOpen((v) => !v);
-                  }}
-                >
-                  {filterConducteurIds.length > 0
-                    ? `Filtrer (${filterConducteurIds.length})`
-                    : 'Filtrer'}
-                </button>
-              </div>
             </div>
             {weekGroups.map((g, i) => (
               <div
@@ -476,7 +440,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
               <div
                 key={d.date}
                 ref={(el) => { dateCellRefs.current[di] = el; }}
-                className={`date-cell ${d.weekend ? 'weekend' : ''} ${
+                className={`date-cell${weekBoundarySet.has(d.date) ? ' week-boundary' : ''} ${d.weekend ? 'weekend' : ''} ${
                   isFerie(d.date) ? 'ferie' : ''
                 } ${isAugustClosure(d.date) ? 'august-closure' : ''} ${d.date === today ? 'today' : ''} ${d.date === targetDate ? 'target-day' : ''}`}
                 title={d.date}
@@ -500,11 +464,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
-          <div className="week-separator-overlay">
-            {weekSeparators.map((x, i) => (
-              <div key={i} className="week-separator-line" style={{ left: x }} />
-            ))}
-          </div>
           {gridRows.map((row) => {
             if (row.type === 'separator') {
               return (
@@ -513,7 +472,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                     <div className="team-cell separator-row" />
                     <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px` }}>
                       {visibleDays.map((day) => (
-                        <div key={`sep-${day.date}`} className="cell separator-cell" />
+                        <div key={`sep-${day.date}`} className={`cell separator-cell${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}`} />
                       ))}
                     </div>
                   </div>
@@ -568,7 +527,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                       const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                       const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
 
-                      const baseClassName = `cell${equipeIndex % 2 ? ' odd' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${isAugustClosure(day.date) ? ' august-closure' : ''}${day.date === today ? ' today' : ''}${isPending ? ' pending-cell' : ''}`;
+                      const baseClassName = `cell${equipeIndex % 2 ? ' odd' : ''}${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${isAugustClosure(day.date) ? ' august-closure' : ''}${day.date === today ? ' today' : ''}${isPending ? ' pending-cell' : ''}`;
                       const sel = isSelected(equipeIndex, day.date);
                       const res = resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex && sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd);
 
@@ -602,31 +561,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
           })}
         </div>
       </div>
-      {filterOpen && createPortal(
-        <div className="conducteur-filter-dropdown" style={{ top: filterPos.top, left: filterPos.left }} onClick={(e) => e.stopPropagation()}>
-          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterOpen(false); }}>
-            <span className={!filterConducteurIds.length ? 'active' : ''}>●</span>
-            Tous les conducteurs
-          </div>
-          {conducteurs.map((c) => (
-            <div
-              key={c.id}
-              className={`conducteur-filter-item ${filterConducteurIds.includes(c.id) ? 'active' : ''}`}
-              onClick={() => {
-                setFilterConducteurIds((prev) =>
-                  prev.includes(c.id)
-                    ? prev.filter((x) => x !== c.id)
-                    : [...prev, c.id]
-                );
-              }}
-            >
-              <span className="filter-check">{filterConducteurIds.includes(c.id) ? '✓' : ''}</span>
-              {c.prenom} {c.nom}
-            </div>
-          ))}
-        </div>,
-        document.body
-      )}
     </div>
   );
 });

@@ -226,20 +226,12 @@ button:active {
   min-width: max-content;
 }
 
-.week-separator-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
+.week-separator-line {
+  display: none;
 }
 
-.week-separator-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: #14532d;
-  opacity: 0.35;
+.week-boundary {
+  border-right: 2px solid #14532d !important;
 }
 
 .grid-row {
@@ -257,8 +249,6 @@ button:active {
 .grid-row-body {
   display: flex;
   min-width: max-content;
-  position: relative;
-  z-index: 1;
 }
 
 .month-grid {
@@ -627,7 +617,7 @@ button:active {
 }
 
 .conducteur-filter-dropdown {
-  position: fixed;
+  position: absolute;
   z-index: 9999;
   min-width: 220px;
   max-height: 320px;
@@ -637,7 +627,6 @@ button:active {
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.15);
   padding: 4px 0;
-  margin-top: 4px;
 }
 
 .conducteur-filter-item {

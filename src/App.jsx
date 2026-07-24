@@ -152,6 +152,7 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('filterConducteurIds')) || []; }
     catch { return []; }
   });
+  const [filterOpen, setFilterOpen] = useState(false);
   const selectionThrottle = useRef(null);
   const scrollThrottleRef = useRef(null);
   const expandRightRef = useRef(null);
@@ -167,6 +168,18 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('filterConducteurIds', JSON.stringify(filterConducteurIds));
   }, [filterConducteurIds]);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    function close(e) {
+      if (!e.target.closest('.conducteur-filter-btn') && !e.target.closest('.conducteur-filter-dropdown')) {
+        setFilterOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [filterOpen]);
+
   const lastCellRef = useRef(null);
 
   const [modal, setModal] = useState({
@@ -1677,6 +1690,37 @@ export default function App() {
           <div className="date-nav">
             <input type="date" aria-label="Aller à une date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
             <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
+            <div style={{ position: 'relative' }}>
+              <button className="today-btn" onClick={() => setFilterOpen((v) => !v)}>
+                {filterConducteurIds.length > 0
+                  ? `Filtrer (${filterConducteurIds.length})`
+                  : 'Filtrer conducteur'}
+              </button>
+              {filterOpen && (
+                <div className="conducteur-filter-dropdown" style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4 }}>
+                  <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterOpen(false); }}>
+                    <span className={!filterConducteurIds.length ? 'active' : ''}>●</span>
+                    Tous les conducteurs
+                  </div>
+                  {conducteurs.map((c) => (
+                    <div
+                      key={c.id}
+                      className={`conducteur-filter-item ${filterConducteurIds.includes(c.id) ? 'active' : ''}`}
+                      onClick={() => {
+                        setFilterConducteurIds((prev) =>
+                          prev.includes(c.id)
+                            ? prev.filter((x) => x !== c.id)
+                            : [...prev, c.id]
+                        );
+                      }}
+                    >
+                      <span className="filter-check">{filterConducteurIds.includes(c.id) ? '✓' : ''}</span>
+                      {c.prenom} {c.nom}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1744,8 +1788,6 @@ export default function App() {
         conges={conges}
         congeSegments={congeSegmentsMap}
         conducteurs={conducteurs}
-        filterConducteurIds={filterConducteurIds}
-        setFilterConducteurIds={setFilterConducteurIds}
         selectedItem={selectedItem}
         selection={selection}
         cellWidth={cellWidth}
