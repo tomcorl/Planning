@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { toPng } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 import { supabase } from './lib/supabase.js';
 import {
   loadPersonalPlans,
@@ -20,27 +22,34 @@ const PERSONAL_COLORS = [
 
 let nextTempId = -1;
 
-function addDays(dateStr, n) {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + n);
-  return d.toISOString().split('T')[0];
+function toDate(value) {
+  if (value instanceof Date) return value;
+  if (!value || typeof value !== 'string') return new Date(NaN);
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
-function formatDate(d) {
-  return d.toISOString().split('T')[0];
+function formatDate(date) {
+  const d = new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-function sameOrAfter(a, b) { return a && b && a >= b; }
-function sameOrBefore(a, b) { return a && b && a <= b; }
+function addDays(date, days) {
+  const d = toDate(date);
+  d.setDate(d.getDate() + days);
+  return formatDate(d);
+}
 
 function isWeekend(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00');
-  const dow = d.getDay();
-  return dow === 0 || dow === 6;
+  const d = toDate(dateStr);
+  return d.getDay() === 0 || d.getDay() === 6;
 }
 
 function getIsoWeek(dateStr) {
-  const date = new Date(dateStr + 'T12:00:00');
+  const date = toDate(dateStr);
   const tmp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = tmp.getUTCDay() || 7;
   tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
@@ -50,9 +59,8 @@ function getIsoWeek(dateStr) {
 
 function generateDays(start, count) {
   return Array.from({ length: count }, (_, i) => {
-    const d = addDays(start, i);
-    const date = d;
-    const dt = new Date(date + 'T12:00:00');
+    const date = addDays(start, i);
+    const dt = toDate(date);
     const monthShort = dt.toLocaleDateString('fr-FR', { month: 'short' });
     const yearStr = String(dt.getFullYear()).slice(-2);
     return {
@@ -68,9 +76,7 @@ function generateDays(start, count) {
 }
 
 function getEndDate(item) {
-  const d = new Date(item.start + 'T00:00:00');
-  d.setDate(d.getDate() + item.duree - 1);
-  return formatDate(d);
+  return addDays(item.start, item.duree - 1);
 }
 
 function applyPersonalInsertion(list, movedItem, targetRowId, targetStart) {
@@ -109,6 +115,7 @@ function applyPersonalInsertion(list, movedItem, targetRowId, targetStart) {
 
 export default function PersonalPlanning({ user }) {
   const scrollRef = useRef(null);
+  const printRef = useRef(null);
   const today = useMemo(() => formatDate(new Date()), []);
 
   const [plans, setPlans] = useState([]);
@@ -129,6 +136,9 @@ export default function PersonalPlanning({ user }) {
   const [modal, setModal] = useState({ open: false, mode: 'creation' });
   const [form, setForm] = useState(null);
   const [resize, setResize] = useState(null);
+  const [pdfModal, setPdfModal] = useState(false);
+  const [pdfStart, setPdfStart] = useState(() => addDays(today, -30));
+  const [pdfEnd, setPdfEnd] = useState(() => addDays(today, 60));
 
   const saveTimerRef = useRef(null);
   const resizeRef = useRef(null);
@@ -180,8 +190,6 @@ export default function PersonalPlanning({ user }) {
     visibleDays.forEach((d, i) => m.set(d.date, i));
     return m;
   }, [visibleDays]);
-
-  const rowByIdMap = useMemo(() => new Map(rows.map(r => [r.id, r])), [rows]);
 
   function dayIndex(date) {
     return dayIdxMap.get(date) ?? -1;
@@ -462,18 +470,16 @@ export default function PersonalPlanning({ user }) {
   function onDragStart(e, itemId) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', String(itemId));
-    const item = items.find((it) => it.id === itemId);
-    if (!item) return;
-    e.dataTransfer.setData('itemId', String(itemId));
   }
 
   function onDrop(e, rowId, date) {
     e.preventDefault();
     e.stopPropagation();
-    const id = Number(e.dataTransfer.getData('itemId') || e.dataTransfer.getData('text/plain'));
+    const id = Number(e.dataTransfer.getData('text/plain'));
     const item = items.find((it) => it.id === id);
     if (!item) return;
     const dayOffset = dayIndex(date) - dayIndex(item.start);
+    if (dayOffset === 0 && rowId === item.rowId) return;
     const newStart = addDays(item.start, dayOffset);
     const movedItem = { ...item, rowId, start: newStart };
     const newItems = applyPersonalInsertion(items, movedItem, rowId, newStart);
@@ -518,22 +524,19 @@ export default function PersonalPlanning({ user }) {
         let previewStart, previewEnd;
         if (delta !== 0) {
           if (r.side === 'right') {
-            const oldEnd = getEndDate({ start: r.originalStart, duree: r.originalDuree });
-            const newEnd = addDays(oldEnd, delta);
-            const newDuree = Math.max(1, dayIndex(newEnd) - dayIndex(r.originalStart) + 1);
             previewStart = r.originalStart;
-            previewEnd = getEndDate({ start: r.originalStart, duree: newDuree });
+            previewEnd = addDays(getEndDate({ start: r.originalStart, duree: r.originalDuree }), delta);
           } else {
-            const oldEnd = addDays(r.originalStart, r.originalDuree - 1);
             const rawNewStart = addDays(r.originalStart, delta);
+            const origEnd = getEndDate({ start: r.originalStart, duree: r.originalDuree });
             const newStartIdx = dayIndex(rawNewStart);
-            const endIdx = dayIndex(oldEnd);
-            if (newStartIdx >= endIdx) {
-              previewStart = visibleDateByIndex(endIdx - 1);
-              previewEnd = oldEnd;
-            } else {
+            const endIdx = dayIndex(origEnd);
+            if (newStartIdx >= 0 && endIdx >= 0 && newStartIdx < endIdx) {
               previewStart = rawNewStart;
-              previewEnd = oldEnd;
+              previewEnd = origEnd;
+            } else if (endIdx >= 1) {
+              previewStart = visibleDateByIndex(endIdx - 1);
+              previewEnd = origEnd;
             }
           }
         }
@@ -550,64 +553,37 @@ export default function PersonalPlanning({ user }) {
       if (!r2) { setResize(null); resizeRef.current = null; return; }
       const delta = Math.round((e.clientX - r2.startX) / CELL_W);
       const { id, side, originalStart, originalDuree, originalRowId } = r2;
+
       if (delta !== 0) {
-        setItems((prev) => {
-          if (side === 'right') {
-            const oldEnd = getEndDate({ start: originalStart, duree: originalDuree });
-            const newEnd = addDays(oldEnd, delta);
-            const newDuree = Math.max(1, dayIndex(newEnd) - dayIndex(originalStart) + 1);
-            let next = prev.map((it) =>
-              it.id === id ? { ...it, start: originalStart, duree: newDuree } : it
-            );
-            const updatedItem = next.find((it) => it.id === id);
-            if (updatedItem) {
-              let cursor = addDays(getEndDate(updatedItem), 1);
-              const sorted = next
-                .filter((it) => it.id !== id && it.rowId === originalRowId && it.start > originalStart)
-                .sort((a, b) => (a.start < b.start ? -1 : 1));
-              const changed = new Map();
-              for (const it of sorted) {
-                if (it.start >= cursor) break;
-                changed.set(it.id, { ...it, start: cursor });
-                cursor = addDays(getEndDate({ ...it, start: cursor }), 1);
-              }
-              next = next.map((it) => changed.get(it.id) || it);
-            }
-            return next;
-          } else {
-            const oldEnd = addDays(originalStart, originalDuree - 1);
-            const rawNewStart = addDays(originalStart, delta);
-            const newStartIdx = dayIndex(rawNewStart);
-            const endIdx = dayIndex(oldEnd);
-            if (newStartIdx >= endIdx) return prev;
-            const newDuree = endIdx - newStartIdx + 1;
-            const newStart = rawNewStart;
-            let next = prev.map((it) =>
-              it.id === id ? { ...it, start: newStart, duree: newDuree } : it
-            );
-            const resizedItem = next.find((it) => it.id === id);
-            if (resizedItem && dayIndex(newStart) < dayIndex(originalStart)) {
-              const prevItems = next
-                .filter((it) => it.id !== id && it.rowId === originalRowId && it.start < originalStart)
-                .sort((a, b) => (b.start < a.start ? -1 : 1));
-              if (prevItems.length > 0) {
-                const prevItem = prevItems[0];
-                if (getEndDate(prevItem) >= newStart) {
-                  const newPrevEnd = addDays(newStart, -1);
-                  const newPrevDuree = dayIndex(getEndDate(prevItem)) - dayIndex(prevItem.start) + 1;
-                  const newPrevEndIdx = dayIndex(newPrevEnd);
-                  const prevStartIdx = dayIndex(prevItem.start);
-                  if (newPrevEndIdx >= prevStartIdx) {
-                    const actualPrevDuree = newPrevEndIdx - prevStartIdx + 1;
-                    next = next.map((it) => it.id === prevItem.id ? { ...it, duree: actualPrevDuree } : it);
-                  }
-                }
-              }
-            }
-            return next;
+        if (side === 'right') {
+          const origEnd = getEndDate({ start: originalStart, duree: originalDuree });
+          const newEnd = addDays(origEnd, delta);
+          const newDuree = dayIndex(newEnd) - dayIndex(originalStart) + 1;
+          if (newDuree >= 1) {
+            const movedItem = { id, rowId: originalRowId, start: originalStart, duree: newDuree, nom: '', color: '' };
+            setItems((prev) => {
+              const updated = prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it);
+              return applyPersonalInsertion(updated, { ...updated.find(it => it.id === id) }, originalRowId, originalStart);
+            });
           }
-        });
+        } else {
+          const origEnd = getEndDate({ start: originalStart, duree: originalDuree });
+          const rawNewStart = addDays(originalStart, delta);
+          const newStartIdx = dayIndex(rawNewStart);
+          const endIdx = dayIndex(origEnd);
+          if (newStartIdx >= 0 && endIdx >= 0 && newStartIdx < endIdx) {
+            const newDuree = endIdx - newStartIdx + 1;
+            setItems((prev) => {
+              const updated = prev.map((it) =>
+                it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
+              );
+              return applyPersonalInsertion(updated, { id, rowId: originalRowId, start: rawNewStart, duree: newDuree, nom: '', color: '' }, originalRowId, rawNewStart);
+            });
+          }
+        }
+        doSave(rows, items);
       }
+
       setResize(null);
       resizeRef.current = null;
     }
@@ -689,21 +665,87 @@ export default function PersonalPlanning({ user }) {
       }
       if (key === 'Escape') {
         if (modal.open) closeModal();
+        if (pdfModal) setPdfModal(false);
         setSelectedItem(null);
       }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedItem, modal.open, items]);
+  }, [selectedItem, modal.open, items, pdfModal]);
+
+  const selectionMouseUpRef = useRef(null);
+  selectionMouseUpRef.current = selection;
 
   useEffect(() => {
     function onMouseUpHandler() {
-      if (!selection) return;
+      if (!selectionMouseUpRef.current) return;
       endSelection();
     }
     window.addEventListener('mouseup', onMouseUpHandler);
     return () => window.removeEventListener('mouseup', onMouseUpHandler);
-  }, [selection, resize, modal.open]);
+  }, [resize, modal.open]);
+
+  async function handleExportPdf() {
+    const startIdx = dayIndex(pdfStart);
+    const endIdx = dayIndex(pdfEnd);
+    if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) {
+      alert('Plage de dates invalide.');
+      return;
+    }
+
+    setPdfModal(false);
+
+    const origScrollLeft = scrollRef.current?.scrollLeft || 0;
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = startIdx * CELL_W;
+    }
+
+    await new Promise((r) => setTimeout(r, 300));
+
+    const planningContainer = printRef.current;
+    if (!planningContainer) return;
+
+    try {
+      const dataUrl = await toPng(planningContainer, {
+        backgroundColor: '#ffffff',
+        pixelRatio: 2,
+        style: {
+          overflow: 'visible',
+        },
+      });
+
+      const nbDays = endIdx - startIdx + 1;
+      const colW = 260 + nbDays * CELL_W;
+      const pxPerMm = 3.78;
+      const imgWidthMm = colW / pxPerMm;
+
+      const pdf = new jsPDF({
+        orientation: imgWidthMm > 297 ? 'landscape' : 'landscape',
+        unit: 'mm',
+        format: [imgWidthMm + 20, 210],
+      });
+
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve) => { img.onload = resolve; });
+
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = pdf.internal.pageSize.getHeight();
+      const scale = Math.min((pdfW - 10) / img.width, (pdfH - 10) / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+
+      pdf.addImage(dataUrl, 'PNG', (pdfW - w) / 2, (pdfH - h) / 2, w, h);
+      pdf.save(`${planName || 'planning'}_${pdfStart}_${pdfEnd}.pdf`);
+    } catch (err) {
+      console.error('PDF export failed', err);
+      alert('Erreur lors de l\'export PDF.');
+    }
+
+    if (scrollRef.current) {
+      scrollRef.current.scrollLeft = origScrollLeft;
+    }
+  }
 
   if (loading) {
     return <div className="loading-screen"><div className="loading-spinner" /><p>Chargement...</p></div>;
@@ -742,6 +784,7 @@ export default function PersonalPlanning({ user }) {
               const idx = dayIndex(today);
               if (scrollRef.current && idx >= 0) scrollRef.current.scrollLeft = Math.max(0, idx * CELL_W - 500);
             }}>Aujourd'hui</button>
+            <button className="personal-pdf-btn" onClick={() => setPdfModal(true)}>PDF</button>
             <span className="personal-plan-name" onDoubleClick={() => setRenameInput(planName)}>
               {renameInput != null ? (
                 <input
@@ -764,22 +807,24 @@ export default function PersonalPlanning({ user }) {
           <button className="personal-add-btn" onClick={handleCreatePlan}>Créer un planning</button>
         </div>
       ) : (
-        <PersonalPlanningGrid
-          gridRows={gridRows}
-          visibleDays={visibleDays}
-          weekGroups={weekGroups}
-          monthGroups={monthGroups}
-          itemsParCellule={itemsParCellule}
-          selectedItem={selectedItem}
-          selection={selection}
-          cellWidth={CELL_W}
-          canEdit={true}
-          resize={resize}
-          today={today}
-          ferieSet={ferieSet}
-          callbacksRef={gridCallbacksRef}
-          scrollRef={scrollRef}
-        />
+        <div ref={printRef}>
+          <PersonalPlanningGrid
+            gridRows={gridRows}
+            visibleDays={visibleDays}
+            weekGroups={weekGroups}
+            monthGroups={monthGroups}
+            itemsParCellule={itemsParCellule}
+            selectedItem={selectedItem}
+            selection={selection}
+            cellWidth={CELL_W}
+            canEdit={true}
+            resize={resize}
+            today={today}
+            ferieSet={ferieSet}
+            callbacksRef={gridCallbacksRef}
+            scrollRef={scrollRef}
+          />
+        </div>
       )}
 
       {/* Context menu */}
@@ -824,7 +869,7 @@ export default function PersonalPlanning({ user }) {
         document.body
       )}
 
-      {/* Modal */}
+      {/* Modal création/modification */}
       {modal.open && form && createPortal(
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 99998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{
@@ -896,6 +941,55 @@ export default function PersonalPlanning({ user }) {
               </button>
               <button onClick={saveModal} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--green)', background: 'var(--green)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
                 {modal.mode === 'creation' ? 'Créer' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal PDF */}
+      {pdfModal && createPortal(
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 99998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{
+            background: 'var(--surface)',
+            borderRadius: 14,
+            padding: '24px 28px',
+            minWidth: 340,
+            maxWidth: 420,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+            border: '1px solid var(--line)',
+          }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
+              Exporter en PDF
+            </h3>
+
+            <label style={{ display: 'block', marginBottom: 12 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Date de début</span>
+              <input
+                type="date"
+                value={pdfStart}
+                onChange={(e) => setPdfStart(e.target.value)}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
+              />
+            </label>
+
+            <label style={{ display: 'block', marginBottom: 16 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Date de fin</span>
+              <input
+                type="date"
+                value={pdfEnd}
+                onChange={(e) => setPdfEnd(e.target.value)}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
+              />
+            </label>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPdfModal(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer', fontSize: 14 }}>
+                Annuler
+              </button>
+              <button onClick={handleExportPdf} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--green)', background: 'var(--green)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+                Générer le PDF
               </button>
             </div>
           </div>
