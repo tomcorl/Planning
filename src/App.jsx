@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useDeferredValue, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import './App.css';
 
 const AdminUsersPage = lazy(() => import('./AdminUsersPage.jsx'));
@@ -153,6 +154,8 @@ export default function App() {
     catch { return []; }
   });
   const [filterOpen, setFilterOpen] = useState(false);
+  const [filterPos, setFilterPos] = useState({ top: 0, left: 0 });
+  const filterBtnRef = useRef(null);
   const selectionThrottle = useRef(null);
   const scrollThrottleRef = useRef(null);
   const expandRightRef = useRef(null);
@@ -1690,36 +1693,20 @@ export default function App() {
           <div className="date-nav">
             <input type="date" aria-label="Aller à une date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
             <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
-            <div style={{ position: 'relative' }}>
-              <button className="today-btn" onClick={() => setFilterOpen((v) => !v)}>
+            <div>
+              <button
+                ref={filterBtnRef}
+                className="today-btn"
+                onClick={() => {
+                  const rect = filterBtnRef.current?.getBoundingClientRect();
+                  if (rect) setFilterPos({ top: rect.bottom + 4, left: rect.left });
+                  setFilterOpen((v) => !v);
+                }}
+              >
                 {filterConducteurIds.length > 0
                   ? `Filtrer (${filterConducteurIds.length})`
                   : 'Filtrer conducteur'}
               </button>
-              {filterOpen && (
-                <div className="conducteur-filter-dropdown" style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4 }}>
-                  <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterOpen(false); }}>
-                    <span className={!filterConducteurIds.length ? 'active' : ''}>●</span>
-                    Tous les conducteurs
-                  </div>
-                  {conducteurs.map((c) => (
-                    <div
-                      key={c.id}
-                      className={`conducteur-filter-item ${filterConducteurIds.includes(c.id) ? 'active' : ''}`}
-                      onClick={() => {
-                        setFilterConducteurIds((prev) =>
-                          prev.includes(c.id)
-                            ? prev.filter((x) => x !== c.id)
-                            : [...prev, c.id]
-                        );
-                      }}
-                    >
-                      <span className="filter-check">{filterConducteurIds.includes(c.id) ? '✓' : ''}</span>
-                      {c.prenom} {c.nom}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -1829,6 +1816,31 @@ export default function App() {
       </Suspense>
       </main>
       <footer className="app-footer">Créé par Tom Corlay</footer>
+      {filterOpen && createPortal(
+        <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
+          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterOpen(false); }}>
+            <span className={!filterConducteurIds.length ? 'active' : ''}>●</span>
+            Tous les conducteurs
+          </div>
+          {conducteurs.map((c) => (
+            <div
+              key={c.id}
+              className={`conducteur-filter-item ${filterConducteurIds.includes(c.id) ? 'active' : ''}`}
+              onClick={() => {
+                setFilterConducteurIds((prev) =>
+                  prev.includes(c.id)
+                    ? prev.filter((x) => x !== c.id)
+                    : [...prev, c.id]
+                );
+              }}
+            >
+              <span className="filter-check">{filterConducteurIds.includes(c.id) ? '✓' : ''}</span>
+              {c.prenom} {c.nom}
+            </div>
+          ))}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
