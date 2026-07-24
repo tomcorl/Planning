@@ -220,9 +220,26 @@ button:active {
 }
 
 .main-grid {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: max-content;
+}
+
+.week-separator-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.week-separator-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+  opacity: 0.5;
 }
 
 .grid-row {
@@ -583,6 +600,63 @@ button:active {
   opacity: 1;
   background: var(--green);
   color: #fff;
+}
+
+.conducteur-filter-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+.conducteur-filter-btn:hover {
+  border-color: var(--green);
+  background: rgba(22, 163, 74, 0.06);
+}
+
+.conducteur-filter-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  padding: 4px 0;
+  margin-top: 4px;
+}
+
+.conducteur-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.conducteur-filter-item:hover {
+  background: rgba(22, 163, 74, 0.08);
+}
+.conducteur-filter-item.active {
+  font-weight: 600;
+}
+
+.filter-check {
+  width: 18px;
+  text-align: center;
+  color: var(--green);
+  font-weight: 700;
 }
 
 /* ═══════════════════════════════════════════════

@@ -148,8 +148,10 @@ export default function App() {
   const [selection, setSelection] = useState(null);
   const [resize, setResize] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [dragPreview, setDragPreview] = useState(null);
-  const dragThrottle = useRef(null);
+  const [filterConducteurIds, setFilterConducteurIds] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('filterConducteurIds')) || []; }
+    catch { return []; }
+  });
   const selectionThrottle = useRef(null);
   const scrollThrottleRef = useRef(null);
   const expandRightRef = useRef(null);
@@ -161,6 +163,10 @@ export default function App() {
   const lastXRef = useRef(0);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+
+  React.useEffect(() => {
+    localStorage.setItem('filterConducteurIds', JSON.stringify(filterConducteurIds));
+  }, [filterConducteurIds]);
   const lastCellRef = useRef(null);
 
   const [modal, setModal] = useState({
@@ -1098,7 +1104,6 @@ export default function App() {
   function onDrop(e, equipe, date) {
     e.preventDefault();
     e.stopPropagation();
-    setDragPreview(null);
     const id = Number(e.dataTransfer.getData('itemId'));
     const type = e.dataTransfer.getData('itemType') || 'chantier';
     if (type === 'conge') {
@@ -1452,6 +1457,11 @@ export default function App() {
   const deferredConges = useDeferredValue(conges);
   const deferredVisibleDays = useDeferredValue(visibleDays);
 
+  const filteredChantiers = useMemo(() => {
+    if (filterConducteurIds.length === 0) return deferredChantiers;
+    return deferredChantiers.filter(c => filterConducteurIds.includes(c.conducteurId));
+  }, [deferredChantiers, filterConducteurIds]);
+
   const congeSegmentsCacheRef = useRef(null);
   const congeSegmentsMap = useMemo(() => {
     const cache = congeSegmentsCacheRef.current;
@@ -1504,11 +1514,11 @@ export default function App() {
 
   const chantiersParCellule = useMemo(() => {
     const cache = chantiersParCelluleCacheRef.current;
-    const depsKey = `${JSON.stringify(deferredChantiers)}|${deferredConges.length}|${holidays.size}|${deferredVisibleDays[0]?.date}-${deferredVisibleDays[deferredVisibleDays.length-1]?.date}`;
+    const depsKey = `${JSON.stringify(filteredChantiers)}|${deferredConges.length}|${holidays.size}|${deferredVisibleDays[0]?.date}-${deferredVisibleDays[deferredVisibleDays.length-1]?.date}`;
 
     if (cache && cache.depsKey === depsKey) {
       const newByTeam = {};
-      deferredChantiers.forEach(c => {
+      filteredChantiers.forEach(c => {
         if (!newByTeam[c.equipe]) newByTeam[c.equipe] = [];
         newByTeam[c.equipe].push(c.id);
       });
@@ -1531,7 +1541,7 @@ export default function App() {
           if (changedTeams.has(team)) map.delete(key);
         }
         const byEquipe = {};
-        deferredChantiers.filter(c => changedTeams.has(c.equipe)).forEach((chantier) => {
+        filteredChantiers.filter(c => changedTeams.has(c.equipe)).forEach((chantier) => {
           const segments = splitChantier(chantier).filter(Boolean);
           const segLens = segments.map(s => s.end - s.start + 1);
           const maxSegLen = segLens.length ? Math.max(...segLens) : 0;
@@ -1561,7 +1571,7 @@ export default function App() {
     const map = new Map();
     const byEquipe = {};
 
-    deferredChantiers.forEach((chantier) => {
+    filteredChantiers.forEach((chantier) => {
       const segments = splitChantier(chantier).filter(Boolean);
       const segLens = segments.map(s => s.end - s.start + 1);
       const maxSegLen = segLens.length ? Math.max(...segLens) : 0;
@@ -1586,13 +1596,13 @@ export default function App() {
     });
 
     const byTeam = {};
-    deferredChantiers.forEach(c => {
+    filteredChantiers.forEach(c => {
       if (!byTeam[c.equipe]) byTeam[c.equipe] = [];
       byTeam[c.equipe].push(c.id);
     });
     chantiersParCelluleCacheRef.current = { depsKey, map, byTeam };
     return map;
-  }, [deferredChantiers, conges, holidays, deferredVisibleDays]);
+  }, [filteredChantiers, conges, holidays, deferredVisibleDays]);
 
   const modalEndDate = useMemo(() => {
     if (!form || modal.type === 'conducteur') return '';
@@ -1608,12 +1618,12 @@ export default function App() {
     deleteTeam,
     startSelection,
     updateSelection,
-    setDragPreview,
-    onDrop,
+    setConducteurs,
     setSelectedItem,
     openEditChantier,
     handleContextMenu,
     onDragStart,
+    onDrop,
     startResize,
     openEditConge,
     addWorkingDays,
@@ -1734,8 +1744,9 @@ export default function App() {
         conges={conges}
         congeSegments={congeSegmentsMap}
         conducteurs={conducteurs}
+        filterConducteurIds={filterConducteurIds}
+        setFilterConducteurIds={setFilterConducteurIds}
         selectedItem={selectedItem}
-        dragPreview={dragPreview}
         selection={selection}
         cellWidth={cellWidth}
         canEdit={canEdit}
@@ -1745,7 +1756,6 @@ export default function App() {
         teams={teams}
         ferieSet={ferieSet}
         callbacksRef={gridCallbacksRef}
-        dragThrottle={dragThrottle}
         scrollRef={scrollRef}
       />
 
