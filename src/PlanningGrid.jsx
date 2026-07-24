@@ -183,6 +183,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const prevTargetDateRef = React.useRef(null);
   const indicatorRef = React.useRef(null);
   const lastDragKeyRef = React.useRef(null);
+  const dateCellRefs = React.useRef([]);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -219,12 +220,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
       if (indicatorRef.current) indicatorRef.current.style.opacity = '0';
       return;
     }
-    const cell = document.querySelector(`.date-cell[title="${date}"]`);
+    const idx = dayIdxMemo.get(date);
+    const cell = idx != null ? dateCellRefs.current[idx] : null;
     if (cell) {
       cell.classList.add('target-day');
     }
     prevTargetDateRef.current = { date, el: cell };
-    const idx = dayIdxMemo.get(date);
     const ind = indicatorRef.current;
     if (ind && idx != null) {
       ind.style.left = (260 + idx * cellWidth + cellWidth / 2) + 'px';
@@ -422,9 +423,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
           <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH, position: 'relative' }}>
             <div className="corner date-corner"></div>
-            {visibleDays.map((d) => (
+            {visibleDays.map((d, di) => (
               <div
                 key={d.date}
+                ref={(el) => { dateCellRefs.current[di] = el; }}
                 className={`date-cell ${d.weekend ? 'weekend' : ''} ${
                   isFerie(d.date) ? 'ferie' : ''
                 } ${isAugustClosure(d.date) ? 'august-closure' : ''} ${d.date === today ? 'today' : ''} ${d.date === targetDate ? 'target-day' : ''}`}
