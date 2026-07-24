@@ -179,6 +179,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const lastHoverRef = React.useRef(null);
   const resizeDragRef = React.useRef(false);
   const initialScrolled = React.useRef(false);
+  const prevDragCellRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -340,6 +341,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
       if (!dragThrottle.current) {
         dragThrottle.current = requestAnimationFrame(() => {
           cb.setDragPreview({ equipe, date });
+          const next = document.querySelector(`.cell[data-eq="${equipe}"][data-da="${date}"]`);
+          if (prevDragCellRef.current && prevDragCellRef.current !== next) {
+            prevDragCellRef.current.classList.remove('drag-preview');
+          }
+          if (next) next.classList.add('drag-preview');
+          prevDragCellRef.current = next || null;
           dragThrottle.current = null;
         });
       }
@@ -347,6 +354,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (type === 'drop') {
       e.preventDefault();
+      if (prevDragCellRef.current) {
+        prevDragCellRef.current.classList.remove('drag-preview');
+        prevDragCellRef.current = null;
+      }
       cb.onDrop(e, equipe, date);
       return;
     }
@@ -408,6 +419,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
+          onDragEnd={() => { if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
