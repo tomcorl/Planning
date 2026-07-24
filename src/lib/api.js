@@ -352,59 +352,64 @@ export async function renamePersonalPlan(planId, nom) {
 }
 
 export async function savePersonalPlan(planId, rows, items) {
-  // Step 1: Upsert rows and collect ID mapping (temp -> real)
+  if (!rows.length && !items.length) return;
+
+  // 1. Delete rows that were removed
+  const rowIdsToKeep = rows.filter(r => r.id > 0).map(r => r.id);
+  if (rowIdsToKeep.length > 0) {
+    await supabase.from('personal_plan_rows')
+      .delete()
+      .eq('plan_id', planId)
+      .not('id', 'in', `(${rowIdsToKeep.join(',')})`);
+  } else {
+    await supabase.from('personal_plan_rows').delete().eq('plan_id', planId);
+  }
+
+  // 2. Upsert rows one by one to capture temp -> real ID mapping
   const tempToReal = new Map();
-  const rowRows = rows.map((r, i) => ({
-    id: r.id > 0 && r.id <= 2147483647 ? r.id : undefined,
-    plan_id: planId,
-    nom: r.nom,
-    ordre: i,
-  }));
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const payload = { plan_id: planId, nom: r.nom, ordre: i };
+    if (r.id > 0) payload.id = r.id;
 
-  const { data: upsertedRows, error: rowErr } = await supabase
-    .from('personal_plan_rows')
-    .upsert(rowRows, { onConflict: 'id' })
-    .select('id, nom, ordre');
-  if (rowErr) { console.error('savePersonalPlan rows', rowErr); throw rowErr; }
-
-  // Map temp IDs -> real IDs by matching nom+ordre
-  for (const dbRow of (upsertedRows || [])) {
-    const srcRow = rows[dbRow.ordre];
-    if (srcRow && srcRow.id < 0) {
-      tempToReal.set(srcRow.id, dbRow.id);
+    const { data, error } = await supabase
+      .from('personal_plan_rows')
+      .upsert(payload, { onConflict: 'id' })
+      .select('id')
+      .single();
+    if (error) { console.error('savePersonalPlan row', error); throw error; }
+    if (r.id < 0 && data) {
+      tempToReal.set(r.id, data.id);
     }
   }
 
-  // Step 2: Build items with resolved row_id
-  const itemRows = items.map((it) => {
+  // 3. Delete items that were removed
+  const itemIdsToKeep = items.filter(it => it.id > 0).map(it => it.id);
+  if (itemIdsToKeep.length > 0) {
+    await supabase.from('personal_plan_items')
+      .delete()
+      .eq('plan_id', planId)
+      .not('id', 'in', `(${itemIdsToKeep.join(',')})`);
+  } else {
+    await supabase.from('personal_plan_items').delete().eq('plan_id', planId);
+  }
+
+  // 4. Upsert items with resolved row IDs
+  for (const it of items) {
     const realRowId = tempToReal.get(it.rowId) || it.rowId;
-    return {
-      id: it.id > 0 && it.id <= 2147483647 ? it.id : undefined,
+    const payload = {
+      plan_id: planId,
       row_id: realRowId,
       start: it.start,
       duree: it.duree,
       nom: it.nom || '',
       color: it.color || '#b7c6d8',
     };
-  });
+    if (it.id > 0) payload.id = it.id;
 
-  const { error: itemErr } = await supabase
-    .from('personal_plan_items')
-    .upsert(itemRows, { onConflict: 'id' });
-  if (itemErr) { console.error('savePersonalPlan items', itemErr); throw itemErr; }
-
-  // Step 3: Clean up deleted items (items in DB but not in our list)
-  const keepIds = itemRows.filter(r => r.id).map(r => r.id);
-  if (keepIds.length > 0) {
-    await supabase
+    const { error } = await supabase
       .from('personal_plan_items')
-      .delete()
-      .eq('plan_id', planId)
-      .not('id', 'in', `(${keepIds.join(',')})`);
-  } else {
-    await supabase
-      .from('personal_plan_items')
-      .delete()
-      .eq('plan_id', planId);
+      .upsert(payload, { onConflict: 'id' });
+    if (error) { console.error('savePersonalPlan item', error); throw error; }
   }
 }
