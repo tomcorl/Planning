@@ -1735,6 +1735,7 @@ export default function App() {
         congeSegments={congeSegmentsMap}
         conducteurs={conducteurs}
         selectedItem={selectedItem}
+        dragPreview={dragPreview}
         selection={selection}
         cellWidth={cellWidth}
         canEdit={canEdit}

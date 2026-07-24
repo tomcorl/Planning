@@ -22,7 +22,7 @@ function getConducteur(conducteurs, id) {
 }
 
 const CellContent = React.memo(function CellContent({
-  baseClassName, isSelected, isResizePreview,
+  baseClassName, isSelected, isDragPreview, isResizePreview,
   segments, congeItems, dayIdx,
   cellWidth, blocH, blocT,
   selectedItem, conducteurs, canEdit, resize,
@@ -30,6 +30,7 @@ const CellContent = React.memo(function CellContent({
 }) {
   const cellClassName = baseClassName
     + (isSelected ? ' selected' : '')
+    + (isDragPreview ? ' drag-preview' : '')
     + (isResizePreview ? ' resize-preview' : '');
 
   function dayIndex(date) {
@@ -163,6 +164,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   congeSegments,
   conducteurs,
   selectedItem,
+  dragPreview,
   selection,
   cellWidth,
   canEdit,
@@ -178,9 +180,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const resizeDragRef = React.useRef(false);
   const initialScrolled = React.useRef(false);
   const totalDays = visibleDays.length;
-  const indicatorRef = React.useRef(null);
-  const prevTargetCellRef = React.useRef(null);
-  const prevDragCellRef = React.useRef(null);
 
   React.useEffect(() => {
     if (initialScrolled.current) return;
@@ -196,45 +195,15 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const dateGridH = Math.round(28 + (cellWidth - 26) * (44 - 28) / 26);
   const headerHeight = 28 + 30 + dateGridH;
 
+  const targetDate = resize
+    ? (resize.side === 'right' ? resize.previewEnd : resize.previewStart)
+    : dragPreview?.date || null;
+
   const dayIdxMemo = React.useMemo(() => {
     const map = new Map();
     visibleDays.forEach((d, i) => map.set(d.date, i));
     return map;
   }, [visibleDays]);
-
-  function moveIndicatorTo(date) {
-    const el = indicatorRef.current;
-    if (!el) return;
-    if (!date) { el.style.opacity = '0'; return; }
-    const idx = dayIdxMemo.get(date);
-    if (idx == null) { el.style.opacity = '0'; return; }
-    el.style.left = (idx * cellWidth + cellWidth / 2) + 'px';
-    el.style.opacity = '1';
-  }
-
-  function highlightDateCell(date) {
-    if (prevTargetCellRef.current) {
-      prevTargetCellRef.current.classList.remove('target-day');
-      prevTargetCellRef.current = null;
-    }
-    if (!date) return;
-    const cell = document.querySelector(`.date-cell[title="${date}"]`);
-    if (cell) {
-      cell.classList.add('target-day');
-      prevTargetCellRef.current = cell;
-    }
-  }
-
-  React.useEffect(() => {
-    if (resize) {
-      const d = resize.side === 'right' ? resize.previewEnd : resize.previewStart;
-      highlightDateCell(d);
-      moveIndicatorTo(d);
-    } else {
-      highlightDateCell(null);
-      moveIndicatorTo(null);
-    }
-  }, [resize]);
 
   function dayIndex(date) {
     return dayIdxMemo.get(date) ?? -1;
@@ -370,8 +339,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
       e.preventDefault();
       if (!dragThrottle.current) {
         dragThrottle.current = requestAnimationFrame(() => {
-          highlightDateCell(date);
-          moveIndicatorTo(date);
+          cb.setDragPreview({ equipe, date });
           dragThrottle.current = null;
         });
       }
@@ -379,12 +347,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (type === 'drop') {
       e.preventDefault();
-      highlightDateCell(null);
-      moveIndicatorTo(null);
-      if (prevDragCellRef.current) {
-        prevDragCellRef.current.classList.remove('drag-preview');
-        prevDragCellRef.current = null;
-      }
       cb.onDrop(e, equipe, date);
       return;
     }
@@ -422,21 +384,21 @@ const PlanningGrid = React.memo(function PlanningGrid({
             ))}
           </div>
 
-          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH, position: 'relative' }}>
+          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH }}>
             <div className="corner date-corner"></div>
             {visibleDays.map((d) => (
               <div
                 key={d.date}
                 className={`date-cell ${d.weekend ? 'weekend' : ''} ${
                   isFerie(d.date) ? 'ferie' : ''
-                } ${isAugustClosure(d.date) ? 'august-closure' : ''} ${d.date === today ? 'today' : ''}`}
+                } ${isAugustClosure(d.date) ? 'august-closure' : ''} ${d.date === today ? 'today' : ''} ${d.date === targetDate ? 'target-day' : ''}`}
                 title={d.date}
               >
                 {cellWidth >= 36 && <span>{d.weekday}</span>}
                 <strong>{d.dayNumber}</strong>
+                {d.date === targetDate && <span className="day-indicator" />}
               </div>
             ))}
-            <span ref={indicatorRef} className="day-indicator" style={{ position: 'absolute', bottom: 2, opacity: 0, pointerEvents: 'none' }} />
           </div>
         </div>
 
@@ -446,7 +408,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { highlightDateCell(null); moveIndicatorTo(null); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
@@ -515,6 +476,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
                       const baseClassName = `cell${equipeIndex % 2 ? ' odd' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${isAugustClosure(day.date) ? ' august-closure' : ''}${day.date === today ? ' today' : ''}${isPending ? ' pending-cell' : ''}`;
                       const sel = isSelected(equipeIndex, day.date);
+                      const drag = dragPreview?.equipe === equipeIndex && dragPreview?.date === day.date;
                       const res = resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex && sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd);
 
                       return (
@@ -522,6 +484,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           key={`${equipeIndex}-${day.date}`}
                           baseClassName={baseClassName}
                           isSelected={sel}
+                          isDragPreview={drag}
                           isResizePreview={res}
                           segments={segments}
                           congeItems={congeItems}
