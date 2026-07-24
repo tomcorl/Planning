@@ -180,8 +180,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const resizeDragRef = React.useRef(false);
   const initialScrolled = React.useRef(false);
   const totalDays = visibleDays.length;
-  const indicatorRef = React.useRef(null);
-  const currentDragDateRef = React.useRef(null);
 
   React.useEffect(() => {
     if (initialScrolled.current) return;
@@ -197,30 +195,15 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const dateGridH = Math.round(28 + (cellWidth - 26) * (44 - 28) / 26);
   const headerHeight = 28 + 30 + dateGridH;
 
+  const targetDate = resize
+    ? (resize.side === 'right' ? resize.previewEnd : resize.previewStart)
+    : dragPreview?.date || null;
+
   const dayIdxMemo = React.useMemo(() => {
     const map = new Map();
     visibleDays.forEach((d, i) => map.set(d.date, i));
     return map;
   }, [visibleDays]);
-
-  function moveIndicator(date) {
-    const el = indicatorRef.current;
-    if (!el) return;
-    if (!date) { el.style.opacity = '0'; return; }
-    const idx = dayIdxMemo.get(date);
-    if (idx == null) { el.style.opacity = '0'; return; }
-    el.style.left = (idx * cellWidth + cellWidth / 2) + 'px';
-    el.style.opacity = '1';
-  }
-
-  React.useEffect(() => {
-    if (resize) {
-      const d = resize.side === 'right' ? resize.previewEnd : resize.previewStart;
-      moveIndicator(d);
-    } else if (!currentDragDateRef.current) {
-      if (indicatorRef.current) indicatorRef.current.style.opacity = '0';
-    }
-  }, [resize]);
 
   function dayIndex(date) {
     return dayIdxMemo.get(date) ?? -1;
@@ -357,10 +340,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
       if (!dragThrottle.current) {
         dragThrottle.current = requestAnimationFrame(() => {
           cb.setDragPreview({ equipe, date });
-          if (currentDragDateRef.current !== date) {
-            currentDragDateRef.current = date;
-            moveIndicator(date);
-          }
           dragThrottle.current = null;
         });
       }
@@ -368,8 +347,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (type === 'drop') {
       e.preventDefault();
-      currentDragDateRef.current = null;
-      if (indicatorRef.current) indicatorRef.current.style.opacity = '0';
       cb.onDrop(e, equipe, date);
       return;
     }
@@ -407,21 +384,21 @@ const PlanningGrid = React.memo(function PlanningGrid({
             ))}
           </div>
 
-          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH, position: 'relative' }}>
+          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH }}>
             <div className="corner date-corner"></div>
             {visibleDays.map((d) => (
               <div
                 key={d.date}
                 className={`date-cell ${d.weekend ? 'weekend' : ''} ${
                   isFerie(d.date) ? 'ferie' : ''
-                } ${isAugustClosure(d.date) ? 'august-closure' : ''} ${d.date === today ? 'today' : ''}`}
+                } ${isAugustClosure(d.date) ? 'august-closure' : ''} ${d.date === today ? 'today' : ''} ${d.date === targetDate ? 'target-day' : ''}`}
                 title={d.date}
               >
                 {cellWidth >= 36 && <span>{d.weekday}</span>}
                 <strong>{d.dayNumber}</strong>
+                {d.date === targetDate && <span className="day-indicator" />}
               </div>
             ))}
-            <span ref={indicatorRef} className="day-indicator" style={{ position: 'absolute', bottom: 2, left: 0, opacity: 0, pointerEvents: 'none' }} />
           </div>
         </div>
 
@@ -431,7 +408,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { currentDragDateRef.current = null; if (indicatorRef.current) indicatorRef.current.style.opacity = '0'; }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
