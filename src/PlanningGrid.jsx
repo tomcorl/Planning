@@ -437,21 +437,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           <div className="grid week-grid" style={{ gridTemplateColumns }}>
             <div className="corner week-corner">
               <strong>Équipes</strong>
-            </div>
-            {weekGroups.map((g, i) => (
-              <div
-                className="week-cell"
-                key={`${g.week}-${i}`}
-                style={{ gridColumn: `span ${g.count}` }}
-              >
-                S{g.week}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH, position: 'relative' }}>
-            <div className="corner date-corner">
-              <div style={{ position: 'relative' }}>
+              <div style={{ position: 'relative', marginLeft: 'auto' }}>
                 <button
                   className="conducteur-filter-btn"
                   onClick={() => setFilterOpen((v) => !v)}
@@ -486,6 +472,19 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 )}
               </div>
             </div>
+            {weekGroups.map((g, i) => (
+              <div
+                className="week-cell"
+                key={`${g.week}-${i}`}
+                style={{ gridColumn: `span ${g.count}` }}
+              >
+                S{g.week}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH, position: 'relative' }}>
+            <div className="corner date-corner"></div>
             {visibleDays.map((d, di) => (
               <div
                 key={d.date}
