@@ -340,7 +340,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
       e.preventDefault();
       if (!dragThrottle.current) {
         dragThrottle.current = requestAnimationFrame(() => {
-          cb.setDragPreview({ equipe, date });
           const next = document.querySelector(`.cell[data-eq="${equipe}"][data-da="${date}"]`);
           if (prevDragCellRef.current && prevDragCellRef.current !== next) {
             prevDragCellRef.current.classList.remove('drag-preview');
