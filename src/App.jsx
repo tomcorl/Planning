@@ -164,7 +164,7 @@ export default function App() {
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     localStorage.setItem('filterConducteurIds', JSON.stringify(filterConducteurIds));
   }, [filterConducteurIds]);
   const lastCellRef = useRef(null);
