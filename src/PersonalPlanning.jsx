@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import { supabase } from './lib/supabase.js';
 import {
@@ -115,7 +114,6 @@ function applyPersonalInsertion(list, movedItem, targetRowId, targetStart) {
 
 export default function PersonalPlanning({ user }) {
   const scrollRef = useRef(null);
-  const printRef = useRef(null);
   const today = useMemo(() => formatDate(new Date()), []);
 
   const [plans, setPlans] = useState([]);
@@ -673,78 +671,247 @@ export default function PersonalPlanning({ user }) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedItem, modal.open, items, pdfModal]);
 
-  const selectionMouseUpRef = useRef(null);
-  selectionMouseUpRef.current = selection;
 
-  useEffect(() => {
-    function onMouseUpHandler() {
-      if (!selectionMouseUpRef.current) return;
-      endSelection();
-    }
-    window.addEventListener('mouseup', onMouseUpHandler);
-    return () => window.removeEventListener('mouseup', onMouseUpHandler);
-  }, [resize, modal.open]);
 
   async function handleExportPdf() {
-    const startIdx = dayIndex(pdfStart);
-    const endIdx = dayIndex(pdfEnd);
-    if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) {
+    const rangeStart = pdfStart;
+    const rangeEnd = pdfEnd;
+    if (!rangeStart || !rangeEnd || rangeStart > rangeEnd) {
       alert('Plage de dates invalide.');
+      return;
+    }
+
+    const rangeDays = [];
+    let cursor = rangeStart;
+    while (cursor <= rangeEnd) {
+      if (!isWeekend(cursor)) rangeDays.push(cursor);
+      cursor = addDays(cursor, 1);
+    }
+    if (rangeDays.length === 0) {
+      alert('Aucun jour ouvré dans cette plage.');
       return;
     }
 
     setPdfModal(false);
 
-    const origScrollLeft = scrollRef.current?.scrollLeft || 0;
-    if (scrollRef.current) {
-      scrollRef.current.scrollLeft = startIdx * CELL_W;
+    const dayIdxInPdf = new Map();
+    rangeDays.forEach((d, i) => dayIdxInPdf.set(d, i));
+
+    const colLeft = 35;
+    const pageW = 297;
+    const pageH = 210;
+    const margin = 5;
+    const availW = pageW - margin * 2 - colLeft;
+    const dayW = Math.min(8, availW / rangeDays.length);
+    const gridW = dayW * rangeDays.length;
+    const rowH = 7;
+    const headerMonthH = 6;
+    const headerWeekH = 5;
+    const headerDateH = 7;
+    const headerH = headerMonthH + headerWeekH + headerDateH;
+    const titleH = 10;
+    const startY = margin + titleH + headerH + 2;
+
+    const rowsOnPage = Math.floor((pageH - margin - startY) / rowH);
+    const totalPages = Math.max(1, Math.ceil(gridRows.length / rowsOnPage || 1));
+
+    function hexToRgb(hex) {
+      const h = hex.replace('#', '');
+      return [parseInt(h.substring(0, 2), 16), parseInt(h.substring(2, 4), 16), parseInt(h.substring(4, 6), 16)];
     }
 
-    await new Promise((r) => setTimeout(r, 300));
+    function drawGrid(pdf, pageRows, pageIndex) {
+      const ox = margin + colLeft;
+      const oy = margin + titleH;
 
-    const planningContainer = printRef.current;
-    if (!planningContainer) return;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.text(planName || 'Planning', margin, margin + 7);
 
-    try {
-      const dataUrl = await toPng(planningContainer, {
-        backgroundColor: '#ffffff',
-        pixelRatio: 2,
-        style: {
-          overflow: 'visible',
-        },
+      pdf.setFontSize(7);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(120, 120, 120);
+      pdf.text(`${rangeStart} — ${rangeEnd}`, pageW - margin, margin + 7, { align: 'right' });
+      pdf.setTextColor(0, 0, 0);
+
+      const monthGroupsPdf = [];
+      rangeDays.forEach((d, i) => {
+        const dt = toDate(d);
+        const mk = `${dt.getFullYear()}-${dt.getMonth()}`;
+        const last = monthGroupsPdf[monthGroupsPdf.length - 1];
+        if (!last || last.key !== mk) {
+          monthGroupsPdf.push({ key: mk, start: i, count: 1, label: dt.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) });
+        } else {
+          last.count++;
+        }
       });
 
-      const nbDays = endIdx - startIdx + 1;
-      const colW = 260 + nbDays * CELL_W;
-      const pxPerMm = 3.78;
-      const imgWidthMm = colW / pxPerMm;
-
-      const pdf = new jsPDF({
-        orientation: imgWidthMm > 297 ? 'landscape' : 'landscape',
-        unit: 'mm',
-        format: [imgWidthMm + 20, 210],
+      const weekGroupsPdf = [];
+      rangeDays.forEach((d, i) => {
+        const w = getIsoWeek(d);
+        const last = weekGroupsPdf[weekGroupsPdf.length - 1];
+        if (!last || last.week !== w) {
+          weekGroupsPdf.push({ week: w, start: i, count: 1 });
+        } else {
+          last.count++;
+        }
       });
 
-      const img = new Image();
-      img.src = dataUrl;
-      await new Promise((resolve) => { img.onload = resolve; });
+      pdf.setFillColor(240, 240, 240);
+      pdf.rect(margin, oy, colLeft, headerMonthH, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(7);
+      pdf.text('Tâches', margin + 2, oy + 4.5);
 
-      const pdfW = pdf.internal.pageSize.getWidth();
-      const pdfH = pdf.internal.pageSize.getHeight();
-      const scale = Math.min((pdfW - 10) / img.width, (pdfH - 10) / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
+      monthGroupsPdf.forEach((g, mi) => {
+        const x = ox + g.start * dayW;
+        const w = g.count * dayW;
+        const even = mi % 2 === 0;
+        pdf.setFillColor(even ? 220 : 235, even ? 245 : 240, even ? 220 : 225);
+        pdf.rect(x, oy, w, headerMonthH, 'F');
+        pdf.setDrawColor(200, 200, 200);
+        pdf.rect(x, oy, w, headerMonthH, 'S');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(6);
+        pdf.setTextColor(40, 40, 40);
+        const label = g.label.length > 12 ? g.label.substring(0, 12) + '.' : g.label;
+        pdf.text(label, x + w / 2, oy + 4, { align: 'center' });
+      });
 
-      pdf.addImage(dataUrl, 'PNG', (pdfW - w) / 2, (pdfH - h) / 2, w, h);
-      pdf.save(`${planName || 'planning'}_${pdfStart}_${pdfEnd}.pdf`);
-    } catch (err) {
-      console.error('PDF export failed', err);
-      alert('Erreur lors de l\'export PDF.');
+      const wy = oy + headerMonthH;
+      pdf.setFillColor(245, 245, 245);
+      pdf.rect(margin, wy, colLeft, headerWeekH, 'F');
+
+      weekGroupsPdf.forEach((g) => {
+        const x = ox + g.start * dayW;
+        const w = g.count * dayW;
+        pdf.setDrawColor(200, 200, 200);
+        pdf.rect(x, wy, w, headerWeekH, 'S');
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(5.5);
+        pdf.setTextColor(80, 80, 80);
+        pdf.text(`S${g.week}`, x + w / 2, wy + 3.8, { align: 'center' });
+      });
+
+      const dy = wy + headerWeekH;
+      pdf.setFillColor(248, 248, 248);
+      pdf.rect(margin, dy, colLeft, headerDateH, 'F');
+
+      rangeDays.forEach((d, i) => {
+        const x = ox + i * dayW;
+        const dt = toDate(d);
+        const isToday = d === today;
+        if (isToday) {
+          pdf.setFillColor(200, 230, 200);
+          pdf.rect(x, dy, dayW, headerDateH, 'F');
+        }
+        pdf.setDrawColor(200, 200, 200);
+        pdf.rect(x, dy, dayW, headerDateH, 'S');
+        pdf.setFont('helvetica', isToday ? 'bold' : 'normal');
+        pdf.setFontSize(5);
+        pdf.setTextColor(isToday ? 20 : 60, isToday ? 100 : 60, isToday ? 20 : 60);
+        pdf.text(String(dt.getDate()), x + dayW / 2, dy + 3.5, { align: 'center' });
+        if (dayW >= 6) {
+          const wd = dt.toLocaleDateString('fr-FR', { weekday: 'narrow' });
+          pdf.setFontSize(4);
+          pdf.setTextColor(120, 120, 120);
+          pdf.text(wd, x + dayW / 2, dy + 6, { align: 'center' });
+        }
+      });
+
+      pdf.setDrawColor(0, 0, 0);
+      pdf.setLineWidth(0.3);
+      pdf.rect(margin, oy, colLeft + gridW, headerH, 'S');
+
+      pdf.setTextColor(0, 0, 0);
+
+      pageRows.forEach((row, ri) => {
+        const ry = startY + ri * rowH;
+        const isOdd = ri % 2 === 1;
+
+        pdf.setFillColor(isOdd ? 248 : 255, isOdd ? 248 : 255, isOdd ? 252 : 255);
+        pdf.rect(margin, ry, colLeft + gridW, rowH, 'F');
+
+        pdf.setDrawColor(220, 220, 220);
+        pdf.rect(margin, ry, colLeft + gridW, rowH, 'S');
+        pdf.rect(margin + colLeft, ry, gridW, rowH, 'S');
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(6.5);
+        pdf.setTextColor(30, 30, 30);
+        pdf.text(row.nom || '', margin + 3, ry + rowH / 2 + 1.5, { maxWidth: colLeft - 6 });
+
+        const rowItems = items.filter((it) => it.rowId === row.id);
+        rowItems.forEach((item) => {
+          const startIdx = dayIdxInPdf.get(item.start);
+          if (startIdx == null) return;
+          const itemEnd = getEndDate(item);
+          let endIdx = dayIdxInPdf.get(itemEnd);
+          if (endIdx == null) {
+            endIdx = rangeDays.length - 1;
+          }
+          if (endIdx < startIdx) return;
+
+          const ix = ox + startIdx * dayW;
+          const iw = (endIdx - startIdx + 1) * dayW - 1;
+          const iy = ry + 1.5;
+          const ih = rowH - 3;
+
+          const rgb = hexToRgb(item.color || '#2563eb');
+          pdf.setFillColor(rgb[0], rgb[1], rgb[2]);
+          pdf.roundedRect(ix, iy, Math.max(iw, 2), ih, 1, 1, 'F');
+
+          if (iw > 10) {
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(5.5);
+            pdf.setTextColor(255, 255, 255);
+            const txt = item.nom || '';
+            const maxChars = Math.floor(iw / 2);
+            const truncated = txt.length > maxChars ? txt.substring(0, maxChars - 1) + '.' : txt;
+            pdf.text(truncated, ix + 1.5, iy + ih / 2 + 1.5, { maxWidth: iw - 3 });
+            pdf.setTextColor(0, 0, 0);
+          }
+        });
+
+        if (ri === pageRows.length - 1) {
+          rangeDays.forEach((d, i) => {
+            const x = ox + i * dayW;
+            pdf.setDrawColor(210, 210, 210);
+            pdf.line(x, ry + rowH, x, ry + rowH);
+          });
+        }
+      });
+
+      if (pageIndex === totalPages - 1) {
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(5);
+        pdf.setTextColor(150, 150, 150);
+        pdf.text(`Page ${pageIndex + 1}/${totalPages}`, pageW - margin, pageH - 3, { align: 'right' });
+        pdf.setTextColor(0, 0, 0);
+      }
     }
 
-    if (scrollRef.current) {
-      scrollRef.current.scrollLeft = origScrollLeft;
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    if (gridRows.length === 0) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(16);
+      pdf.text(planName || 'Planning', margin, margin + 10);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text('Aucune tâche dans cette plage de dates.', margin, margin + 20);
+      pdf.save(`${planName || 'planning'}_${rangeStart}_${rangeEnd}.pdf`);
+      return;
     }
+
+    for (let pi = 0; pi < totalPages; pi++) {
+      if (pi > 0) pdf.addPage();
+      const start = pi * rowsOnPage;
+      const end = Math.min(start + rowsOnPage, gridRows.length);
+      drawGrid(pdf, gridRows.slice(start, end), pi);
+    }
+
+    pdf.save(`${planName || 'planning'}_${rangeStart}_${rangeEnd}.pdf`);
   }
 
   if (loading) {
@@ -752,7 +919,7 @@ export default function PersonalPlanning({ user }) {
   }
 
   return (
-    <div className="personal-planning-wrap">
+    <div className="personal-planning-wrap" onMouseUp={endSelection}>
       <div className="personal-header">
         <div className="personal-plan-selector" style={{ position: 'relative' }}>
           <button className="personal-plan-btn" onClick={() => setDropdownOpen((v) => !v)}>
@@ -807,7 +974,7 @@ export default function PersonalPlanning({ user }) {
           <button className="personal-add-btn" onClick={handleCreatePlan}>Créer un planning</button>
         </div>
       ) : (
-        <div ref={printRef}>
+        <div>
           <PersonalPlanningGrid
             gridRows={gridRows}
             visibleDays={visibleDays}
