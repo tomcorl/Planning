@@ -225,7 +225,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
     const idx = dayIdxMemo.get(date);
     const ind = indicatorRef.current;
     if (ind && idx != null) {
-      ind.style.left = (idx * cellWidth + cellWidth / 2) + 'px';
+      ind.style.left = (260 + idx * cellWidth + cellWidth / 2) + 'px';
       ind.style.opacity = '1';
     }
   }
