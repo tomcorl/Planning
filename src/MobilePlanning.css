@@ -1,0 +1,178 @@
+.mobile-planning {
+  height: calc(100vh - 58px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 12px 100px;
+  background: var(--bg);
+  -webkit-overflow-scrolling: touch;
+}
+
+.mp-company-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 14px 4px 8px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.mp-company-count {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.mp-team-section {
+  margin-bottom: 16px;
+}
+
+.mp-team-header {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  padding: 8px 4px 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+
+.mp-card {
+  display: flex;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  cursor: pointer;
+  margin-bottom: 6px;
+  transition: box-shadow 0.15s, transform 0.1s;
+  min-height: 52px;
+}
+
+.mp-card:active {
+  box-shadow: 0 1px 4px var(--shadow);
+  transform: scale(0.99);
+}
+
+.mp-card-color {
+  width: 5px;
+  flex-shrink: 0;
+}
+
+.mp-card-color-conge {
+  background: #f59e0b;
+}
+
+.mp-card-conge {
+  background: var(--surface-2);
+}
+
+.mp-card-body {
+  flex: 1;
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.mp-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mp-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mp-card-delete {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mp-card-delete:active {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.mp-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mp-card-duree {
+  background: var(--line);
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.mp-card-conducteur {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mp-card-conducteur::before {
+  content: '👤';
+  font-size: 11px;
+}
+
+.mp-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.mp-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--green);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 300;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(22, 163, 74, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+  z-index: 1000;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mp-fab:active {
+  transform: scale(0.92);
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
+}

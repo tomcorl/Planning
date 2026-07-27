@@ -8,6 +8,7 @@ const LoginPage = lazy(() => import('./LoginPage.jsx'));
 const PasswordChangePage = lazy(() => import('./PasswordChangePage.jsx'));
 const PersonalPlanning = lazy(() => import('./PersonalPlanning.jsx'));
 import PlanningGrid from './PlanningGrid.jsx';
+import MobilePlanning from './MobilePlanning.jsx';
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
@@ -177,6 +178,7 @@ export default function App() {
   const [settingsPos, setSettingsPos] = useState({ top: 0, left: 0 });
   const settingsDropdownRef = useRef(null);
   const [connectedUsers, setConnectedUsers] = useState([]);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
   useEffect(() => {
     localStorage.setItem('filterConducteurIds', JSON.stringify(filterConducteurIds));
@@ -210,6 +212,13 @@ export default function App() {
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [settingsOpen]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const lastCellRef = useRef(null);
 
@@ -1975,6 +1984,25 @@ export default function App() {
 
       {activePage === 'planning' && (
         <>
+      {isMobile ? (
+        <MobilePlanning
+          chantiers={chantiers}
+          conges={conges}
+          teams={teams}
+          conducteurs={conducteurs}
+          companies={companies}
+          canEdit={canEdit}
+          session={session}
+          onEditChantier={openEditChantier}
+          onEditConge={openEditConge}
+          onAddChantier={quickAdd}
+          onDeleteChantier={(id) => { setSelectedItem({ type: 'chantier', id }); deleteSelectedItem(); }}
+          onDeleteConge={(id) => { setSelectedItem({ type: 'conge', id }); deleteSelectedItem(); }}
+          getEndDateForChantier={getEndDateForChantier}
+          getConducteur={getConducteur}
+          addWorkingDays={addWorkingDays}
+        />
+      ) : (
       <PlanningGrid
         gridRows={gridRows}
         visibleDays={visibleDays}
@@ -1996,6 +2024,7 @@ export default function App() {
         callbacksRef={gridCallbacksRef}
         scrollRef={scrollRef}
       />
+      )}
 
         <Modals
           modal={modal} setModal={setModal}
