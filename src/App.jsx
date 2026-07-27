@@ -302,6 +302,13 @@ export default function App() {
     [theme]
   );
 
+  // ── Realtime broadcast ──
+  const saveTimerRef = useRef(null);
+  const suppressAutoSaveRef = useRef(false);
+  const reloadTimerRef = useRef(null);
+  const reloadInFlightRef = useRef(false);
+  const pendingReloadRef = useRef(false);
+
   // ── Supabase Auth + Data Loading ──
   const loadedRef = useRef(false);
   const skipNextReflowRef = useRef(true);
@@ -324,7 +331,9 @@ export default function App() {
   // Debounced persistence to Supabase (runs 800ms after data settles)
   useEffect(() => {
     if (!loadedRef.current || !session || !companies.length) return;
+    if (suppressAutoSaveRef.current) return;
     const timer = setTimeout(async () => {
+      saveTimerRef.current = null;
       try {
         const result = await api.saveAllPlanningData({
           chantiers,
@@ -365,12 +374,80 @@ export default function App() {
             setConges(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
           }
         }
+
+        api.notifyPlanningSaved();
+
+        if (pendingReloadRef.current) {
+          pendingReloadRef.current = false;
+          performReload();
+        }
       } catch (e) {
         console.error('saveAllPlanningData failed', e);
       }
     }, 800);
-    return () => clearTimeout(timer);
+    saveTimerRef.current = timer;
+    return () => { clearTimeout(timer); saveTimerRef.current = null; };
   }, [chantiers, conges, teams, conducteurs, customFeries, chantierColors, conducteurColors, session, companies]);
+
+  // ── Realtime subscription ──
+  useEffect(() => {
+    if (!session?.id) return;
+    const cleanup = api.subscribePlanningUpdates(session.id, () => {
+      if (!loadedRef.current) return;
+      if (saveTimerRef.current) {
+        pendingReloadRef.current = true;
+        return;
+      }
+      scheduleReload();
+    });
+    return cleanup;
+  }, [session?.id]);
+
+  function scheduleReload() {
+    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+    reloadTimerRef.current = setTimeout(performReload, 200);
+  }
+
+  async function performReload() {
+    if (reloadInFlightRef.current) {
+      pendingReloadRef.current = true;
+      return;
+    }
+    if (saveTimerRef.current) {
+      pendingReloadRef.current = true;
+      return;
+    }
+    reloadInFlightRef.current = true;
+    reloadTimerRef.current = null;
+    suppressAutoSaveRef.current = true;
+
+    try {
+      const allData = await api.loadPlanningData();
+      if (!allData) return;
+      setCompanies(allData.companies);
+      setTeams(allData.equipes || []);
+      setConducteurs(allData.conducteurs || []);
+      setChantiers(allData.chantiers || []);
+      setConges(allData.conges || []);
+      setCustomFeries(allData.customFeries || []);
+
+      if (allData.companies.length > 0) {
+        const first = allData.companies[0];
+        if (first.chantier_colors?.length) setChantierColors(first.chantier_colors);
+        if (first.conducteur_colors?.length) setConducteurColors(first.conducteur_colors);
+      }
+    } catch (e) {
+      console.error('Realtime reload failed', e);
+    } finally {
+      reloadInFlightRef.current = false;
+      setTimeout(() => { suppressAutoSaveRef.current = false; }, 100);
+
+      if (pendingReloadRef.current) {
+        pendingReloadRef.current = false;
+        performReload();
+      }
+    }
+  }
 
   async function loadAllCompanyData() {
     setDataLoading(true);

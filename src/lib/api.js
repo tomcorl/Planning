@@ -409,3 +409,36 @@ export async function savePersonalPlan(planId, rows, items) {
     }
   }
 }
+
+// ─── REALTIME BROADCAST ──────────────────────────────────
+
+let planningChannel = null;
+
+export function subscribePlanningUpdates(userId, onNotify) {
+  if (planningChannel) {
+    supabase.removeChannel(planningChannel);
+  }
+  planningChannel = supabase.channel('planning-broadcast', {
+    config: { broadcast: { self: false } },
+  });
+  planningChannel.on('broadcast', { event: 'saved' }, () => {
+    onNotify();
+  });
+  planningChannel.subscribe();
+  return () => {
+    if (planningChannel) {
+      supabase.removeChannel(planningChannel);
+      planningChannel = null;
+    }
+  };
+}
+
+export function notifyPlanningSaved() {
+  if (planningChannel) {
+    planningChannel.send({
+      type: 'broadcast',
+      event: 'saved',
+      payload: { timestamp: Date.now() },
+    }).catch(() => {});
+  }
+}
