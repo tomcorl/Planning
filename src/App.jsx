@@ -1853,12 +1853,12 @@ export default function App() {
                 setSettingsOpen(v => !v);
               }}
               style={{
-                fontSize: 18, padding: '4px 7px', cursor: 'pointer', lineHeight: 1,
-                background: 'var(--line)', border: '1px solid var(--line)', borderRadius: 6,
-                color: 'var(--text)', opacity: 0.85,
+                fontSize: 22, padding: '2px 6px', cursor: 'pointer', lineHeight: 1,
+                background: 'transparent', border: '1px solid var(--line)', borderRadius: 6,
+                color: 'var(--text)', opacity: 1, fontWeight: 700,
               }}
               title="Paramètres"
-            >⚙️</button>
+            >⚙</button>
           </div>
 
           {settingsOpen && createPortal(
