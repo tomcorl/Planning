@@ -168,6 +168,8 @@ export default function App() {
   const lastXRef = useRef(0);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem('filterConducteurIds', JSON.stringify(filterConducteurIds));
@@ -183,6 +185,17 @@ export default function App() {
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [filterOpen]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    function close(e) {
+      if (settingsRef.current && !settingsRef.current.contains(e.target)) {
+        setSettingsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [settingsOpen]);
 
   const lastCellRef = useRef(null);
 
@@ -1777,7 +1790,6 @@ export default function App() {
 
         {activePage === 'planning' && (
           <div className="date-nav">
-            <input type="date" aria-label="Aller à une date" value={jumpDate} onChange={(e) => jumpToDate(e.target.value)} />
             <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
             <div>
               <button
@@ -1827,21 +1839,45 @@ export default function App() {
             </button>
           )}
 
-          {activePage === 'planning' && canEdit && (
-            <button onClick={() => setHolidayModalOpen(true)}>
-              Jours fériés
-            </button>
-          )}
-
-          <button
-            className="theme-toggle"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-
-          <button onClick={() => { if (window.confirm('Se déconnecter ?')) logout(); }}>Déconnexion</button>
+          <div ref={settingsRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setSettingsOpen(v => !v)}
+              style={{ fontSize: 20, padding: '4px 6px', cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', lineHeight: 1 }}
+            >⚙️</button>
+            {settingsOpen && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', zIndex: 99999,
+                background: 'var(--surface)', border: '1px solid var(--line)',
+                borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                minWidth: 190, padding: '6px 0', overflow: 'hidden',
+              }}>
+                {activePage === 'planning' && canEdit && (
+                  <div onClick={() => { setSettingsOpen(false); setHolidayModalOpen(true); }}
+                    style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--line)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    🗓️ Jours fériés
+                  </div>
+                )}
+                <div onClick={() => { setSettingsOpen(false); setTheme(theme === 'dark' ? 'light' : 'dark'); }}
+                  style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--line)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  {theme === 'dark' ? '☀️' : '🌙'} {theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+                </div>
+                <div style={{ height: 1, background: 'var(--line)', margin: '5px 0' }} />
+                <div onClick={() => { setSettingsOpen(false); if (window.confirm('Se déconnecter ?')) logout(); }}
+                  style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 8 }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--line)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  🚪 Déconnexion
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
