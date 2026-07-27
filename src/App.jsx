@@ -172,6 +172,7 @@ export default function App() {
   const settingsRef = useRef(null);
   const [settingsPos, setSettingsPos] = useState({ top: 0, left: 0 });
   const settingsDropdownRef = useRef(null);
+  const [connectedUsers, setConnectedUsers] = useState([]);
 
   useEffect(() => {
     localStorage.setItem('filterConducteurIds', JSON.stringify(filterConducteurIds));
@@ -420,6 +421,19 @@ export default function App() {
     });
     return cleanup;
   }, [session?.id]);
+
+  // ── Realtime presence ──
+  useEffect(() => {
+    if (!session?.id) return;
+    const companyId = companies[0]?.id;
+    const cleanup = api.subscribePlanningPresence(
+      session.id,
+      session.nom || 'Utilisateur',
+      companyId,
+      setConnectedUsers
+    );
+    return cleanup;
+  }, [session?.id, companies[0]?.id]);
 
   function scheduleReload() {
     if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
@@ -1842,6 +1856,35 @@ export default function App() {
             <button className="primary-action" onClick={quickAdd}>
               + Chantier
             </button>
+          )}
+
+          {connectedUsers.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginRight: 2 }}>
+              {connectedUsers.slice(0, 4).map((u, i) => (
+                <div
+                  key={u.userId}
+                  title={u.nom}
+                  style={{
+                    width: 26, height: 26, borderRadius: '50%',
+                    background: u.userId === session.id ? '#22c55e' : '#2563eb',
+                    color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 11, fontWeight: 700,
+                    border: '2px solid var(--surface)',
+                    marginLeft: i === 0 ? 0 : -6,
+                    position: 'relative',
+                    zIndex: connectedUsers.length - i,
+                  }}
+                >
+                  {u.nom.charAt(0).toUpperCase()}
+                </div>
+              ))}
+              {connectedUsers.length > 4 && (
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 2, fontWeight: 600 }}>
+                  +{connectedUsers.length - 4}
+                </div>
+              )}
+            </div>
           )}
 
           <div ref={settingsRef} style={{ position: 'relative', display: 'inline-flex' }}>

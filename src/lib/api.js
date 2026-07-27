@@ -442,3 +442,50 @@ export function notifyPlanningSaved() {
     }).catch(() => {});
   }
 }
+
+// ─── REALTIME PRESENCE ──────────────────────────────────
+
+let presenceChannel = null;
+
+export function subscribePlanningPresence(userId, nom, companyId, onPresenceUpdate) {
+  if (presenceChannel) {
+    supabase.removeChannel(presenceChannel);
+    presenceChannel = null;
+  }
+
+  const channelName = companyId
+    ? `planning-presence-${companyId}`
+    : 'planning-presence';
+
+  presenceChannel = supabase.channel(channelName);
+
+  presenceChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = presenceChannel.presenceState();
+      const seen = new Set();
+      const users = [];
+
+      for (const presence of Object.values(state)) {
+        for (const p of presence) {
+          if (!seen.has(p.userId)) {
+            seen.add(p.userId);
+            users.push({ userId: p.userId, nom: p.nom });
+          }
+        }
+      }
+
+      onPresenceUpdate(users);
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await presenceChannel.track({ userId, nom });
+      }
+    });
+
+  return () => {
+    if (presenceChannel) {
+      supabase.removeChannel(presenceChannel);
+      presenceChannel = null;
+    }
+  };
+}
