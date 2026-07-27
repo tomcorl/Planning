@@ -154,6 +154,10 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('filterConducteurIds')) || []; }
     catch { return []; }
   });
+  const [filterColors, setFilterColors] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('filterColors')) || []; }
+    catch { return []; }
+  });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterPos, setFilterPos] = useState({ top: 0, left: 0 });
   const filterBtnRef = useRef(null);
@@ -177,6 +181,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('filterConducteurIds', JSON.stringify(filterConducteurIds));
   }, [filterConducteurIds]);
+
+  useEffect(() => {
+    localStorage.setItem('filterColors', JSON.stringify(filterColors));
+  }, [filterColors]);
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -1592,9 +1600,15 @@ export default function App() {
   const deferredVisibleDays = useDeferredValue(visibleDays);
 
   const filteredChantiers = useMemo(() => {
-    if (filterConducteurIds.length === 0) return deferredChantiers;
-    return deferredChantiers.filter(c => filterConducteurIds.includes(c.conducteurId));
-  }, [deferredChantiers, filterConducteurIds]);
+    const hasConducteurFilter = filterConducteurIds.length > 0;
+    const hasColorFilter = filterColors.length > 0;
+    if (!hasConducteurFilter && !hasColorFilter) return deferredChantiers;
+    return deferredChantiers.filter(c => {
+      const matchConducteur = hasConducteurFilter && filterConducteurIds.includes(c.conducteurId);
+      const matchColor = hasColorFilter && filterColors.includes(c.color);
+      return matchConducteur || matchColor;
+    });
+  }, [deferredChantiers, filterConducteurIds, filterColors]);
 
   const congeSegmentsCacheRef = useRef(null);
   const congeSegmentsMap = useMemo(() => {
@@ -1820,9 +1834,9 @@ export default function App() {
                   setFilterOpen((v) => !v);
                 }}
               >
-                {filterConducteurIds.length > 0
-                  ? `Filtrer (${filterConducteurIds.length})`
-                  : 'Filtrer conducteur'}
+                {filterConducteurIds.length > 0 || filterColors.length > 0
+                  ? `Filtrer (${filterConducteurIds.length + filterColors.length})`
+                  : 'Filtrer'}
               </button>
             </div>
           </div>
@@ -2013,10 +2027,12 @@ export default function App() {
       <footer className="app-footer">Créé par Tom Corlay</footer>
       {filterOpen && createPortal(
         <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
-          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterOpen(false); }}>
-            <span className={!filterConducteurIds.length ? 'active' : ''}>●</span>
-            Tous les conducteurs
+          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setFilterOpen(false); }}>
+            <span className={!filterConducteurIds.length && !filterColors.length ? 'active' : ''}>●</span>
+            Tout afficher
           </div>
+          <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
+          <div style={{ padding: '4px 14px 2px', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>CONDUCTEUR</div>
           {conducteurs.map((c) => (
             <div
               key={c.id}
@@ -2033,6 +2049,32 @@ export default function App() {
               {c.prenom} {c.nom}
             </div>
           ))}
+          <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
+          <div style={{ padding: '4px 14px 2px', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>COULEUR</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '4px 14px 8px' }}>
+            {CHANTIER_COLORS.map((color) => {
+              const active = filterColors.includes(color);
+              return (
+                <div
+                  key={color}
+                  onClick={() => {
+                    setFilterColors((prev) =>
+                      prev.includes(color)
+                        ? prev.filter((x) => x !== color)
+                        : [...prev, color]
+                    );
+                  }}
+                  style={{
+                    width: 24, height: 24, borderRadius: '50%', background: color, cursor: 'pointer',
+                    border: active ? '3px solid var(--text)' : '3px solid transparent',
+                    outline: active ? '2px solid ' + color : 'none',
+                    transition: 'border 0.15s',
+                  }}
+                  title={color}
+                />
+              );
+            })}
+          </div>
         </div>,
         document.body
       )}
