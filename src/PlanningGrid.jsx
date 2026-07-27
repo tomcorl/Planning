@@ -278,6 +278,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (deleteBtn) return;
     if (teamInput) return;
 
+    if (!canEdit && (type === 'dragstart' || type === 'drop' || type === 'dragover' || type === 'dblclick' || type === 'contextmenu' || type === 'mousedown')) return;
+
     if (type === 'dragstart') {
       isDraggingRef.current = true;
       const fromResize = resizeDragRef.current;
@@ -509,6 +511,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           key={`name-${row.name}`}
                           defaultValue={row.name}
                           aria-label="Nom de l'équipe"
+                          readOnly={!canEdit}
                           onBlur={(e) => cb.updateTeam(row.teamId, e.target.value)}
                           style={{ fontSize: Math.round(13 + (cellWidth - 26) * 3 / 26) }}
                         />

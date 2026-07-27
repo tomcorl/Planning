@@ -807,6 +807,7 @@ export default function App() {
   }
 
   function updateTeam(id, value) {
+    if (!canEdit) return;
     commit(() => {
       setTeams((prev) => prev.map((t) => (t.id === id ? { ...t, nom: value } : t)));
     });
@@ -853,6 +854,7 @@ export default function App() {
   }
 
   function startSelection(e, equipe, date) {
+    if (!canEdit) return;
     if (e.button !== 0) return;
     if (resize || modal.open) return;
     lastCellRef.current = { equipe, date };
@@ -920,6 +922,7 @@ export default function App() {
   }
 
   function openEditChantier(chantier) {
+    if (!canEdit) return;
     if (!chantier) return;
     const full = chantiers.find((c) => c.id === chantier.id) || chantier;
     setSelectedItem({ type: 'chantier', id: full.id });
@@ -928,6 +931,7 @@ export default function App() {
   }
 
   function openEditConge(conge) {
+    if (!canEdit) return;
     if (!conge) return;
     const full = conges.find((c) => c.id === conge.id) || conge;
     setSelectedItem({ type: 'conge', id: full.id });
@@ -942,6 +946,7 @@ export default function App() {
   }
 
   function saveModal() {
+    if (!canEdit) return;
     if (!form?.nom?.trim() && modal.type !== 'conducteur') {
       alert('Il faut donner un nom.');
       return;
@@ -1113,12 +1118,14 @@ export default function App() {
   }
 
   function onDragStart(e, id, type) {
+    if (!canEdit) return;
     e.dataTransfer.setData('itemId', String(id));
     e.dataTransfer.setData('itemType', type || 'chantier');
     e.dataTransfer.effectAllowed = 'move';
   }
 
   function onDrop(e, equipe, date) {
+    if (!canEdit) return;
     e.preventDefault();
     e.stopPropagation();
     const id = Number(e.dataTransfer.getData('itemId'));
@@ -1142,6 +1149,7 @@ export default function App() {
   }
 
   function startResize(e, chantier, side) {
+    if (!canEdit) return;
     e.preventDefault();
     e.stopPropagation();
 
