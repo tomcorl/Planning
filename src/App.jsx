@@ -170,6 +170,8 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsRef = useRef(null);
+  const [settingsPos, setSettingsPos] = useState({ top: 0, left: 0 });
+  const settingsDropdownRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem('filterConducteurIds', JSON.stringify(filterConducteurIds));
@@ -189,7 +191,10 @@ export default function App() {
   useEffect(() => {
     if (!settingsOpen) return;
     function close(e) {
-      if (settingsRef.current && !settingsRef.current.contains(e.target)) {
+      if (
+        settingsRef.current && !settingsRef.current.contains(e.target) &&
+        settingsDropdownRef.current && !settingsDropdownRef.current.contains(e.target)
+      ) {
         setSettingsOpen(false);
       }
     }
@@ -1839,45 +1844,60 @@ export default function App() {
             </button>
           )}
 
-          <div ref={settingsRef} style={{ position: 'relative' }}>
+          <div ref={settingsRef} style={{ position: 'relative', display: 'inline-flex' }}>
             <button
-              onClick={() => setSettingsOpen(v => !v)}
-              style={{ fontSize: 20, padding: '4px 6px', cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', lineHeight: 1 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                setSettingsPos({ top: rect.bottom + 4, left: Math.max(4, rect.right - 190) });
+                setSettingsOpen(v => !v);
+              }}
+              style={{
+                fontSize: 18, padding: '4px 7px', cursor: 'pointer', lineHeight: 1,
+                background: 'var(--line)', border: '1px solid var(--line)', borderRadius: 6,
+                color: 'var(--text)', opacity: 0.85,
+              }}
+              title="Paramètres"
             >⚙️</button>
-            {settingsOpen && (
-              <div style={{
-                position: 'absolute', right: 0, top: '100%', zIndex: 99999,
+          </div>
+
+          {settingsOpen && createPortal(
+            <div
+              ref={settingsDropdownRef}
+              style={{
+                position: 'fixed', top: settingsPos.top, left: settingsPos.left, zIndex: 999999,
                 background: 'var(--surface)', border: '1px solid var(--line)',
-                borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
                 minWidth: 190, padding: '6px 0', overflow: 'hidden',
-              }}>
-                {activePage === 'planning' && canEdit && (
-                  <div onClick={() => { setSettingsOpen(false); setHolidayModalOpen(true); }}
-                    style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--line)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    🗓️ Jours fériés
-                  </div>
-                )}
-                <div onClick={() => { setSettingsOpen(false); setTheme(theme === 'dark' ? 'light' : 'dark'); }}
+              }}
+            >
+              {activePage === 'planning' && canEdit && (
+                <div onClick={() => { setSettingsOpen(false); setHolidayModalOpen(true); }}
                   style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--line)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
-                  {theme === 'dark' ? '☀️' : '🌙'} {theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
+                  🗓️ Jours fériés
                 </div>
-                <div style={{ height: 1, background: 'var(--line)', margin: '5px 0' }} />
-                <div onClick={() => { setSettingsOpen(false); if (window.confirm('Se déconnecter ?')) logout(); }}
-                  style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 8 }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--line)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  🚪 Déconnexion
-                </div>
+              )}
+              <div onClick={() => { setSettingsOpen(false); setTheme(theme === 'dark' ? 'light' : 'dark'); }}
+                style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--line)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                {theme === 'dark' ? '☀️' : '🌙'} {theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
               </div>
-            )}
-          </div>
+              <div style={{ height: 1, background: 'var(--line)', margin: '5px 0' }} />
+              <div onClick={() => { setSettingsOpen(false); if (window.confirm('Se déconnecter ?')) logout(); }}
+                style={{ padding: '9px 14px', cursor: 'pointer', fontSize: 13, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 8 }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--line)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                🚪 Déconnexion
+              </div>
+            </div>,
+            document.body
+          )}
         </div>
       </div>
 
