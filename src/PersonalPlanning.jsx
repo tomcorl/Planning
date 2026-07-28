@@ -8,7 +8,7 @@ import {
   savePersonalPlan,
 } from './lib/api.js';
 import PersonalPlanningGrid from './PersonalPlanningGrid.jsx';
-import { addWorkingDays, getWorkingDaysBetween, generateFrenchHolidays } from './lib/personalPlanningUtils.js';
+import { addWorkingDays, getWorkingDaysBetween, generateFrenchHolidays, isWorkingDay } from './lib/personalPlanningUtils.js';
 import { generatePdf } from './lib/pdfExport.js';
 
 const CELL_W = 26;
@@ -112,17 +112,31 @@ function applyPersonalInsertion(list, movedItem, targetRowId, targetStart, ferie
   return next;
 }
 
+function nextWorkingDay(date, ferieSet) {
+  let cur = date;
+  while (!isWorkingDay(cur, ferieSet)) {
+    const d = toDate(cur);
+    d.setDate(d.getDate() + 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    cur = `${y}-${m}-${day}`;
+  }
+  return cur;
+}
+
 function cascadeGanttOnModify(allItems, modifiedId, ferieSet) {
   const sorted = allItems.map(it => ({ ...it })).sort((a, b) => {
     if (a.start !== b.start) return a.start.localeCompare(b.start);
     return a.id - b.id;
   });
   const idx = sorted.findIndex(it => it.id === modifiedId);
-  if (idx === -1 || idx === sorted.length - 1) return sorted;
+  if (idx === -1) return sorted;
+  sorted[idx].start = nextWorkingDay(sorted[idx].start, ferieSet);
   for (let i = idx + 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];
     const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
-    sorted[i].start = addWorkingDays(prevEnd, 1, ferieSet);
+    sorted[i].start = nextWorkingDay(addWorkingDays(prevEnd, 1, ferieSet), ferieSet);
   }
   return sorted;
 }
@@ -137,7 +151,7 @@ function cascadeGanttOnDelete(allItems, deletedId, ferieSet) {
   for (let i = 1; i < sorted.length; i++) {
     const prev = sorted[i - 1];
     const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
-    sorted[i].start = addWorkingDays(prevEnd, 1, ferieSet);
+    sorted[i].start = nextWorkingDay(addWorkingDays(prevEnd, 1, ferieSet), ferieSet);
   }
   return sorted;
 }
@@ -522,7 +536,7 @@ export default function PersonalPlanning({ user }) {
     const b = Math.max(startIdx, endIdx);
     if (a === b) { setSelection(null); return; }
 
-    const start = visibleDateByIndex(a);
+    const start = nextWorkingDay(visibleDateByIndex(a), ferieSet);
     const duree = b - a + 1;
     openCreateItem(selection.rowId, start, duree);
     setSelection(null);

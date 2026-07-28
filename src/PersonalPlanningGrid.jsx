@@ -392,13 +392,14 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
-          {gridRows.map((row) => {
+          {gridRows.map((row, rowIndex) => {
             const rowId = row.id;
+            const isOdd = rowIndex % 2 === 1;
 
             return (
               <React.Fragment key={rowId}>
                 <div className="grid-row" style={{ height: rowHeight }}>
-                  <div className={`team-cell ${rowId % 2 ? 'odd' : ''}`}>
+                  <div className={`team-cell${isOdd ? ' odd' : ''}`}>
                     <div className="avatar">{row.ordre + 1}</div>
                     <input
                       key={`name-${row.nom}`}
@@ -420,7 +421,7 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
                       const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                       const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
 
-                      const baseClassName = `cell${rowId % 2 ? ' odd' : ''}${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${day.date === today ? ' today' : ''}`;
+                      const baseClassName = `cell${isOdd ? ' odd' : ''}${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${day.date === today ? ' today' : ''}`;
                       const sel = isSelected(rowId, day.date);
                       const res = resize?.previewStart && resize?.previewEnd && resize?.previewRowId === rowId && day.date >= resize.previewStart && day.date <= resize.previewEnd;
 
