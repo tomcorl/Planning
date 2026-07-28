@@ -112,6 +112,36 @@ function applyPersonalInsertion(list, movedItem, targetRowId, targetStart, ferie
   return next;
 }
 
+function cascadeGanttOnModify(allItems, modifiedId, ferieSet) {
+  const sorted = allItems.map(it => ({ ...it })).sort((a, b) => {
+    if (a.start !== b.start) return a.start.localeCompare(b.start);
+    return a.id - b.id;
+  });
+  const idx = sorted.findIndex(it => it.id === modifiedId);
+  if (idx === -1 || idx === sorted.length - 1) return sorted;
+  for (let i = idx + 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
+    sorted[i].start = addWorkingDays(prevEnd, 1, ferieSet);
+  }
+  return sorted;
+}
+
+function cascadeGanttOnDelete(allItems, deletedId, ferieSet) {
+  const remaining = allItems.filter(it => it.id !== deletedId);
+  if (remaining.length <= 1) return remaining;
+  const sorted = remaining.map(it => ({ ...it })).sort((a, b) => {
+    if (a.start !== b.start) return a.start.localeCompare(b.start);
+    return a.id - b.id;
+  });
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
+    sorted[i].start = addWorkingDays(prevEnd, 1, ferieSet);
+  }
+  return sorted;
+}
+
 export default function PersonalPlanning({ user }) {
   const scrollRef = useRef(null);
   const today = useMemo(() => formatDate(new Date()), []);
@@ -439,7 +469,7 @@ export default function PersonalPlanning({ user }) {
         doSave(rows, newItems);
       } else {
         const newItems = [...items, newItem];
-        const cleaned = applyPersonalInsertion(newItems, newItem, newItem.rowId, newItem.start, ferieSet);
+        const cleaned = cascadeGanttOnModify(newItems, newItem.id, ferieSet);
         setItems(cleaned);
         doSave(rows, cleaned);
       }
@@ -460,7 +490,8 @@ export default function PersonalPlanning({ user }) {
 
   function deleteSelectedItem() {
     if (!selectedItem || selectedItem.type !== 'item') return;
-    const newItems = items.filter((it) => it.id !== selectedItem.id);
+    const filtered = items.filter((it) => it.id !== selectedItem.id);
+    const newItems = ganttMode ? cascadeGanttOnDelete(filtered, selectedItem.id, ferieSet) : filtered;
     setItems(newItems);
     doSave(rows, newItems);
     setSelectedItem(null);
@@ -518,7 +549,8 @@ export default function PersonalPlanning({ user }) {
       setItems(newItems);
       doSave(rows, newItems);
     } else {
-      const newItems = applyPersonalInsertion(items, movedItem, rowId, newStart, ferieSet);
+      const applied = items.map((it) => it.id === item.id ? movedItem : it);
+      const newItems = cascadeGanttOnModify(applied, item.id, ferieSet);
       setItems(newItems);
       doSave(rows, newItems);
     }
@@ -604,7 +636,7 @@ export default function PersonalPlanning({ user }) {
             } else {
               setItems((prev) => {
                 const updated = prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it);
-                return applyPersonalInsertion(updated, { ...updated.find(it => it.id === id) }, originalRowId, originalStart, ferieSet);
+                return cascadeGanttOnModify(updated, id, ferieSet);
               });
             }
           }
@@ -626,7 +658,7 @@ export default function PersonalPlanning({ user }) {
                 const updated = prev.map((it) =>
                   it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
                 );
-                return applyPersonalInsertion(updated, { id, rowId: originalRowId, start: rawNewStart, duree: newDuree, nom: '', color: '' }, originalRowId, rawNewStart, ferieSet);
+                return cascadeGanttOnModify(updated, id, ferieSet);
               });
             }
           }
@@ -780,15 +812,12 @@ export default function PersonalPlanning({ user }) {
               if (scrollRef.current && idx >= 0) scrollRef.current.scrollLeft = Math.max(0, idx * CELL_W - 500);
             }}>Aujourd'hui</button>
             <button className="personal-pdf-btn" onClick={() => setPdfModal(true)}>PDF</button>
-            <button className="personal-add-task-btn" onClick={handleAddRow}>
-              + Nouvelle tâche
-            </button>
             <button
               className={`gantt-toggle ${ganttMode ? 'active' : ''}`}
               onClick={() => setGanttMode((v) => !v)}
-              title={ganttMode ? 'Mode Gantt : cascade activée' : 'Mode libre : pas de cascade'}
+              title={ganttMode ? 'Mode Gantt : cascade globale activée' : 'Mode libre : indépendant'}
             >
-              {ganttMode ? 'Gantt' : 'Libre'}
+              {ganttMode ? '🔗 Mode Gantt' : '🔗 Mode Libre'}
             </button>
             <span className="personal-plan-name" onDoubleClick={() => setRenameInput(planName)}>
               {renameInput != null ? (
@@ -812,7 +841,7 @@ export default function PersonalPlanning({ user }) {
           <button className="personal-add-btn" onClick={handleCreatePlan}>Créer un planning</button>
         </div>
       ) : (
-        <div style={{ position: 'relative' }}>
+        <div>
           <PersonalPlanningGrid
             gridRows={gridRows}
             visibleDays={visibleDays}
@@ -829,13 +858,6 @@ export default function PersonalPlanning({ user }) {
             callbacksRef={gridCallbacksRef}
             scrollRef={scrollRef}
           />
-          <button
-            className="fab-add-task"
-            onClick={handleAddRow}
-            title="Ajouter une tâche"
-          >
-            +
-          </button>
         </div>
       )}
 
@@ -860,7 +882,8 @@ export default function PersonalPlanning({ user }) {
                 setContextMenu(null);
               }}>Modifier</div>
               <div className="danger" onClick={() => {
-                const newItems = items.filter((it) => it.id !== contextMenu.item.id);
+                const filtered = items.filter((it) => it.id !== contextMenu.item.id);
+                const newItems = ganttMode ? cascadeGanttOnDelete(filtered, contextMenu.item.id, ferieSet) : filtered;
                 setItems(newItems);
                 doSave(rows, newItems);
                 setContextMenu(null);
