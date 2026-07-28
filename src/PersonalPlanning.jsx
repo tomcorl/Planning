@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { jsPDF } from 'jspdf';
-import { supabase } from './lib/supabase.js';
 import {
   loadPersonalPlans,
   createPersonalPlan,
@@ -10,7 +8,8 @@ import {
   savePersonalPlan,
 } from './lib/api.js';
 import PersonalPlanningGrid from './PersonalPlanningGrid.jsx';
-import { addWorkingDays, getWorkingDaysBetween } from './lib/personalPlanningUtils.js';
+import { addWorkingDays, getWorkingDaysBetween, generateFrenchHolidays } from './lib/personalPlanningUtils.js';
+import { generatePdf } from './lib/pdfExport.js';
 
 const CELL_W = 26;
 const PERSONAL_COLORS = [
@@ -75,11 +74,11 @@ function generateDays(start, count) {
   });
 }
 
-function getEndDate(item) {
-  return addWorkingDays(item.start, item.duree - 1);
+function getEndDate(item, ferieSet) {
+  return addWorkingDays(item.start, item.duree - 1, ferieSet);
 }
 
-function applyPersonalInsertion(list, movedItem, targetRowId, targetStart) {
+function applyPersonalInsertion(list, movedItem, targetRowId, targetStart, ferieSet) {
   let next = list.map((it) =>
     it.id === movedItem.id
       ? { ...it, rowId: targetRowId, start: targetStart }
@@ -88,15 +87,15 @@ function applyPersonalInsertion(list, movedItem, targetRowId, targetStart) {
 
   const moved = next.find((it) => it.id === movedItem.id);
   if (!moved) return next;
-  const movedEnd = getEndDate(moved);
+  const movedEnd = getEndDate(moved, ferieSet);
 
-  let cursor = addWorkingDays(movedEnd, 1);
+  let cursor = addWorkingDays(movedEnd, 1, ferieSet);
   const affected = next
     .filter(
       (it) =>
         it.id !== moved.id &&
         it.rowId === targetRowId &&
-        getEndDate(it) >= targetStart
+        getEndDate(it, ferieSet) >= targetStart
     )
     .sort((a, b) => (a.start < b.start ? -1 : 1));
 
@@ -106,7 +105,7 @@ function applyPersonalInsertion(list, movedItem, targetRowId, targetStart) {
   affected.forEach((it) => {
     if (!movedEarlier && it.start >= cursor) return;
     changed.set(it.id, { ...it, start: cursor });
-    cursor = addWorkingDays(getEndDate({ ...it, start: cursor }), 1);
+    cursor = addWorkingDays(getEndDate({ ...it, start: cursor }, ferieSet), 1, ferieSet);
   });
 
   next = next.map((it) => changed.get(it.id) || it);
@@ -126,6 +125,7 @@ export default function PersonalPlanning({ user }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [renameInput, setRenameInput] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [ganttMode, setGanttMode] = useState(false);
 
   const [calendarStart, setCalendarStart] = useState(() => addDays(today, -140));
   const [calendarLength, setCalendarLength] = useState(500);
@@ -201,6 +201,17 @@ export default function PersonalPlanning({ user }) {
     return visibleDays[index].date;
   }
 
+  function overlaps(itemA, itemB) {
+    if (itemA.rowId !== itemB.rowId) return false;
+    const endA = getEndDate(itemA, ferieSet);
+    const endB = getEndDate(itemB, ferieSet);
+    return itemA.start <= endB && itemB.start <= endA;
+  }
+
+  function hasOverlap(checkItem, excludeId) {
+    return items.some((it) => it.id !== excludeId && overlaps(checkItem, it));
+  }
+
   function nextLocalId() {
     nextTempId -= 1;
     return nextTempId;
@@ -209,7 +220,7 @@ export default function PersonalPlanning({ user }) {
   function splitItem(item) {
     const startIdx = dayIndex(item.start);
     if (startIdx === -1) return [];
-    const endDate = getEndDate(item);
+    const endDate = getEndDate(item, ferieSet);
     const endIdx = dayIndex(endDate);
     if (endIdx === -1) {
       return [{ start: startIdx, end: visibleDays.length - 1 }];
@@ -253,7 +264,12 @@ export default function PersonalPlanning({ user }) {
     handleScroll,
   };
 
-  const ferieSet = useMemo(() => new Set(), []);
+  const thisYear = new Date().getFullYear();
+  const ferieSet = useMemo(() => {
+    const s = generateFrenchHolidays(thisYear);
+    for (const h of generateFrenchHolidays(thisYear + 1)) s.add(h);
+    return s;
+  }, []);
 
   const loadPlans = useCallback(async () => {
     if (!user?.id) return [];
@@ -408,10 +424,20 @@ export default function PersonalPlanning({ user }) {
         color: form.color || PERSONAL_COLORS[0],
         note: form.note || '',
       };
-      const newItems = [...items, newItem];
-      const cleaned = applyPersonalInsertion(newItems, newItem, newItem.rowId, newItem.start);
-      setItems(cleaned);
-      doSave(rows, cleaned);
+      if (!ganttMode) {
+        if (hasOverlap(newItem)) {
+          alert('Impossible : chevauchement avec un bloc existant sur la même ligne.');
+          return;
+        }
+        const newItems = [...items, newItem];
+        setItems(newItems);
+        doSave(rows, newItems);
+      } else {
+        const newItems = [...items, newItem];
+        const cleaned = applyPersonalInsertion(newItems, newItem, newItem.rowId, newItem.start, ferieSet);
+        setItems(cleaned);
+        doSave(rows, cleaned);
+      }
     } else {
       const newItems = items.map((it) => it.id === form.id ? { ...it, ...form, duree: Number(form.duree) || 5 } : it);
       setItems(newItems);
@@ -479,11 +505,18 @@ export default function PersonalPlanning({ user }) {
     if (!item) return;
     const dayOffset = dayIndex(date) - dayIndex(item.start);
     if (dayOffset === 0 && rowId === item.rowId) return;
-    const newStart = addWorkingDays(item.start, dayOffset);
+    const newStart = addWorkingDays(item.start, dayOffset, ferieSet);
     const movedItem = { ...item, rowId, start: newStart };
-    const newItems = applyPersonalInsertion(items, movedItem, rowId, newStart);
-    setItems(newItems);
-    doSave(rows, newItems);
+    if (!ganttMode) {
+      if (hasOverlap(movedItem, item.id)) return;
+      const newItems = items.map((it) => it.id === item.id ? movedItem : it);
+      setItems(newItems);
+      doSave(rows, newItems);
+    } else {
+      const newItems = applyPersonalInsertion(items, movedItem, rowId, newStart, ferieSet);
+      setItems(newItems);
+      doSave(rows, newItems);
+    }
   }
 
   function startResize(e, item, side) {
@@ -524,9 +557,9 @@ export default function PersonalPlanning({ user }) {
         if (delta !== 0) {
           if (r.side === 'right') {
             previewStart = r.originalStart;
-            previewEnd = addWorkingDays(getEndDate({ start: r.originalStart, duree: r.originalDuree }), delta);
+            previewEnd = addWorkingDays(getEndDate({ start: r.originalStart, duree: r.originalDuree }, ferieSet), delta, ferieSet);
           } else {
-            const rawNewStart = addWorkingDays(r.originalStart, delta);
+            const rawNewStart = addWorkingDays(r.originalStart, delta, ferieSet);
             const origEnd = getEndDate({ start: r.originalStart, duree: r.originalDuree });
             const newStartIdx = dayIndex(rawNewStart);
             const endIdx = dayIndex(origEnd);
@@ -555,29 +588,42 @@ export default function PersonalPlanning({ user }) {
 
       if (delta !== 0) {
         if (side === 'right') {
-          const origEnd = getEndDate({ start: originalStart, duree: originalDuree });
-          const newEnd = addWorkingDays(origEnd, delta);
-          const newDuree = getWorkingDaysBetween(originalStart, newEnd);
+          const origEnd = getEndDate({ start: originalStart, duree: originalDuree }, ferieSet);
+          const newEnd = addWorkingDays(origEnd, delta, ferieSet);
+          const newDuree = getWorkingDaysBetween(originalStart, newEnd, ferieSet);
           if (newDuree >= 1) {
-            const movedItem = { id, rowId: originalRowId, start: originalStart, duree: newDuree, nom: '', color: '' };
-            setItems((prev) => {
-              const updated = prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it);
-              return applyPersonalInsertion(updated, { ...updated.find(it => it.id === id) }, originalRowId, originalStart);
-            });
+            if (!ganttMode) {
+              const resized = { id, rowId: originalRowId, start: originalStart, duree: newDuree };
+              if (hasOverlap(resized, id)) return;
+              setItems((prev) => prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it));
+            } else {
+              setItems((prev) => {
+                const updated = prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it);
+                return applyPersonalInsertion(updated, { ...updated.find(it => it.id === id) }, originalRowId, originalStart, ferieSet);
+              });
+            }
           }
         } else {
-          const origEnd = getEndDate({ start: originalStart, duree: originalDuree });
-          const rawNewStart = addWorkingDays(originalStart, delta);
+          const origEnd = getEndDate({ start: originalStart, duree: originalDuree }, ferieSet);
+          const rawNewStart = addWorkingDays(originalStart, delta, ferieSet);
           const newStartIdx = dayIndex(rawNewStart);
           const endIdx = dayIndex(origEnd);
           if (newStartIdx >= 0 && endIdx >= 0 && newStartIdx < endIdx) {
             const newDuree = endIdx - newStartIdx + 1;
-            setItems((prev) => {
-              const updated = prev.map((it) =>
+            if (!ganttMode) {
+              const resized = { id, rowId: originalRowId, start: rawNewStart, duree: newDuree };
+              if (hasOverlap(resized, id)) return;
+              setItems((prev) => prev.map((it) =>
                 it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
-              );
-              return applyPersonalInsertion(updated, { id, rowId: originalRowId, start: rawNewStart, duree: newDuree, nom: '', color: '' }, originalRowId, rawNewStart);
-            });
+              ));
+            } else {
+              setItems((prev) => {
+                const updated = prev.map((it) =>
+                  it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
+                );
+                return applyPersonalInsertion(updated, { id, rowId: originalRowId, start: rawNewStart, duree: newDuree, nom: '', color: '' }, originalRowId, rawNewStart, ferieSet);
+              });
+            }
           }
         }
         doSave(rows, items);
@@ -674,245 +720,21 @@ export default function PersonalPlanning({ user }) {
 
 
 
-  async function handleExportPdf() {
-    const rangeStart = pdfStart;
-    const rangeEnd = pdfEnd;
-    if (!rangeStart || !rangeEnd || rangeStart > rangeEnd) {
+  function handleExportPdf() {
+    const result = generatePdf({
+      planName,
+      rangeStart: pdfStart,
+      rangeEnd: pdfEnd,
+      rows: gridRows,
+      items,
+      today,
+      ferieSet,
+    });
+    if (!result) {
       alert('Plage de dates invalide.');
       return;
     }
-
-    const rangeDays = [];
-    let cursor = rangeStart;
-    while (cursor <= rangeEnd) {
-      if (!isWeekend(cursor)) rangeDays.push(cursor);
-      cursor = addDays(cursor, 1);
-    }
-    if (rangeDays.length === 0) {
-      alert('Aucun jour ouvré dans cette plage.');
-      return;
-    }
-
     setPdfModal(false);
-
-    const dayIdxInPdf = new Map();
-    rangeDays.forEach((d, i) => dayIdxInPdf.set(d, i));
-
-    const colLeft = 35;
-    const pageW = 297;
-    const pageH = 210;
-    const margin = 5;
-    const availW = pageW - margin * 2 - colLeft;
-    const dayW = Math.min(8, availW / rangeDays.length);
-    const gridW = dayW * rangeDays.length;
-    const rowH = 7;
-    const headerMonthH = 6;
-    const headerWeekH = 5;
-    const headerDateH = 7;
-    const headerH = headerMonthH + headerWeekH + headerDateH;
-    const titleH = 10;
-    const startY = margin + titleH + headerH + 2;
-
-    const rowsOnPage = Math.floor((pageH - margin - startY) / rowH);
-    const totalPages = Math.max(1, Math.ceil(gridRows.length / rowsOnPage || 1));
-
-    function hexToRgb(hex) {
-      const h = hex.replace('#', '');
-      return [parseInt(h.substring(0, 2), 16), parseInt(h.substring(2, 4), 16), parseInt(h.substring(4, 6), 16)];
-    }
-
-    function drawGrid(pdf, pageRows, pageIndex) {
-      const ox = margin + colLeft;
-      const oy = margin + titleH;
-
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(14);
-      pdf.text(planName || 'Planning', margin, margin + 7);
-
-      pdf.setFontSize(7);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(120, 120, 120);
-      pdf.text(`${rangeStart} — ${rangeEnd}`, pageW - margin, margin + 7, { align: 'right' });
-      pdf.setTextColor(0, 0, 0);
-
-      const monthGroupsPdf = [];
-      rangeDays.forEach((d, i) => {
-        const dt = toDate(d);
-        const mk = `${dt.getFullYear()}-${dt.getMonth()}`;
-        const last = monthGroupsPdf[monthGroupsPdf.length - 1];
-        if (!last || last.key !== mk) {
-          monthGroupsPdf.push({ key: mk, start: i, count: 1, label: dt.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) });
-        } else {
-          last.count++;
-        }
-      });
-
-      const weekGroupsPdf = [];
-      rangeDays.forEach((d, i) => {
-        const w = getIsoWeek(d);
-        const last = weekGroupsPdf[weekGroupsPdf.length - 1];
-        if (!last || last.week !== w) {
-          weekGroupsPdf.push({ week: w, start: i, count: 1 });
-        } else {
-          last.count++;
-        }
-      });
-
-      pdf.setFillColor(240, 240, 240);
-      pdf.rect(margin, oy, colLeft, headerMonthH, 'F');
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(7);
-      pdf.text('Tâches', margin + 2, oy + 4.5);
-
-      monthGroupsPdf.forEach((g, mi) => {
-        const x = ox + g.start * dayW;
-        const w = g.count * dayW;
-        const even = mi % 2 === 0;
-        pdf.setFillColor(even ? 220 : 235, even ? 245 : 240, even ? 220 : 225);
-        pdf.rect(x, oy, w, headerMonthH, 'F');
-        pdf.setDrawColor(200, 200, 200);
-        pdf.rect(x, oy, w, headerMonthH, 'S');
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(6);
-        pdf.setTextColor(40, 40, 40);
-        const label = g.label.length > 12 ? g.label.substring(0, 12) + '.' : g.label;
-        pdf.text(label, x + w / 2, oy + 4, { align: 'center' });
-      });
-
-      const wy = oy + headerMonthH;
-      pdf.setFillColor(245, 245, 245);
-      pdf.rect(margin, wy, colLeft, headerWeekH, 'F');
-
-      weekGroupsPdf.forEach((g) => {
-        const x = ox + g.start * dayW;
-        const w = g.count * dayW;
-        pdf.setDrawColor(200, 200, 200);
-        pdf.rect(x, wy, w, headerWeekH, 'S');
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(5.5);
-        pdf.setTextColor(80, 80, 80);
-        pdf.text(`S${g.week}`, x + w / 2, wy + 3.8, { align: 'center' });
-      });
-
-      const dy = wy + headerWeekH;
-      pdf.setFillColor(248, 248, 248);
-      pdf.rect(margin, dy, colLeft, headerDateH, 'F');
-
-      rangeDays.forEach((d, i) => {
-        const x = ox + i * dayW;
-        const dt = toDate(d);
-        const isToday = d === today;
-        if (isToday) {
-          pdf.setFillColor(200, 230, 200);
-          pdf.rect(x, dy, dayW, headerDateH, 'F');
-        }
-        pdf.setDrawColor(200, 200, 200);
-        pdf.rect(x, dy, dayW, headerDateH, 'S');
-        pdf.setFont('helvetica', isToday ? 'bold' : 'normal');
-        pdf.setFontSize(5);
-        pdf.setTextColor(isToday ? 20 : 60, isToday ? 100 : 60, isToday ? 20 : 60);
-        pdf.text(String(dt.getDate()), x + dayW / 2, dy + 3.5, { align: 'center' });
-        if (dayW >= 6) {
-          const wd = dt.toLocaleDateString('fr-FR', { weekday: 'narrow' });
-          pdf.setFontSize(4);
-          pdf.setTextColor(120, 120, 120);
-          pdf.text(wd, x + dayW / 2, dy + 6, { align: 'center' });
-        }
-      });
-
-      pdf.setDrawColor(0, 0, 0);
-      pdf.setLineWidth(0.3);
-      pdf.rect(margin, oy, colLeft + gridW, headerH, 'S');
-
-      pdf.setTextColor(0, 0, 0);
-
-      pageRows.forEach((row, ri) => {
-        const ry = startY + ri * rowH;
-        const isOdd = ri % 2 === 1;
-
-        pdf.setFillColor(isOdd ? 248 : 255, isOdd ? 248 : 255, isOdd ? 252 : 255);
-        pdf.rect(margin, ry, colLeft + gridW, rowH, 'F');
-
-        pdf.setDrawColor(220, 220, 220);
-        pdf.rect(margin, ry, colLeft + gridW, rowH, 'S');
-        pdf.rect(margin + colLeft, ry, gridW, rowH, 'S');
-
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(6.5);
-        pdf.setTextColor(30, 30, 30);
-        pdf.text(row.nom || '', margin + 3, ry + rowH / 2 + 1.5, { maxWidth: colLeft - 6 });
-
-        const rowItems = items.filter((it) => it.rowId === row.id);
-        rowItems.forEach((item) => {
-          const startIdx = dayIdxInPdf.get(item.start);
-          if (startIdx == null) return;
-          const itemEnd = getEndDate(item);
-          let endIdx = dayIdxInPdf.get(itemEnd);
-          if (endIdx == null) {
-            endIdx = rangeDays.length - 1;
-          }
-          if (endIdx < startIdx) return;
-
-          const ix = ox + startIdx * dayW;
-          const iw = (endIdx - startIdx + 1) * dayW - 1;
-          const iy = ry + 1.5;
-          const ih = rowH - 3;
-
-          const rgb = hexToRgb(item.color || '#2563eb');
-          pdf.setFillColor(rgb[0], rgb[1], rgb[2]);
-          pdf.roundedRect(ix, iy, Math.max(iw, 2), ih, 1, 1, 'F');
-
-          if (iw > 10) {
-            pdf.setFont('helvetica', 'bold');
-            pdf.setFontSize(5.5);
-            pdf.setTextColor(255, 255, 255);
-            const txt = item.nom || '';
-            const maxChars = Math.floor(iw / 2);
-            const truncated = txt.length > maxChars ? txt.substring(0, maxChars - 1) + '.' : txt;
-            pdf.text(truncated, ix + 1.5, iy + ih / 2 + 1.5, { maxWidth: iw - 3 });
-            pdf.setTextColor(0, 0, 0);
-          }
-        });
-
-        if (ri === pageRows.length - 1) {
-          rangeDays.forEach((d, i) => {
-            const x = ox + i * dayW;
-            pdf.setDrawColor(210, 210, 210);
-            pdf.line(x, ry + rowH, x, ry + rowH);
-          });
-        }
-      });
-
-      if (pageIndex === totalPages - 1) {
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(5);
-        pdf.setTextColor(150, 150, 150);
-        pdf.text(`Page ${pageIndex + 1}/${totalPages}`, pageW - margin, pageH - 3, { align: 'right' });
-        pdf.setTextColor(0, 0, 0);
-      }
-    }
-
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
-    if (gridRows.length === 0) {
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(16);
-      pdf.text(planName || 'Planning', margin, margin + 10);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(10);
-      pdf.text('Aucune tâche dans cette plage de dates.', margin, margin + 20);
-      pdf.save(`${planName || 'planning'}_${rangeStart}_${rangeEnd}.pdf`);
-      return;
-    }
-
-    for (let pi = 0; pi < totalPages; pi++) {
-      if (pi > 0) pdf.addPage();
-      const start = pi * rowsOnPage;
-      const end = Math.min(start + rowsOnPage, gridRows.length);
-      drawGrid(pdf, gridRows.slice(start, end), pi);
-    }
-
-    pdf.save(`${planName || 'planning'}_${rangeStart}_${rangeEnd}.pdf`);
   }
 
   if (loading) {
@@ -953,6 +775,13 @@ export default function PersonalPlanning({ user }) {
               if (scrollRef.current && idx >= 0) scrollRef.current.scrollLeft = Math.max(0, idx * CELL_W - 500);
             }}>Aujourd'hui</button>
             <button className="personal-pdf-btn" onClick={() => setPdfModal(true)}>PDF</button>
+            <button
+              className={`gantt-toggle ${ganttMode ? 'active' : ''}`}
+              onClick={() => setGanttMode((v) => !v)}
+              title={ganttMode ? 'Mode Gantt : cascade activée' : 'Mode libre : pas de cascade'}
+            >
+              {ganttMode ? 'Gantt' : 'Libre'}
+            </button>
             <span className="personal-plan-name" onDoubleClick={() => setRenameInput(planName)}>
               {renameInput != null ? (
                 <input
@@ -975,7 +804,7 @@ export default function PersonalPlanning({ user }) {
           <button className="personal-add-btn" onClick={handleCreatePlan}>Créer un planning</button>
         </div>
       ) : (
-        <div>
+        <div style={{ position: 'relative' }}>
           <PersonalPlanningGrid
             gridRows={gridRows}
             visibleDays={visibleDays}
@@ -992,6 +821,13 @@ export default function PersonalPlanning({ user }) {
             callbacksRef={gridCallbacksRef}
             scrollRef={scrollRef}
           />
+          <button
+            className="fab-add-task"
+            onClick={handleAddRow}
+            title="Ajouter une tâche"
+          >
+            +
+          </button>
         </div>
       )}
 

@@ -451,16 +451,6 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
             );
           })}
 
-          <div className="grid-row" style={{ height: 40 }}>
-            <div
-              className="team-cell"
-              onClick={() => cb.handleAddRow()}
-              style={{ cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--green)', width: 260 }}
-            >
-              + Ajouter une tâche
-            </div>
-            <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px` }} />
-          </div>
         </div>
       </div>
     </div>

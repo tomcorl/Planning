@@ -1886,7 +1886,7 @@ button:active {
 }
 
 /* ────────────────────────────────────────────
-   PERSONAL PLANNING – "Mes chantiers"
+   PERSONAL PLANNING – "Mes plannings"
    ──────────────────────────────────────────── */
 
 .personal-planning-wrap {
@@ -1894,6 +1894,51 @@ button:active {
   flex-direction: column;
   height: calc(100vh - 58px);
   overflow: hidden;
+}
+
+.fab-add-task {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: var(--green);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.fab-add-task:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+.fab-add-task:active {
+  transform: scale(0.95);
+}
+
+.gantt-toggle {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.gantt-toggle.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
 }
 
 .personal-planning-wrap .planning-scroll {

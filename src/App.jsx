@@ -1863,7 +1863,7 @@ export default function App() {
               className={activePage === 'personal' ? 'active-nav' : ''}
               onClick={() => setActivePage('personal')}
             >
-              Mes chantiers
+              Mes plannings
             </button>
             {isAdmin && (
               <button
