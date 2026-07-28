@@ -190,6 +190,13 @@ export default function PersonalPlanning({ user }) {
     return m;
   }, [visibleDays]);
 
+  const thisYear = new Date().getFullYear();
+  const ferieSet = useMemo(() => {
+    const s = generateFrenchHolidays(thisYear);
+    for (const h of generateFrenchHolidays(thisYear + 1)) s.add(h);
+    return s;
+  }, []);
+
   function dayIndex(date) {
     return dayIdxMap.get(date) ?? -1;
   }
@@ -202,13 +209,14 @@ export default function PersonalPlanning({ user }) {
   }
 
   function overlaps(itemA, itemB) {
-    if (itemA.rowId !== itemB.rowId) return false;
+    if (!itemA?.start || !itemB?.start || itemA.rowId !== itemB.rowId) return false;
     const endA = getEndDate(itemA, ferieSet);
     const endB = getEndDate(itemB, ferieSet);
     return itemA.start <= endB && itemB.start <= endA;
   }
 
   function hasOverlap(checkItem, excludeId) {
+    if (!checkItem?.start) return false;
     return items.some((it) => it.id !== excludeId && overlaps(checkItem, it));
   }
 
@@ -218,6 +226,10 @@ export default function PersonalPlanning({ user }) {
   }
 
   function splitItem(item) {
+    if (!item || !item.start || !item.rowId || !(item.duree > 0)) {
+      console.error('splitItem: item invalide ignoré', item);
+      return [];
+    }
     const startIdx = dayIndex(item.start);
     if (startIdx === -1) return [];
     const endDate = getEndDate(item, ferieSet);
@@ -263,13 +275,6 @@ export default function PersonalPlanning({ user }) {
     handleAddRow,
     handleScroll,
   };
-
-  const thisYear = new Date().getFullYear();
-  const ferieSet = useMemo(() => {
-    const s = generateFrenchHolidays(thisYear);
-    for (const h of generateFrenchHolidays(thisYear + 1)) s.add(h);
-    return s;
-  }, []);
 
   const loadPlans = useCallback(async () => {
     if (!user?.id) return [];
