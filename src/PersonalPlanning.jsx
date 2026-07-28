@@ -10,6 +10,7 @@ import {
   savePersonalPlan,
 } from './lib/api.js';
 import PersonalPlanningGrid from './PersonalPlanningGrid.jsx';
+import { addWorkingDays, getWorkingDaysBetween } from './lib/personalPlanningUtils.js';
 
 const CELL_W = 26;
 const PERSONAL_COLORS = [
@@ -75,7 +76,7 @@ function generateDays(start, count) {
 }
 
 function getEndDate(item) {
-  return addDays(item.start, item.duree - 1);
+  return addWorkingDays(item.start, item.duree - 1);
 }
 
 function applyPersonalInsertion(list, movedItem, targetRowId, targetStart) {
@@ -89,7 +90,7 @@ function applyPersonalInsertion(list, movedItem, targetRowId, targetStart) {
   if (!moved) return next;
   const movedEnd = getEndDate(moved);
 
-  let cursor = addDays(movedEnd, 1);
+  let cursor = addWorkingDays(movedEnd, 1);
   const affected = next
     .filter(
       (it) =>
@@ -105,7 +106,7 @@ function applyPersonalInsertion(list, movedItem, targetRowId, targetStart) {
   affected.forEach((it) => {
     if (!movedEarlier && it.start >= cursor) return;
     changed.set(it.id, { ...it, start: cursor });
-    cursor = addDays(getEndDate({ ...it, start: cursor }), 1);
+    cursor = addWorkingDays(getEndDate({ ...it, start: cursor }), 1);
   });
 
   next = next.map((it) => changed.get(it.id) || it);
@@ -478,7 +479,7 @@ export default function PersonalPlanning({ user }) {
     if (!item) return;
     const dayOffset = dayIndex(date) - dayIndex(item.start);
     if (dayOffset === 0 && rowId === item.rowId) return;
-    const newStart = addDays(item.start, dayOffset);
+    const newStart = addWorkingDays(item.start, dayOffset);
     const movedItem = { ...item, rowId, start: newStart };
     const newItems = applyPersonalInsertion(items, movedItem, rowId, newStart);
     setItems(newItems);
@@ -523,9 +524,9 @@ export default function PersonalPlanning({ user }) {
         if (delta !== 0) {
           if (r.side === 'right') {
             previewStart = r.originalStart;
-            previewEnd = addDays(getEndDate({ start: r.originalStart, duree: r.originalDuree }), delta);
+            previewEnd = addWorkingDays(getEndDate({ start: r.originalStart, duree: r.originalDuree }), delta);
           } else {
-            const rawNewStart = addDays(r.originalStart, delta);
+            const rawNewStart = addWorkingDays(r.originalStart, delta);
             const origEnd = getEndDate({ start: r.originalStart, duree: r.originalDuree });
             const newStartIdx = dayIndex(rawNewStart);
             const endIdx = dayIndex(origEnd);
@@ -555,8 +556,8 @@ export default function PersonalPlanning({ user }) {
       if (delta !== 0) {
         if (side === 'right') {
           const origEnd = getEndDate({ start: originalStart, duree: originalDuree });
-          const newEnd = addDays(origEnd, delta);
-          const newDuree = dayIndex(newEnd) - dayIndex(originalStart) + 1;
+          const newEnd = addWorkingDays(origEnd, delta);
+          const newDuree = getWorkingDaysBetween(originalStart, newEnd);
           if (newDuree >= 1) {
             const movedItem = { id, rowId: originalRowId, start: originalStart, duree: newDuree, nom: '', color: '' };
             setItems((prev) => {
@@ -566,7 +567,7 @@ export default function PersonalPlanning({ user }) {
           }
         } else {
           const origEnd = getEndDate({ start: originalStart, duree: originalDuree });
-          const rawNewStart = addDays(originalStart, delta);
+          const rawNewStart = addWorkingDays(originalStart, delta);
           const newStartIdx = dayIndex(rawNewStart);
           const endIdx = dayIndex(origEnd);
           if (newStartIdx >= 0 && endIdx >= 0 && newStartIdx < endIdx) {
