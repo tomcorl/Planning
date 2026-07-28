@@ -780,6 +780,9 @@ export default function PersonalPlanning({ user }) {
               if (scrollRef.current && idx >= 0) scrollRef.current.scrollLeft = Math.max(0, idx * CELL_W - 500);
             }}>Aujourd'hui</button>
             <button className="personal-pdf-btn" onClick={() => setPdfModal(true)}>PDF</button>
+            <button className="personal-add-task-btn" onClick={handleAddRow}>
+              + Nouvelle tâche
+            </button>
             <button
               className={`gantt-toggle ${ganttMode ? 'active' : ''}`}
               onClick={() => setGanttMode((v) => !v)}

@@ -1924,6 +1924,22 @@ button:active {
   transform: scale(0.95);
 }
 
+.personal-add-task-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.personal-add-task-btn:hover {
+  opacity: 0.85;
+}
+
 .gantt-toggle {
   padding: 6px 14px;
   border-radius: 8px;
