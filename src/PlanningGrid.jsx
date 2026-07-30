@@ -311,8 +311,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const dco = e.target.closest('[data-co]');
       if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
       else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
+      const draggedEl = dch || dco;
       const blocs = gridRef.current?.querySelectorAll('[data-ch], [data-co]');
-      if (blocs) blocs.forEach(el => el.style.pointerEvents = 'none');
+      if (blocs) blocs.forEach(el => { if (el !== draggedEl) el.style.pointerEvents = 'none'; });
       if (cleanupTimerRef.current) clearTimeout(cleanupTimerRef.current);
       cleanupTimerRef.current = setTimeout(() => {
         const els = gridRef.current?.querySelectorAll('[data-ch], [data-co]');
