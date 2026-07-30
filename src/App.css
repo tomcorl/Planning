@@ -1512,11 +1512,6 @@ button:active {
   outline-offset: -2px;
 }
 
-.main-grid.dragging [data-ch],
-.main-grid.dragging [data-co] {
-  pointer-events: none;
-}
-
 .resize-preview {
   background: rgba(22, 163, 74, 0.08) !important;
   outline: 2px dashed var(--green);
