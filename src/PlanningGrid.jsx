@@ -255,7 +255,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
     prevTargetDateRef.current = { date, el: cell };
     const ind = indicatorRef.current;
     if (ind && idx != null) {
-      ind.style.left = (260 + idx * cellWidth + cellWidth / 2) + 'px';
+      ind.style.transform = `translateX(${260 + idx * cellWidth + cellWidth / 2}px)`;
       ind.style.opacity = '1';
     }
   }
@@ -524,7 +524,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 {d.date === targetDate && <span className="day-indicator" />}
               </div>
             ))}
-            <span ref={indicatorRef} className="day-indicator" style={{ position: 'absolute', bottom: 2, opacity: 0, pointerEvents: 'none' }} />
+            <span ref={indicatorRef} className="day-indicator" style={{ position: 'absolute', bottom: 2, opacity: 0, pointerEvents: 'none', transform: 'translateX(0)' }} />
           </div>
         </div>
 

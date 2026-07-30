@@ -464,6 +464,7 @@ button:active {
   box-shadow: 6px 0 16px var(--shadow);
   width: 260px;
   flex-shrink: 0;
+  will-change: transform;
 }
 
 .team-cell.odd {
@@ -1502,14 +1503,12 @@ button:active {
 
 .drag-preview {
   background: rgba(22, 163, 74, 0.12) !important;
-  outline: 2px solid var(--green);
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 2px var(--green);
 }
 
 .drag-end-preview {
   background: rgba(220, 38, 38, 0.12) !important;
-  outline: 2px solid #dc2626;
-  outline-offset: -2px;
+  box-shadow: inset 0 0 0 2px #dc2626;
 }
 
 .resize-preview {
