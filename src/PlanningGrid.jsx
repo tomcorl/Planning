@@ -186,6 +186,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const cellMapRef = React.useRef(new Map());
   const draggedItemRef = React.useRef(null);
   const prevDragEndCellRef = React.useRef(null);
+  const cleanupTimerRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -281,13 +282,16 @@ const PlanningGrid = React.memo(function PlanningGrid({
   function handleGridEvent(e) {
     const type = e.type;
     const cell = e.target.closest('[data-eq]');
-    const chantierBloc = e.target.closest('[data-ch]');
-    const congeBloc = e.target.closest('[data-co]');
-    const resizeHandle = e.target.closest('[data-rs]');
-    const noteIcon = e.target.closest('.note-icon');
-    const addBtn = e.target.closest('.add-team-btn');
-    const deleteBtn = e.target.closest('.delete-team');
-    const teamInput = e.target.closest('.team-cell input');
+    let chantierBloc, congeBloc, resizeHandle, noteIcon, addBtn, deleteBtn, teamInput;
+    if (type !== 'dragover' && type !== 'drop' && type !== 'dragstart') {
+      chantierBloc = e.target.closest('[data-ch]');
+      congeBloc = e.target.closest('[data-co]');
+      resizeHandle = e.target.closest('[data-rs]');
+      noteIcon = e.target.closest('.note-icon');
+      addBtn = e.target.closest('.add-team-btn');
+      deleteBtn = e.target.closest('.delete-team');
+      teamInput = e.target.closest('.team-cell input');
+    }
 
     if (addBtn) return;
     if (deleteBtn) return;
@@ -307,6 +311,14 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const dco = e.target.closest('[data-co]');
       if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
       else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
+      const blocs = gridRef.current?.querySelectorAll('[data-ch], [data-co]');
+      if (blocs) blocs.forEach(el => el.style.pointerEvents = 'none');
+      if (cleanupTimerRef.current) clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = setTimeout(() => {
+        const els = gridRef.current?.querySelectorAll('[data-ch], [data-co]');
+        if (els) els.forEach(el => el.style.pointerEvents = '');
+        cleanupTimerRef.current = null;
+      }, 10000);
     }
 
     if (resizeHandle && type === 'mousedown') {
@@ -440,6 +452,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
         prevDragEndCellRef.current = null;
       }
       draggedItemRef.current = null;
+      if (cleanupTimerRef.current) { clearTimeout(cleanupTimerRef.current); cleanupTimerRef.current = null; }
+      const blocs = gridRef.current?.querySelectorAll('[data-ch], [data-co]');
+      if (blocs) blocs.forEach(el => el.style.pointerEvents = '');
       cb.onDrop(e, equipe, date);
       return;
     }
@@ -503,7 +518,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; if (cleanupTimerRef.current) { clearTimeout(cleanupTimerRef.current); cleanupTimerRef.current = null; } const blocs = gridRef.current?.querySelectorAll('[data-ch], [data-co]'); if (blocs) blocs.forEach(el => el.style.pointerEvents = ''); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
