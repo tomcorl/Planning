@@ -327,6 +327,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
         }
         endDateCacheRef.current = cache;
       }
+      const dragSrc = dch || dco;
+      if (dragSrc) dragSrc.classList.add('dragging-source');
       gridRef.current?.classList.add('dragging-active');
     }
 
@@ -459,6 +461,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
       }
       draggedItemRef.current = null;
       endDateCacheRef.current = null;
+      gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source');
       gridRef.current?.classList.remove('dragging-active');
       cb.onDrop(e, equipe, date);
       return;
@@ -523,7 +526,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.classList.remove('dragging-active'); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
