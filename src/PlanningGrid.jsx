@@ -279,7 +279,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
     prevTargetDateRef.current = { date, el: cell };
     const ind = indicatorRef.current;
     if (ind && idx != null) {
-      ind.style.left = (260 + idx * cellWidth + cellWidth / 2) + 'px';
+      // TEST Étape 1 — désactivé : ind.style.left = (260 + idx * cellWidth + cellWidth / 2) + 'px';
       ind.style.opacity = '1';
     }
   }
