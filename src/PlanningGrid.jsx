@@ -2,30 +2,6 @@ import React from 'react';
 
 const EMPTY = [];
 
-const __prof = { samples: [], logAfter: 120 };
-function __p(label) {
-  return { label, t: performance.now() };
-}
-function __pe(ctx) {
-  if (!ctx) return;
-  __prof.samples.push(ctx.label + '|' + (performance.now() - ctx.t));
-}
-function __flush() {
-  if (__prof.samples.length < __prof.logAfter) return;
-  const groups = {};
-  for (const s of __prof.samples) {
-    const [label, val] = s.split('|');
-    if (!groups[label]) groups[label] = [];
-    groups[label].push(Number(val));
-  }
-  for (const [label, vals] of Object.entries(groups)) {
-    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const max = Math.max(...vals);
-    console.log(`📊 PlanningGrid | ${label}: avg=${(avg*1000).toFixed(1)}μs max=${(max*1000).toFixed(1)}μs n=${vals.length}`);
-  }
-  __prof.samples.length = 0;
-}
-
 function sameOrAfter(a, b) {
   if (!a || !b) return false;
   return a >= b;
@@ -279,7 +255,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
     prevTargetDateRef.current = { date, el: cell };
     const ind = indicatorRef.current;
     if (ind && idx != null) {
-      // TEST Étape 1 — désactivé : ind.style.left = (260 + idx * cellWidth + cellWidth / 2) + 'px';
+      ind.style.left = (260 + idx * cellWidth + cellWidth / 2) + 'px';
       ind.style.opacity = '1';
     }
   }
@@ -451,25 +427,16 @@ const PlanningGrid = React.memo(function PlanningGrid({
       return;
     }
     if (type === 'dragover') {
-      const _t0 = __p('dragover total');
-      const _tc = __p('1-closest+extract');
-      // closest + extract already done above, just measure entry to branch
-      __pe(_tc);
       e.preventDefault();
       const key = `${equipe}-${date}`;
-      if (lastDragKeyRef.current === key) { __pe(_t0); __flush(); return; }
+      if (lastDragKeyRef.current === key) return;
       lastDragKeyRef.current = key;
-      const _t1 = __p('2-carre-vert');
       if (prevDragCellRef.current) {
         prevDragCellRef.current.classList.remove('drag-preview');
       }
       if (cell) cell.classList.add('drag-preview');
       prevDragCellRef.current = cell;
-      __pe(_t1);
-      const _t2 = __p('3-highlightTargetDate');
       highlightTargetDate(date);
-      __pe(_t2);
-      const _t3 = __p('4-carre-rouge');
       if (prevDragEndCellRef.current) {
         prevDragEndCellRef.current.classList.remove('drag-end-preview');
         prevDragEndCellRef.current = null;
@@ -484,9 +451,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
           }
         }
       }
-      __pe(_t3);
-      __pe(_t0);
-      __flush();
       return;
     }
     if (type === 'drop') {
