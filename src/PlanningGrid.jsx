@@ -182,6 +182,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const lastDragKeyRef = React.useRef(null);
   const isDraggingRef = React.useRef(false);
   const dateCellRefs = React.useRef([]);
+  const gridRef = React.useRef(null);
+  const cellMapRef = React.useRef(new Map());
+  const draggedItemRef = React.useRef(null);
+  const prevDragEndCellRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -193,6 +197,17 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (!el) return;
     el.scrollLeft = Math.max(0, idx * cellWidth - 500);
   }, []);
+
+  React.useEffect(() => {
+    const map = new Map();
+    const cells = gridRef.current?.querySelectorAll('[data-eq][data-da]');
+    if (cells) {
+      for (const el of cells)
+        map.set(`${el.dataset.eq}|${el.dataset.da}`, el);
+    }
+    cellMapRef.current = map;
+  }, [gridRows, visibleDays]);
+
   const gridTemplateColumns = `260px repeat(${totalDays}, ${cellWidth}px)`;
   const rowHeight = Math.round(56 + (cellWidth - 26) * (78 - 56) / 26);
   const dateGridH = Math.round(28 + (cellWidth - 26) * (44 - 28) / 26);
@@ -288,6 +303,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
         e.preventDefault();
         return;
       }
+      const dch = e.target.closest('[data-ch]');
+      const dco = e.target.closest('[data-co]');
+      if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
+      else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
     }
 
     if (resizeHandle && type === 'mousedown') {
@@ -388,6 +407,23 @@ const PlanningGrid = React.memo(function PlanningGrid({
       if (cell) cell.classList.add('drag-preview');
       prevDragCellRef.current = cell;
       highlightTargetDate(date);
+      if (prevDragEndCellRef.current) {
+        prevDragEndCellRef.current.classList.remove('drag-end-preview');
+        prevDragEndCellRef.current = null;
+      }
+      if (draggedItemRef.current && cell?.dataset.da) {
+        const endDate = cb.addWorkingDays(
+          cell.dataset.da,
+          draggedItemRef.current.duree - 1,
+          equipe,
+          { force_aout: draggedItemRef.current.force_aout },
+        );
+        const endCell = cellMapRef.current.get(`${equipe}|${endDate}`);
+        if (endCell) {
+          endCell.classList.add('drag-end-preview');
+          prevDragEndCellRef.current = endCell;
+        }
+      }
       return;
     }
     if (type === 'drop') {
@@ -399,6 +435,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
         prevDragCellRef.current = null;
       }
       highlightTargetDate(null);
+      if (prevDragEndCellRef.current) {
+        prevDragEndCellRef.current.classList.remove('drag-end-preview');
+        prevDragEndCellRef.current = null;
+      }
+      draggedItemRef.current = null;
       cb.onDrop(e, equipe, date);
       return;
     }
@@ -456,13 +497,13 @@ const PlanningGrid = React.memo(function PlanningGrid({
           </div>
         </div>
 
-        <div className="main-grid"
+        <div className="main-grid" ref={gridRef}
           onMouseDown={handleGridEvent}
           onMouseOver={handleGridEvent}
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
