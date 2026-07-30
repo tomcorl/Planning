@@ -187,6 +187,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const draggedItemRef = React.useRef(null);
   const prevDragEndCellRef = React.useRef(null);
   const cleanupTimerRef = React.useRef(null);
+  const endDateCacheRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -311,6 +312,22 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const dco = e.target.closest('[data-co]');
       if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
       else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
+      const dragged = draggedItemRef.current;
+      if (dragged) {
+        const eqSet = new Set();
+        for (const row of gridRows) {
+          if (row.type === 'separator' || row.type === 'company-header') continue;
+          eqSet.add(row.type === 'pending' ? row.equipeIndex : row.teamId);
+        }
+        const cache = new Map();
+        const dateList = visibleDays.map(d => d.date);
+        for (const eq of eqSet) {
+          for (const d of dateList) {
+            cache.set(`${eq}|${d}`, cb.addWorkingDays(d, dragged.duree - 1, eq, { force_aout: dragged.force_aout }));
+          }
+        }
+        endDateCacheRef.current = cache;
+      }
       const draggedEl = dch || dco;
       const blocs = gridRef.current?.querySelectorAll('[data-ch], [data-co]');
       if (blocs) blocs.forEach(el => { if (el !== draggedEl) el.style.pointerEvents = 'none'; });
@@ -425,16 +442,13 @@ const PlanningGrid = React.memo(function PlanningGrid({
         prevDragEndCellRef.current = null;
       }
       if (draggedItemRef.current && cell?.dataset.da) {
-        const endDate = cb.addWorkingDays(
-          cell.dataset.da,
-          draggedItemRef.current.duree - 1,
-          equipe,
-          { force_aout: draggedItemRef.current.force_aout },
-        );
-        const endCell = cellMapRef.current.get(`${equipe}|${endDate}`);
-        if (endCell) {
-          endCell.classList.add('drag-end-preview');
-          prevDragEndCellRef.current = endCell;
+        const endDate = endDateCacheRef.current?.get(`${equipe}|${cell.dataset.da}`);
+        if (endDate) {
+          const endCell = cellMapRef.current.get(`${equipe}|${endDate}`);
+          if (endCell) {
+            endCell.classList.add('drag-end-preview');
+            prevDragEndCellRef.current = endCell;
+          }
         }
       }
       return;
@@ -453,6 +467,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
         prevDragEndCellRef.current = null;
       }
       draggedItemRef.current = null;
+      endDateCacheRef.current = null;
       if (cleanupTimerRef.current) { clearTimeout(cleanupTimerRef.current); cleanupTimerRef.current = null; }
       const blocs = gridRef.current?.querySelectorAll('[data-ch], [data-co]');
       if (blocs) blocs.forEach(el => el.style.pointerEvents = '');
@@ -519,7 +534,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; if (cleanupTimerRef.current) { clearTimeout(cleanupTimerRef.current); cleanupTimerRef.current = null; } const blocs = gridRef.current?.querySelectorAll('[data-ch], [data-co]'); if (blocs) blocs.forEach(el => el.style.pointerEvents = ''); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; if (cleanupTimerRef.current) { clearTimeout(cleanupTimerRef.current); cleanupTimerRef.current = null; } const blocs = gridRef.current?.querySelectorAll('[data-ch], [data-co]'); if (blocs) blocs.forEach(el => el.style.pointerEvents = ''); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
