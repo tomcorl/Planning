@@ -2,6 +2,30 @@ import React from 'react';
 
 const EMPTY = [];
 
+const __prof = { samples: [], logAfter: 120 };
+function __p(label) {
+  return { label, t: performance.now() };
+}
+function __pe(ctx) {
+  if (!ctx) return;
+  __prof.samples.push(ctx.label + '|' + (performance.now() - ctx.t));
+}
+function __flush() {
+  if (__prof.samples.length < __prof.logAfter) return;
+  const groups = {};
+  for (const s of __prof.samples) {
+    const [label, val] = s.split('|');
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(Number(val));
+  }
+  for (const [label, vals] of Object.entries(groups)) {
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const max = Math.max(...vals);
+    console.log(`📊 PersoPlanningGrid | ${label}: avg=${(avg*1000).toFixed(1)}μs max=${(max*1000).toFixed(1)}μs n=${vals.length}`);
+  }
+  __prof.samples.length = 0;
+}
+
 const CellContent = React.memo(function CellContent({
   baseClassName, isSelected, isResizePreview,
   segments, dayIdx,
@@ -304,16 +328,25 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
       return;
     }
     if (type === 'dragover') {
+      const _t0 = __p('dragover total');
+      const _tc = __p('1-closest+extract');
+      __pe(_tc);
       e.preventDefault();
       const key = `${rowId}-${date}`;
-      if (lastDragKeyRef.current === key) return;
+      if (lastDragKeyRef.current === key) { __pe(_t0); __flush(); return; }
       lastDragKeyRef.current = key;
+      const _t1 = __p('2-carre-vert');
       if (prevDragCellRef.current) {
         prevDragCellRef.current.classList.remove('drag-preview');
       }
       if (cell) cell.classList.add('drag-preview');
       prevDragCellRef.current = cell;
+      __pe(_t1);
+      const _t2 = __p('3-highlightTargetDate');
       highlightTargetDate(date);
+      __pe(_t2);
+      __pe(_t0);
+      __flush();
       return;
     }
     if (type === 'drop') {
