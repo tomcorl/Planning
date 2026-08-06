@@ -125,35 +125,69 @@ function nextWorkingDay(date, ferieSet) {
   return cur;
 }
 
-function cascadeGanttOnModify(allItems, modifiedId, ferieSet) {
-  const sorted = allItems.map(it => ({ ...it })).sort((a, b) => {
+function cascadeGanttOnModify(originalItems, newItems, modifiedId, ferieSet) {
+  const sorted = [...originalItems].sort((a, b) => {
     if (a.start !== b.start) return a.start.localeCompare(b.start);
     return a.id - b.id;
   });
   const idx = sorted.findIndex(it => it.id === modifiedId);
-  if (idx === -1) return sorted;
-  sorted[idx].start = nextWorkingDay(sorted[idx].start, ferieSet);
-  for (let i = idx + 1; i < sorted.length; i++) {
-    const prev = sorted[i - 1];
-    const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
-    sorted[i].start = nextWorkingDay(addWorkingDays(prevEnd, 1, ferieSet), ferieSet);
+  if (idx === -1) {
+    const allSorted = [...newItems].sort((a, b) => {
+      if (a.start !== b.start) return a.start.localeCompare(b.start);
+      return a.id - b.id;
+    });
+    const newIdx = allSorted.findIndex(it => it.id === modifiedId);
+    if (newIdx === -1) return newItems;
+    const result = allSorted.map(it => ({ ...it }));
+    result[newIdx].start = nextWorkingDay(result[newIdx].start, ferieSet);
+    for (let i = newIdx + 1; i < result.length; i++) {
+      const prev = result[i - 1];
+      const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
+      result[i].start = nextWorkingDay(addWorkingDays(prevEnd, 1, ferieSet), ferieSet);
+    }
+    return result;
   }
-  return sorted;
+  const oldStart = toDate(sorted[idx].start);
+  const newItem = newItems.find(it => it.id === modifiedId);
+  if (!newItem) return newItems;
+  const newStart = toDate(newItem.start);
+  const deltaDays = Math.round((newStart - oldStart) / 86400000);
+  if (deltaDays === 0) return newItems;
+  const result = newItems.map(it => ({ ...it }));
+  const m = result.find(it => it.id === modifiedId);
+  if (m) m.start = nextWorkingDay(m.start, ferieSet);
+  for (let i = idx + 1; i < sorted.length; i++) {
+    const ref = sorted[i];
+    const rIdx = result.findIndex(it => it.id === ref.id);
+    if (rIdx === -1) continue;
+    const d = toDate(ref.start);
+    d.setDate(d.getDate() + deltaDays);
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    result[rIdx].start = nextWorkingDay(`${y}-${mo}-${dd}`, ferieSet);
+  }
+  return result;
 }
 
 function cascadeGanttOnDelete(allItems, deletedId, ferieSet) {
-  const remaining = allItems.filter(it => it.id !== deletedId);
-  if (remaining.length <= 1) return remaining;
-  const sorted = remaining.map(it => ({ ...it })).sort((a, b) => {
+  const deleted = allItems.find(it => it.id === deletedId);
+  if (!deleted) return allItems.filter(it => it.id !== deletedId);
+  const sorted = [...allItems].sort((a, b) => {
     if (a.start !== b.start) return a.start.localeCompare(b.start);
     return a.id - b.id;
   });
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = sorted[i - 1];
+  const idx = sorted.findIndex(it => it.id === deletedId);
+  if (idx === -1) return allItems.filter(it => it.id !== deletedId);
+  const remaining = sorted.filter(it => it.id !== deletedId);
+  if (remaining.length <= 1) return remaining;
+  const result = remaining.map(it => ({ ...it }));
+  for (let i = idx; i < result.length; i++) {
+    const prev = result[i - 1];
     const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
-    sorted[i].start = nextWorkingDay(addWorkingDays(prevEnd, 1, ferieSet), ferieSet);
+    result[i].start = nextWorkingDay(addWorkingDays(prevEnd, 1, ferieSet), ferieSet);
   }
-  return sorted;
+  return result;
 }
 
 export default function PersonalPlanning({ user }) {
@@ -483,7 +517,7 @@ export default function PersonalPlanning({ user }) {
         doSave(rows, newItems);
       } else {
         const newItems = [...items, newItem];
-        const cleaned = cascadeGanttOnModify(newItems, newItem.id, ferieSet);
+        const cleaned = cascadeGanttOnModify(items, newItems, newItem.id, ferieSet);
         setItems(cleaned);
         doSave(rows, cleaned);
       }
@@ -564,7 +598,7 @@ export default function PersonalPlanning({ user }) {
       doSave(rows, newItems);
     } else {
       const applied = items.map((it) => it.id === item.id ? movedItem : it);
-      const newItems = cascadeGanttOnModify(applied, item.id, ferieSet);
+      const newItems = cascadeGanttOnModify(items, applied, item.id, ferieSet);
       setItems(newItems);
       doSave(rows, newItems);
     }
@@ -650,7 +684,7 @@ export default function PersonalPlanning({ user }) {
             } else {
               setItems((prev) => {
                 const updated = prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it);
-                return cascadeGanttOnModify(updated, id, ferieSet);
+                return cascadeGanttOnModify(prev, updated, id, ferieSet);
               });
             }
           }
@@ -672,7 +706,7 @@ export default function PersonalPlanning({ user }) {
                 const updated = prev.map((it) =>
                   it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
                 );
-                return cascadeGanttOnModify(updated, id, ferieSet);
+                return cascadeGanttOnModify(prev, updated, id, ferieSet);
               });
             }
           }

@@ -2,10 +2,50 @@ import { supabase } from './supabase.js';
 
 // ─── AUTH ───────────────────────────────────────────────
 
+const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
+
 export async function login(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   return data;
+}
+
+// Invite un utilisateur par email (Edge Function invite-user).
+// L'email d'invitation est envoyé par SMTP ; l'utilisateur définira
+// son mot de passe en cliquant le lien.
+export async function inviteUser(email, nom, role, companyIds = []) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Non connecté');
+
+  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ email, nom, role, companyIds }),
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.error || 'Erreur lors de l\'envoi de l\'invitation');
+  return body;
+}
+
+// Envoie un email de réinitialisation de mot de passe (GoTrue)
+// à l'utilisateur concerné.
+export async function resetUserPassword(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: APP_URL,
+  });
+  if (error) throw error;
+}
+
+// Définit un nouveau mot de passe pour la session courante
+// (flux invitation ou réinitialisation de mot de passe).
+export async function setPassword(newPassword) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
 }
 
 export async function logout() {
@@ -225,10 +265,27 @@ export async function fetchUsers() {
   // RPC get_users bypasses RLS (requires running the SQL in DB)
   // fallback: direct SELECT (sujet à RLS, ne voit que soi-même)
   const { data, error } = await supabase.rpc('get_users');
-  if (!error) return data || [];
+  if (!error) {
+    return (data || []).map((u) => ({
+      id: u.id,
+      email: u.email,
+      nom: u.nom,
+      role: u.role,
+      email_confirmed_at: u.email_confirmed_at,
+      invited: !u.email_confirmed_at,
+    }));
+  }
   const { data: fb, error: fbErr } = await supabase.from('profiles').select('*');
   if (fbErr) throw fbErr;
-  return (fb || []).map((p) => ({ id: p.id, email: p.email, nom: p.nom, role: p.role, must_change_password: !!p.must_change_password }));
+  return (fb || []).map((p) => ({
+    id: p.id,
+    email: p.email,
+    nom: p.nom,
+    role: p.role,
+    email_confirmed_at: p.email_confirmed_at,
+    must_change_password: !!p.must_change_password,
+    invited: !p.email_confirmed_at,
+  }));
 }
 
 export async function updateUserProfile(userId, updates) {

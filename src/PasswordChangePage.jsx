@@ -1,10 +1,16 @@
 import { useState } from 'react';
 
-export default function PasswordChangePage({ onSubmit }) {
+export default function PasswordChangePage({ onSubmit, mode = 'first' }) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const isSetup = mode === 'setup';
+  const title = isSetup ? 'Créer votre mot de passe' : 'Changer votre mot de passe';
+  const subtitle = isSetup
+    ? 'Vous avez cliqué sur un lien d\'invitation ou de réinitialisation. Choisissez un mot de passe pour activer votre compte.'
+    : 'Ceci est votre première connexion. Veuillez choisir un mot de passe définitif.';
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -39,8 +45,8 @@ export default function PasswordChangePage({ onSubmit }) {
       `}</style>
       <div className="pw-change-panel">
         <div className="pw-change-inner">
-          <h2>Changer votre mot de passe</h2>
-          <p>Ceci est votre première connexion. Veuillez choisir un mot de passe définitif.</p>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
           <form onSubmit={handleSubmit}>
             <div className="field">
               <label htmlFor="pw">Nouveau mot de passe</label>

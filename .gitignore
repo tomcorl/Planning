@@ -6,3 +6,6 @@ dist
 scripts/*
 .vercel
 .env*
+
+# Supabase CLI local artifacts
+supabase/.temp

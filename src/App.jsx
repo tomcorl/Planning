@@ -126,6 +126,7 @@ export default function App() {
   const [activePage, setActivePage] = useState('planning');
   const [users, setUsers] = useState([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [passwordSetup, setPasswordSetup] = useState(false);
 
   const isAdmin = session?.role === 'admin';
   const canEdit = session?.role !== 'lecture';
@@ -633,6 +634,10 @@ export default function App() {
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordSetup(true);
+        return;
+      }
       if (event === 'SIGNED_IN' && s) {
         buildSessionMeta(s.user).then((meta) => {
           setSession(meta);
@@ -692,13 +697,29 @@ export default function App() {
     }
   }
 
-  async function addUser(email, password, nom, role) {
+  async function addUser(email, nom, role) {
     try {
-      const newUser = await api.createUser(email, password, nom, role, companies.map(c => c.id));
-      setUsers((prev) => [...prev, newUser]);
+      const newUser = await api.inviteUser(email, nom, role, companies.map(c => c.id));
+      setUsers((prev) => [...prev, {
+        id: newUser.id,
+        email: newUser.email,
+        nom: newUser.nom,
+        role: newUser.role,
+        email_confirmed_at: newUser.email_confirmed_at,
+        invited: !newUser.email_confirmed_at,
+      }]);
       return newUser;
     } catch (err) {
-      console.error('Failed to create user:', err);
+      console.error('Failed to invite user:', err);
+      throw err;
+    }
+  }
+
+  async function resetUserPassword(email) {
+    try {
+      await api.resetUserPassword(email);
+    } catch (err) {
+      console.error('Failed to reset password:', err);
       throw err;
     }
   }
@@ -714,7 +735,15 @@ export default function App() {
 
   async function handlePasswordChange(newPassword) {
     await api.updatePassword(newPassword);
-    setSession((cur) => ({ ...cur, mustChangePassword: false }));
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const meta = await buildSessionMeta(user);
+      setSession(meta);
+      loadAllData();
+    } else {
+      setSession((cur) => ({ ...cur, mustChangePassword: false }));
+    }
+    setPasswordSetup(false);
   }
 
   async function logout() {
@@ -1791,10 +1820,13 @@ export default function App() {
     return <div className="loading-screen"><div className="loading-spinner"/><p>Chargement...</p></div>;
   }
 
-  if (session?.mustChangePassword) {
+  if (session?.mustChangePassword || passwordSetup) {
     return (
       <Suspense fallback={<div className="loading-screen"><div className="loading-spinner" /></div>}>
-        <PasswordChangePage onSubmit={handlePasswordChange} />
+        <PasswordChangePage
+          mode={passwordSetup ? 'setup' : 'first'}
+          onSubmit={handlePasswordChange}
+        />
       </Suspense>
     );
   }
@@ -1974,6 +2006,7 @@ export default function App() {
           onSaveUsers={saveUsers}
           onAddUser={addUser}
           onRemoveUser={removeUser}
+          onResetUserPassword={resetUserPassword}
           users={users}
         />
       )}

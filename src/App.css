@@ -1750,6 +1750,21 @@ button:active {
   color: var(--muted);
 }
 
+.invite-pending {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.invite-active {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.reset-btn {
+  background: #e0f2fe !important;
+  color: #075985 !important;
+}
+
 .admin-row-actions {
   display: flex;
   gap: 6px;
