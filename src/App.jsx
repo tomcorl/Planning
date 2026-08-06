@@ -586,17 +586,32 @@ export default function App() {
   }
 
   async function buildSessionMeta(user) {
+    // Compte supprimé : le JWT est techniquement encore valide (jusqu'à expiration),
+    // mais GoTrue renvoie une erreur car l'utilisateur n'existe plus en base.
+    const { data: cur, error: curErr } = await supabase.auth.getUser();
+    if (curErr || !cur?.user) {
+      await supabase.auth.signOut().catch(() => {});
+      return null;
+    }
+
     let profile = null;
     const r1 = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
     if (!r1.error) profile = r1.data;
+
+    // Pas de profil => compte supprimé (le RPC delete_user efface profiles)
+    if (!profile) {
+      await supabase.auth.signOut().catch(() => {});
+      return null;
+    }
+
     const meta = {
       id: user.id,
       email: user.email,
-      nom: profile?.nom || user.email?.split('@')[0] || '',
-      role: profile?.role || 'planning',
-      mustChangePassword: !!profile?.must_change_password,
+      nom: profile.nom || user.email?.split('@')[0] || '',
+      role: profile.role || 'planning',
+      mustChangePassword: !!profile.must_change_password,
     };
-    if (profile?.role && profile.role !== user.user_metadata?.role) {
+    if (profile.role && profile.role !== user.user_metadata?.role) {
       await supabase.auth.updateUser({ data: { role: profile.role, nom: profile.nom } }).catch(() => {});
     }
     return meta;
@@ -622,6 +637,11 @@ export default function App() {
       if (s) {
         try {
           const meta = await buildSessionMeta(s.user);
+          if (!meta) {
+            setSession(null);
+            setDataLoading(false);
+            return;
+          }
           setSession(meta);
           loadAllData();
         } catch (e) {
@@ -640,6 +660,11 @@ export default function App() {
       }
       if (event === 'SIGNED_IN' && s) {
         buildSessionMeta(s.user).then((meta) => {
+          if (!meta) {
+            setSession(null);
+            setDataLoading(false);
+            return;
+          }
           setSession(meta);
           loadAllData();
         }).catch((e) => {
