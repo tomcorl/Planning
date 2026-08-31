@@ -853,20 +853,10 @@ export default function PersonalPlanning({ user }) {
 
         <button className="personal-add-btn" onClick={handleCreatePlan}>+ Nouveau</button>
 
+        <div className="personal-header-sep" />
+
         {activePlan && (
           <>
-            <button className="today-btn" onClick={() => {
-              const idx = dayIndex(today);
-              if (scrollRef.current && idx >= 0) scrollRef.current.scrollLeft = Math.max(0, idx * CELL_W - 500);
-            }}>Aujourd'hui</button>
-            <button className="personal-pdf-btn" onClick={() => setPdfModal(true)}>PDF</button>
-            <button
-              className={`gantt-toggle ${ganttMode ? 'active' : ''}`}
-              onClick={() => setGanttMode((v) => !v)}
-              title={ganttMode ? 'Mode Gantt : cascade globale activée' : 'Mode libre : indépendant'}
-            >
-              {ganttMode ? '🔗 Mode Gantt' : '🔗 Mode Libre'}
-            </button>
             <span className="personal-plan-name" onDoubleClick={() => setRenameInput(planName)}>
               {renameInput != null ? (
                 <input
@@ -879,6 +869,19 @@ export default function PersonalPlanning({ user }) {
                 />
               ) : planName}
             </span>
+            <div className="personal-header-spacer" />
+            <button className="today-btn" onClick={() => {
+              const idx = dayIndex(today);
+              if (scrollRef.current && idx >= 0) scrollRef.current.scrollLeft = Math.max(0, idx * CELL_W - 500);
+            }}>Aujourd'hui</button>
+            <button className="personal-pdf-btn" onClick={() => setPdfModal(true)}>PDF</button>
+            <button
+              className={`gantt-toggle ${ganttMode ? 'active' : ''}`}
+              onClick={() => setGanttMode((v) => !v)}
+              title={ganttMode ? 'Mode Gantt : cascade globale activée' : 'Mode libre : indépendant'}
+            >
+              {ganttMode ? '🔗 Mode Gantt' : '🔗 Mode Libre'}
+            </button>
           </>
         )}
       </div>
@@ -954,75 +957,61 @@ export default function PersonalPlanning({ user }) {
 
       {/* Modal création/modification */}
       {modal.open && form && createPortal(
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 99998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{
-            background: 'var(--surface)',
-            borderRadius: 14,
-            padding: '24px 28px',
-            minWidth: 340,
-            maxWidth: 420,
-            boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
-            border: '1px solid var(--line)',
-          }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
-              {modal.mode === 'creation' ? 'Nouveau bloc' : 'Modifier le bloc'}
-            </h3>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 99998, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
+          <div className="personal-modal">
+            <div className="personal-modal-head">
+              <h3>{modal.mode === 'creation' ? 'Nouveau bloc' : 'Modifier le bloc'}</h3>
+              <button className="personal-modal-close" onClick={closeModal} aria-label="Fermer">×</button>
+            </div>
 
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Nom</span>
+            <label className="personal-modal-field">
+              <span>Nom</span>
               <input
                 autoFocus
                 value={form.nom}
                 onChange={(e) => setForm({ ...form, nom: e.target.value })}
                 onKeyDown={(e) => { if (e.key === 'Enter') saveModal(); }}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
                 placeholder="Nom du bloc"
               />
             </label>
 
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Durée (jours)</span>
+            <label className="personal-modal-field">
+              <span>Durée (jours)</span>
               <input
                 type="number"
                 min="1"
                 value={form.duree}
                 onChange={(e) => setForm({ ...form, duree: e.target.value })}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
               />
             </label>
 
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Note</span>
+            <label className="personal-modal-field">
+              <span>Note</span>
               <textarea
                 value={form.note || ''}
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
                 rows={3}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box', resize: 'vertical' }}
                 placeholder="Note ou commentaire..."
               />
             </label>
 
-            <label style={{ display: 'block', marginBottom: 16 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Couleur</span>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <label className="personal-modal-field">
+              <span>Couleur</span>
+              <div className="personal-color-picker">
                 {PERSONAL_COLORS.map((c) => (
                   <div
                     key={c}
+                    className={`personal-color-swatch${form.color === c ? ' selected' : ''}`}
                     onClick={() => setForm({ ...form, color: c })}
-                    style={{
-                      width: 28, height: 28, borderRadius: 6, background: c, cursor: 'pointer',
-                      border: form.color === c ? '3px solid var(--text)' : '3px solid transparent',
-                    }}
+                    style={{ background: c }}
                   />
                 ))}
               </div>
             </label>
 
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={closeModal} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer', fontSize: 14 }}>
-                Annuler
-              </button>
-              <button onClick={saveModal} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--green)', background: 'var(--green)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+            <div className="personal-modal-foot">
+              <button className="personal-modal-btn ghost" onClick={closeModal}>Annuler</button>
+              <button className="personal-modal-btn primary" onClick={saveModal}>
                 {modal.mode === 'creation' ? 'Créer' : 'Enregistrer'}
               </button>
             </div>
@@ -1033,47 +1022,34 @@ export default function PersonalPlanning({ user }) {
 
       {/* Modal PDF */}
       {pdfModal && createPortal(
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 99998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{
-            background: 'var(--surface)',
-            borderRadius: 14,
-            padding: '24px 28px',
-            minWidth: 340,
-            maxWidth: 420,
-            boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
-            border: '1px solid var(--line)',
-          }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>
-              Exporter en PDF
-            </h3>
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 99998, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
+          <div className="personal-modal">
+            <div className="personal-modal-head">
+              <h3>Exporter en PDF</h3>
+              <button className="personal-modal-close" onClick={() => setPdfModal(false)} aria-label="Fermer">×</button>
+            </div>
 
-            <label style={{ display: 'block', marginBottom: 12 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Date de début</span>
+            <label className="personal-modal-field">
+              <span>Date de début</span>
               <input
                 type="date"
                 value={pdfStart}
                 onChange={(e) => setPdfStart(e.target.value)}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
               />
             </label>
 
-            <label style={{ display: 'block', marginBottom: 16 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', display: 'block', marginBottom: 4 }}>Date de fin</span>
+            <label className="personal-modal-field">
+              <span>Date de fin</span>
               <input
                 type="date"
                 value={pdfEnd}
                 onChange={(e) => setPdfEnd(e.target.value)}
-                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, boxSizing: 'border-box' }}
               />
             </label>
 
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setPdfModal(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer', fontSize: 14 }}>
-                Annuler
-              </button>
-              <button onClick={handleExportPdf} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--green)', background: 'var(--green)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-                Générer le PDF
-              </button>
+            <div className="personal-modal-foot">
+              <button className="personal-modal-btn ghost" onClick={() => setPdfModal(false)}>Annuler</button>
+              <button className="personal-modal-btn primary" onClick={handleExportPdf}>Générer le PDF</button>
             </div>
           </div>
         </div>,
