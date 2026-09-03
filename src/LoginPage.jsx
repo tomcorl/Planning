@@ -6,8 +6,6 @@ export default function LoginPage({
   onChange,
   onSubmit,
   loggingIn,
-  localMode,
-  onQuickLogin,
 }) {
   const [loaded, setLoaded] = useState(false);
 
@@ -284,25 +282,6 @@ export default function LoginPage({
           margin-top: 16px;
         }
 
-        .login-demo {
-          margin-top: 24px;
-          padding: 12px 14px;
-          border-radius: 8px;
-          background: #f0fdf4;
-          border: 1px dashed #86efac;
-          color: #166534;
-          font-size: 12.5px;
-          line-height: 1.7;
-        }
-
-        .login-demo strong {
-          display: block;
-          font-size: 12px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 2px;
-        }
-
         .submit-btn {
           width: 100%;
           margin-top: 20px;
@@ -339,35 +318,6 @@ export default function LoginPage({
         .submit-btn.loading,
         .submit-btn:disabled {
           opacity: 0.7;
-          pointer-events: none;
-        }
-
-        .quick-login-btn {
-          width: 100%;
-          margin-top: 12px;
-          padding: 13px 24px;
-          border: 1.5px solid #16a34a;
-          border-radius: 10px;
-          background: transparent;
-          color: #16a34a;
-          font-size: 14px;
-          font-weight: 700;
-          font-family: inherit;
-          cursor: pointer;
-          transition: background 160ms ease-out, color 160ms ease-out, box-shadow 200ms ease-out;
-        }
-
-        .quick-login-btn:hover {
-          background: #f0fdf4;
-          box-shadow: 0 4px 14px rgba(22, 163, 74, 0.12);
-        }
-
-        .quick-login-btn:active {
-          transform: scale(0.98);
-        }
-
-        .quick-login-btn:disabled {
-          opacity: 0.6;
           pointer-events: none;
         }
 
@@ -415,10 +365,10 @@ export default function LoginPage({
               <path d="M2 17l10 5 10-5"/>
               <path d="M2 12l10 5 10-5"/>
             </svg>
-            Charpente
+            Bâtiment
           </div>
           <h1 className={`image-title ${loaded ? 'visible' : ''}`}>
-            Bati Ouest<br/>
+            PlanPro<br/>
             <em>planifiez</em> vos chantiers
           </h1>
         </div>
@@ -427,17 +377,6 @@ export default function LoginPage({
       {/* ── RIGHT: Form side ── */}
       <div className="login-form-panel">
         <div className="form-inner">
-
-          {localMode && (
-            <button
-              type="button"
-              className="quick-login-btn"
-              disabled={loggingIn}
-              onClick={() => onQuickLogin('admin@batiouest.fr', 'admin123')}
-            >
-              Connexion rapide (admin)
-            </button>
-          )}
 
           <div className={`form-header ${loaded ? 'visible' : ''}`}>
             <div className="label">Connexion</div>
@@ -470,14 +409,6 @@ export default function LoginPage({
               {loggingIn ? 'Connexion\u2026' : 'Se connecter'}
             </button>
           </form>
-
-          {localMode && (
-            <div className="login-demo">
-              <strong>Mode démo local</strong>
-              Admin : admin@batiouest.fr / admin123<br/>
-              Équipe : equipe@batiouest.fr / equipe123
-            </div>
-          )}
 
         </div>
       </div>

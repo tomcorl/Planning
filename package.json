@@ -1,5 +1,5 @@
 {
-  "name": "batiouest-planning",
+  "name": "mon-app",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,9 +11,9 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
+    "jspdf": "^4.2.1",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "recharts": "^3.10.1"
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
