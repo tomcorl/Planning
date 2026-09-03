@@ -1553,10 +1553,6 @@ button:active {
   pointer-events: none;
 }
 
-.main-grid.dragging-active .cell {
-  pointer-events: none;
-}
-
 .main-grid.dragging-active .bloc {
   box-shadow: none !important;
   transition: none !important;

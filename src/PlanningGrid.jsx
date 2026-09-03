@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v4.3-fix-drop';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v4.4-fix-drag';
 
 const EMPTY = [];
 
