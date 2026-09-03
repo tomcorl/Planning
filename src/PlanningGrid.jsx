@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v6.1-auto-fix';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v6.2-vitesse+';
 
 const EMPTY = [];
 
@@ -264,8 +264,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
   // Auto-scroll pendant drag (vitesse modérée, pas de lag chargement)
   const EDGE_X = 80;
   const EDGE_Y = 60;
-  const MIN_SPEED = 4;
-  const MAX_SPEED = 12;
+  const MIN_SPEED = 6;
+  const MAX_SPEED = 16;
   function lerpSpeed(distFromEdge, edge) {
     const t = 1 - Math.max(0, Math.min(1, distFromEdge / edge));
     return Math.round(MIN_SPEED + (MAX_SPEED - MIN_SPEED) * t * t);

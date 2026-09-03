@@ -2114,7 +2114,7 @@ export default function App() {
       )}
       </Suspense>
       </main>
-      <footer className="app-footer">Créé par Tom Corlay • v6.1-auto-fix</footer>
+      <footer className="app-footer">Créé par Tom Corlay • v6.2-vitesse+</footer>
       {filterOpen && createPortal(
         <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
           <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setFilterOpen(false); }}>
