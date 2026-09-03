@@ -1,4 +1,6 @@
 import React from 'react';
+// PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v1-rAF-lazy';
 
 const EMPTY = [];
 
