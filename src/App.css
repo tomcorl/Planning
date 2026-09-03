@@ -239,6 +239,7 @@ button:active {
 .grid-row {
   display: flex;
   flex-shrink: 0;
+  contain: layout paint;
 }
 
 .grid-row.company-header-row {
@@ -668,6 +669,7 @@ button:active {
   overflow: visible;
   width: var(--cell-w, 26px);
   flex: 0 0 var(--cell-w, 26px);
+  contain: layout paint style;
 }
 
 .cell.odd {
@@ -1509,6 +1511,7 @@ button:active {
 .drag-preview {
   background: rgba(22, 163, 74, 0.12) !important;
   box-shadow: inset 0 0 0 2px var(--green);
+  contain: layout paint style;
 }
 
 .drag-end-preview {

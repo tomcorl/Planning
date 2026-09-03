@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v1-rAF-lazy';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v2-diag-contain';
 
 const EMPTY = [];
 
@@ -316,7 +316,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
       if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
       else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
       // SAFE: cache lazy pour éviter freeze au dragStart (15k addWorkingDays sync)
+      const dragStartT0 = performance.now();
       endDateCacheRef.current = new Map();
+      // log total cells for diagnosis
+      if (cellMapRef.current.size > 0) console.log(`[dragStart] cells=${cellMapRef.current.size} days=${visibleDays.length} rows=${gridRows.length} t=${(performance.now()-dragStartT0).toFixed(1)}ms`);
       const dragSrc = dch || dco;
       if (dragSrc) dragSrc.classList.add('dragging-source');
       gridRef.current?.classList.add('dragging-active');
@@ -417,6 +420,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
       pendingDragRef.current = { equipe, date, cell, key };
       if (rafDragRef.current) return;
       rafDragRef.current = requestAnimationFrame(() => {
+        const t0 = performance.now();
         rafDragRef.current = null;
         const pending = pendingDragRef.current;
         pendingDragRef.current = null;
@@ -448,6 +452,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
               prevDragEndCellRef.current = endCell;
             }
           }
+          const dt = performance.now() - t0;
+          if (dt > 8) console.log(`[drag] ${dt.toFixed(1)}ms key=${pKey} cells=${cellMapRef.current.size}`);
         }
       });
       return;
