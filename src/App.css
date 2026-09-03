@@ -239,6 +239,7 @@ button:active {
 .grid-row {
   display: flex;
   flex-shrink: 0;
+  contain: layout style;
 }
 
 .grid-row.company-header-row {
@@ -1509,6 +1510,39 @@ button:active {
 .drag-preview {
   background: rgba(22, 163, 74, 0.12) !important;
   box-shadow: inset 0 0 0 2px var(--green);
+}
+
+.drag-overlay {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid var(--green);
+  background: rgba(22, 163, 74, 0.12);
+  border-radius: 8px;
+  z-index: 10000;
+  display: none;
+}
+
+.drag-overlay.visible {
+  display: block;
+}
+
+.drag-end-overlay {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid #dc2626;
+  background: rgba(220, 38, 38, 0.12);
+  border-radius: 8px;
+  z-index: 10000;
+  display: none;
+}
+
+.drag-end-overlay.visible {
+  display: block;
+}
+
+.main-grid.dragging-active .cell,
+.main-grid.dragging-active .bloc:not(.dragging-source) {
+  pointer-events: none;
 }
 
 .drag-end-preview {

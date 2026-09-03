@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v2-diag-contain';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v3-paint-overlay';
 
 const EMPTY = [];
 
@@ -191,6 +191,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const endDateCacheRef = React.useRef(null);
   const pendingDragRef = React.useRef(null);
   const rafDragRef = React.useRef(null);
+  const dragOverlayRef = React.useRef(null);
+  const dragEndOverlayRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -242,20 +244,14 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
   function highlightTargetDate(date) {
     if (prevTargetDateRef.current?.date === date) return;
-    if (prevTargetDateRef.current?.el) {
-      prevTargetDateRef.current.el.classList.remove('target-day');
-    }
+    // v3: no classList on date-cell to avoid Rendering 4.5s - only move indicator
+    prevTargetDateRef.current = { date, el: null };
     if (!date) {
-      prevTargetDateRef.current = null;
       if (indicatorRef.current) indicatorRef.current.style.opacity = '0';
       return;
     }
     const idx = dayIdxMemo.get(date);
-    const cell = idx != null ? dateCellRefs.current[idx] : null;
-    if (cell) {
-      cell.classList.add('target-day');
-    }
-    prevTargetDateRef.current = { date, el: cell };
+    prevTargetDateRef.current = { date, el: null };
     const ind = indicatorRef.current;
     if (ind && idx != null) {
       ind.style.transform = `translateX(${260 + idx * cellWidth + cellWidth / 2}px)`;
@@ -414,10 +410,23 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (type === 'dragover') {
       e.preventDefault();
-      const key = `${equipe}-${date}`;
-      // SAFE: throttling rAF pour éviter thrash layout à 60evt/s
+      // v3: hit test par maths (0 hit test) + overlay au lieu de classList sur 12k cells
+      const gridRect = gridRef.current?.getBoundingClientRect();
+      if (!gridRect) return;
+      const x = e.clientX - gridRect.left - 260;
+      const y = e.clientY - gridRect.top;
+      if (x < 0 || y < 0) return;
+      const dayIdx = Math.floor(x / cellWidth);
+      const rowIdx = Math.floor(y / rowHeight);
+      if (dayIdx < 0 || dayIdx >= visibleDays.length || rowIdx < 0 || rowIdx >= gridRows.length) return;
+      const row = gridRows[rowIdx];
+      if (!row || row.type === 'separator' || row.type === 'company-header') return;
+      const pEquipe = row.type === 'pending' ? row.equipeIndex : row.teamId;
+      const pDate = visibleDays[dayIdx]?.date;
+      if (!pDate) return;
+      const key = `${pEquipe}-${pDate}`;
       if (lastDragKeyRef.current === key && !rafDragRef.current) return;
-      pendingDragRef.current = { equipe, date, cell, key };
+      pendingDragRef.current = { pEquipe, pDate, dayIdx, rowIdx, key };
       if (rafDragRef.current) return;
       rafDragRef.current = requestAnimationFrame(() => {
         const t0 = performance.now();
@@ -425,36 +434,46 @@ const PlanningGrid = React.memo(function PlanningGrid({
         const pending = pendingDragRef.current;
         pendingDragRef.current = null;
         if (!pending) return;
-        const { equipe: pEquipe, date: pDate, cell: pCell, key: pKey } = pending;
-        if (lastDragKeyRef.current === pKey) return;
-        lastDragKeyRef.current = pKey;
-        if (prevDragCellRef.current) {
-          prevDragCellRef.current.classList.remove('drag-preview');
+        const { pEquipe: eq, pDate: d, dayIdx: di, rowIdx: ri, key: k } = pending;
+        if (lastDragKeyRef.current === k) return;
+        lastDragKeyRef.current = k;
+        // overlay vert = case de début
+        const startLeft = 260 + di * cellWidth;
+        const top = ri * rowHeight;
+        if (dragOverlayRef.current) {
+          dragOverlayRef.current.style.left = startLeft + 'px';
+          dragOverlayRef.current.style.top = top + 'px';
+          dragOverlayRef.current.style.width = cellWidth + 'px';
+          dragOverlayRef.current.style.height = rowHeight + 'px';
+          dragOverlayRef.current.classList.add('visible');
         }
-        if (pCell) pCell.classList.add('drag-preview');
-        prevDragCellRef.current = pCell;
-        highlightTargetDate(pDate);
-        if (prevDragEndCellRef.current) {
-          prevDragEndCellRef.current.classList.remove('drag-end-preview');
-          prevDragEndCellRef.current = null;
-        }
-        if (draggedItemRef.current && pCell?.dataset.da) {
-          const cacheKey = `${pEquipe}|${pCell.dataset.da}`;
+        highlightTargetDate(d);
+        // overlay rouge = case de fin
+        if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
+        if (draggedItemRef.current) {
+          const cacheKey = `${eq}|${d}`;
           let endDate = endDateCacheRef.current?.get(cacheKey);
           if (!endDate) {
-            endDate = cb.addWorkingDays(pCell.dataset.da, draggedItemRef.current.duree - 1, pEquipe, { force_aout: draggedItemRef.current.force_aout });
+            endDate = cb.addWorkingDays(d, draggedItemRef.current.duree - 1, eq, { force_aout: draggedItemRef.current.force_aout });
             endDateCacheRef.current?.set(cacheKey, endDate);
           }
           if (endDate) {
-            const endCell = cellMapRef.current.get(`${pEquipe}|${endDate}`);
-            if (endCell) {
-              endCell.classList.add('drag-end-preview');
-              prevDragEndCellRef.current = endCell;
+            const endIdx = dayIdxMemo.get(endDate);
+            if (endIdx != null && endIdx >= 0) {
+              const endLeft = 260 + endIdx * cellWidth;
+              // vérifier même rangée (pas de débordement visuel si end hors viewport)
+              if (dragEndOverlayRef.current) {
+                dragEndOverlayRef.current.style.left = endLeft + 'px';
+                dragEndOverlayRef.current.style.top = top + 'px';
+                dragEndOverlayRef.current.style.width = cellWidth + 'px';
+                dragEndOverlayRef.current.style.height = rowHeight + 'px';
+                dragEndOverlayRef.current.classList.add('visible');
+              }
             }
           }
-          const dt = performance.now() - t0;
-          if (dt > 8) console.log(`[drag] ${dt.toFixed(1)}ms key=${pKey} cells=${cellMapRef.current.size}`);
         }
+        const dt = performance.now() - t0;
+        if (dt > 8) console.log(`[drag] ${dt.toFixed(1)}ms key=${k} cells=${cellMapRef.current.size} di=${di} ri=${ri}`);
       });
       return;
     }
@@ -464,6 +483,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
       lastDragKeyRef.current = null;
       if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; }
       pendingDragRef.current = null;
+      if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible');
+      if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
       if (prevDragCellRef.current) {
         prevDragCellRef.current.classList.remove('drag-preview');
         prevDragCellRef.current = null;
@@ -473,11 +494,28 @@ const PlanningGrid = React.memo(function PlanningGrid({
         prevDragEndCellRef.current.classList.remove('drag-end-preview');
         prevDragEndCellRef.current = null;
       }
+      // v3: drop via maths si closest a échoué (overlay a pointer-events:none mais fallback)
+      let dropEquipe = equipe;
+      let dropDate = date;
+      if (!dropEquipe || !dropDate) {
+        const gridRect = gridRef.current?.getBoundingClientRect();
+        if (gridRect) {
+          const x = e.clientX - gridRect.left - 260;
+          const y = e.clientY - gridRect.top;
+          const dayIdx = Math.floor(x / cellWidth);
+          const rowIdx = Math.floor(y / rowHeight);
+          const row = gridRows[rowIdx];
+          if (row && row.type !== 'separator' && row.type !== 'company-header' && visibleDays[dayIdx]) {
+            dropEquipe = row.type === 'pending' ? row.equipeIndex : row.teamId;
+            dropDate = visibleDays[dayIdx].date;
+          }
+        }
+      }
       draggedItemRef.current = null;
       endDateCacheRef.current = null;
       gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source');
       gridRef.current?.classList.remove('dragging-active');
-      cb.onDrop(e, equipe, date);
+      if (dropEquipe && dropDate) cb.onDrop(e, dropEquipe, dropDate);
       return;
     }
   }
@@ -540,10 +578,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible'); if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible'); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
+          <div ref={dragOverlayRef} className="drag-overlay" />
+          <div ref={dragEndOverlayRef} className="drag-end-overlay" />
           {gridRows.map((row) => {
             if (row.type === 'separator') {
               return (
