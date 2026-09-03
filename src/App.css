@@ -1520,6 +1520,7 @@ button:active {
   border-radius: 8px;
   z-index: 10000;
   display: none;
+  box-sizing: border-box;
 }
 
 .drag-overlay.visible {
@@ -1532,6 +1533,7 @@ button:active {
   border: 2px solid #dc2626;
   background: rgba(220, 38, 38, 0.12);
   border-radius: 8px;
+  box-sizing: border-box;
   z-index: 10000;
   display: none;
 }

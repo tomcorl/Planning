@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v4-math';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v5-virtual';
 
 const EMPTY = [];
 
@@ -194,6 +194,69 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const dragOverlayRef = React.useRef(null);
   const dragEndOverlayRef = React.useRef(null);
   const totalDays = visibleDays.length;
+  const overscan = 30;
+  const [hRange, setHRange] = React.useState(() => {
+    const idx = visibleDays.findIndex(d => d.date === today);
+    const start = Math.max(0, (idx >= 0 ? idx : 0) - 40);
+    const end = Math.min(totalDays, start + 80);
+    return { start, end };
+  });
+  const rafVirtualRef = React.useRef(null);
+
+  function updateHRange() {
+    const el = scrollRef.current;
+    if (!el) return;
+    const scrollLeft = el.scrollLeft;
+    const clientWidth = el.clientWidth;
+    const start = Math.max(0, Math.floor(scrollLeft / cellWidth) - overscan);
+    const end = Math.min(totalDays, Math.ceil((scrollLeft + clientWidth - 260) / cellWidth) + overscan);
+    setHRange(prev => (prev.start === start && prev.end === end ? prev : { start, end }));
+  }
+
+  React.useEffect(() => {
+    updateHRange();
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (rafVirtualRef.current) return;
+      rafVirtualRef.current = requestAnimationFrame(() => {
+        rafVirtualRef.current = null;
+        updateHRange();
+      });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [totalDays, cellWidth]);
+
+  React.useEffect(() => {
+    updateHRange();
+  }, [totalDays]);
+
+  const vDays = React.useMemo(() => visibleDays.slice(hRange.start, hRange.end), [visibleDays, hRange]);
+  const vMonthGroups = React.useMemo(() => {
+    const groups = [];
+    vDays.forEach((day) => {
+      const last = groups[groups.length - 1];
+      if (!last || last.monthKey !== day.monthKey) {
+        groups.push({ monthLabel: day.monthLabel, monthKey: day.monthKey, count: 1 });
+      } else {
+        last.count += 1;
+      }
+    });
+    return groups;
+  }, [vDays]);
+  const vWeekGroups = React.useMemo(() => {
+    const groups = [];
+    vDays.forEach((day) => {
+      const last = groups[groups.length - 1];
+      if (!last || last.week !== day.week) {
+        groups.push({ week: day.week, count: 1 });
+      } else {
+        last.count += 1;
+      }
+    });
+    return groups;
+  }, [vDays]);
 
   React.useEffect(() => {
     if (initialScrolled.current) return;
@@ -203,6 +266,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
     const el = scrollRef.current;
     if (!el) return;
     el.scrollLeft = Math.max(0, idx * cellWidth - 500);
+    // après scroll initial, mettre à jour la fenêtre virtuelle
+    requestAnimationFrame(updateHRange);
   }, []);
 
   React.useEffect(() => {
@@ -529,48 +594,60 @@ const PlanningGrid = React.memo(function PlanningGrid({
         <div className="planning-header">
           <div className="grid month-grid" style={{ gridTemplateColumns }}>
             <div className="corner month-corner"></div>
-            {monthGroups.map((g, i) => (
-              <div
-                className={`month-cell ${i % 2 === 0 ? 'month-even' : 'month-odd'}`}
-                key={g.monthKey}
-                style={{ gridColumn: `span ${g.count}` }}
-              >
-                {g.monthLabel}
-              </div>
-            ))}
+            {vMonthGroups.map((g, i) => {
+              const offset = vMonthGroups.slice(0, i).reduce((a, b) => a + b.count, 0);
+              const startCol = hRange.start + offset + 2;
+              return (
+                <div
+                  className={`month-cell ${i % 2 === 0 ? 'month-even' : 'month-odd'}`}
+                  key={g.monthKey}
+                  style={{ gridColumn: `${startCol} / span ${g.count}` }}
+                >
+                  {g.monthLabel}
+                </div>
+              );
+            })}
           </div>
 
           <div className="grid week-grid" style={{ gridTemplateColumns }}>
             <div className="corner week-corner">
               <strong>Équipes</strong>
             </div>
-            {weekGroups.map((g, i) => (
-              <div
-                className="week-cell"
-                key={`${g.week}-${i}`}
-                style={{ gridColumn: `span ${g.count}` }}
-              >
-                S{g.week}
-              </div>
-            ))}
+            {vWeekGroups.map((g, i) => {
+              const offset = vWeekGroups.slice(0, i).reduce((a, b) => a + b.count, 0);
+              const startCol = hRange.start + offset + 2;
+              return (
+                <div
+                  className="week-cell"
+                  key={`${g.week}-${i}`}
+                  style={{ gridColumn: `${startCol} / span ${g.count}` }}
+                >
+                  S{g.week}
+                </div>
+              );
+            })}
           </div>
 
           <div className="grid date-grid" style={{ gridTemplateColumns, gridAutoRows: dateGridH, position: 'relative' }}>
             <div className="corner date-corner"></div>
-            {visibleDays.map((d, di) => (
-              <div
-                key={d.date}
-                ref={(el) => { dateCellRefs.current[di] = el; }}
-                className={`date-cell${weekBoundarySet.has(d.date) ? ' week-boundary' : ''} ${d.weekend ? 'weekend' : ''} ${
-                  isFerie(d.date) ? 'ferie' : ''
-                } ${isAugustClosure(d.date) ? 'august-closure' : ''} ${d.date === today ? 'today' : ''} ${d.date === targetDate ? 'target-day' : ''}`}
-                title={d.date}
-              >
-                {cellWidth >= 36 && <span>{d.weekday}</span>}
-                <strong>{d.dayNumber}</strong>
-                {d.date === targetDate && <span className="day-indicator" />}
-              </div>
-            ))}
+            {vDays.map((d, localIdx) => {
+              const di = hRange.start + localIdx;
+              return (
+                <div
+                  key={d.date}
+                  ref={(el) => { dateCellRefs.current[di] = el; }}
+                  className={`date-cell${weekBoundarySet.has(d.date) ? ' week-boundary' : ''} ${d.weekend ? 'weekend' : ''} ${
+                    isFerie(d.date) ? 'ferie' : ''
+                  } ${isAugustClosure(d.date) ? 'august-closure' : ''} ${d.date === today ? 'today' : ''} ${d.date === targetDate ? 'target-day' : ''}`}
+                  title={d.date}
+                  style={{ gridColumn: di + 2 }}
+                >
+                  {cellWidth >= 36 && <span>{d.weekday}</span>}
+                  <strong>{d.dayNumber}</strong>
+                  {d.date === targetDate && <span className="day-indicator" />}
+                </div>
+              );
+            })}
             <span ref={indicatorRef} className="day-indicator" style={{ position: 'absolute', bottom: 2, opacity: 0, pointerEvents: 'none', transform: 'translateX(0)' }} />
           </div>
         </div>
@@ -593,8 +670,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 <React.Fragment key={row.id}>
                   <div className="grid-row">
                     <div className="team-cell separator-row" />
-                    <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px` }}>
-                      {visibleDays.map((day) => (
+                    <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px`, marginLeft: hRange.start * cellWidth, marginRight: (totalDays - hRange.end) * cellWidth }}>
+                      {vDays.map((day) => (
                         <div key={`sep-${day.date}`} className={`cell separator-cell${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}`} />
                       ))}
                     </div>
@@ -608,8 +685,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 <React.Fragment key={row.id}>
                   <div className="grid-row company-header-row" style={{ top: headerHeight }}>
                     <div className="team-cell company-header-cell"><span>{row.name}</span>{canEdit && <button className="add-team-btn" onClick={() => cb.addTeamToCompany(row.id.replace('ch-', ''))}>+</button>}</div>
-                    <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px` }}>
-                      {visibleDays.map((day) => (
+                    <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px`, marginLeft: hRange.start * cellWidth, marginRight: (totalDays - hRange.end) * cellWidth }}>
+                      {vDays.map((day) => (
                         <div key={`${row.id}-${day.date}`} className="cell company-header-day" />
                       ))}
                     </div>
@@ -644,8 +721,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
                     )}
                   </div>
 
-                  <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px` }}>
-                    {visibleDays.map((day, dayIdx) => {
+                  <div className="grid-row-body" style={{ '--cell-w': `${cellWidth}px`, marginLeft: hRange.start * cellWidth, marginRight: (totalDays - hRange.end) * cellWidth }}>
+                    {vDays.map((day, localIdx) => {
+                      const dayIdx = hRange.start + localIdx;
                       const segments = chantiersParCellule.get(`${equipeIndex}-${dayIdx}`) || EMPTY;
                       const congeItems = (congeSegments.get(`${equipeIndex}-${dayIdx}`) || EMPTY);
                       const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
