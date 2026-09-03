@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v5.2-precalc';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v6-virtual';
 
 const EMPTY = [];
 
@@ -194,6 +194,51 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const dragOverlayRef = React.useRef(null);
   const dragEndOverlayRef = React.useRef(null);
   const totalDays = visibleDays.length;
+  const vOverscan = 5;
+  const [vRange, setVRange] = React.useState({ start: 0, end: Math.min(gridRows.length, 25) });
+  const rafVRef = React.useRef(null);
+  function getRowHeight(row) {
+    if (row.type === 'company-header') return 34;
+    if (row.type === 'separator') return 8;
+    return Math.round(56 + (cellWidth - 26) * (78 - 56) / 26);
+  }
+  function updateVRange() {
+    const el = scrollRef.current;
+    if (!el) return;
+    const scrollTop = el.scrollTop;
+    const clientHeight = el.clientHeight;
+    let acc = 0;
+    let start = 0;
+    let end = gridRows.length;
+    // find start
+    for (let i = 0; i < gridRows.length; i++) {
+      const h = getRowHeight(gridRows[i]);
+      if (acc + h > scrollTop - vOverscan * 56) { start = Math.max(0, i - 2); break; }
+      acc += h;
+    }
+    acc = 0;
+    for (let i = 0; i < gridRows.length; i++) {
+      const h = getRowHeight(gridRows[i]);
+      acc += h;
+      if (acc > scrollTop + clientHeight + vOverscan * 56) { end = Math.min(gridRows.length, i + vOverscan + 1); break; }
+    }
+    setVRange(prev => (prev.start === start && prev.end === end ? prev : { start, end }));
+  }
+
+  React.useEffect(() => {
+    updateVRange();
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScrollV = () => {
+      if (rafVRef.current) return;
+      rafVRef.current = requestAnimationFrame(() => {
+        rafVRef.current = null;
+        updateVRange();
+      });
+    };
+    el.addEventListener('scroll', onScrollV, { passive: true });
+    return () => el.removeEventListener('scroll', onScrollV);
+  }, [gridRows, cellWidth]);
 
   React.useEffect(() => {
     if (initialScrolled.current) return;
@@ -203,7 +248,20 @@ const PlanningGrid = React.memo(function PlanningGrid({
     const el = scrollRef.current;
     if (!el) return;
     el.scrollLeft = Math.max(0, idx * cellWidth - 500);
+    requestAnimationFrame(updateVRange);
   }, []);
+
+  const vRows = React.useMemo(() => gridRows.slice(vRange.start, vRange.end), [gridRows, vRange]);
+  const paddingTop = React.useMemo(() => {
+    let h = 0;
+    for (let i = 0; i < vRange.start; i++) h += getRowHeight(gridRows[i]);
+    return h;
+  }, [gridRows, vRange.start, cellWidth]);
+  const paddingBottom = React.useMemo(() => {
+    let h = 0;
+    for (let i = vRange.end; i < gridRows.length; i++) h += getRowHeight(gridRows[i]);
+    return h;
+  }, [gridRows, vRange.end, cellWidth]);
 
   React.useEffect(() => {
     const map = new Map();
@@ -213,7 +271,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
         map.set(`${el.dataset.eq}|${el.dataset.da}`, el);
     }
     cellMapRef.current = map;
-  }, [gridRows, visibleDays]);
+  }, [gridRows, visibleDays, vRange]);
 
   const gridTemplateColumns = `260px repeat(${totalDays}, ${cellWidth}px)`;
   const rowHeight = Math.round(56 + (cellWidth - 26) * (78 - 56) / 26);
@@ -628,7 +686,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
         >
           <div ref={dragOverlayRef} className="drag-overlay" />
           <div ref={dragEndOverlayRef} className="drag-end-overlay" />
-          {gridRows.map((row) => {
+          {paddingTop > 0 && <div style={{ height: paddingTop, flexShrink: 0 }} />}
+          {vRows.map((row) => {
             if (row.type === 'separator') {
               return (
                 <React.Fragment key={row.id}>
