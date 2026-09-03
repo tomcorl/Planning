@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v6-auto-scroll';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v6.1-auto-fix';
 
 const EMPTY = [];
 
@@ -267,7 +267,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const MIN_SPEED = 4;
   const MAX_SPEED = 12;
   function lerpSpeed(distFromEdge, edge) {
-    const t = Math.max(0, Math.min(1, distFromEdge / edge));
+    const t = 1 - Math.max(0, Math.min(1, distFromEdge / edge));
     return Math.round(MIN_SPEED + (MAX_SPEED - MIN_SPEED) * t * t);
   }
   function stopAutoScroll() {
@@ -295,9 +295,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
     const { x, y } = dragClientPos.current;
     let dx = 0;
     let dy = 0;
-    // Horizontal
+    // Horizontal - sur team div aussi (x < rect.left+260) doit scroller à gauche
     if (x > rect.right - EDGE_X) dx = lerpSpeed(rect.right - x, EDGE_X);
-    else if (x < rect.left + 260 + EDGE_X && x > rect.left + 260) dx = -lerpSpeed(x - (rect.left + 260), EDGE_X);
+    else if (x < rect.left + EDGE_X) dx = -lerpSpeed(x - rect.left, EDGE_X);
+    else if (x < rect.left + 260 + EDGE_X) dx = -lerpSpeed(x - (rect.left + 260), EDGE_X);
     // Vertical (exclure header)
     const headerH = 28 + 30 + dateGridH;
     const topLimit = rect.top + headerH;

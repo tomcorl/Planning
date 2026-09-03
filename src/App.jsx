@@ -1487,16 +1487,15 @@ export default function App() {
 
   function handleScroll(e) {
     const el = e.currentTarget;
-    // ne pas déclencher d'expansion/recalcul pendant un drag (évite lag rechargement)
-    if (el.dataset.dragging === '1') return;
+    const isDraggingAtStart = el.dataset.dragging === '1';
     const raf = scrollThrottleRef.current;
     if (raf) cancelAnimationFrame(raf);
     scrollThrottleRef.current = requestAnimationFrame(() => {
       scrollThrottleRef.current = null;
-      if (el.dataset.dragging === '1') return;
+      const isDragging = el.dataset.dragging === '1' || isDraggingAtStart;
 
-      // Throttle localStorage writes to max 1/s (synchronous IO is slow)
-      if (!localStorageThrottleRef.current) {
+      // Throttle localStorage writes to max 1/s (skip pendant drag)
+      if (!isDragging && !localStorageThrottleRef.current) {
         localStorageThrottleRef.current = setTimeout(() => {
           localStorageThrottleRef.current = null;
           try {
@@ -1505,14 +1504,15 @@ export default function App() {
         }, 1000);
       }
 
-      // Right-edge expansion: debounced, cooldown 2s après chaque expansion (seuil réduit pour 250j)
+      // Right-edge expansion: debounced, cooldown 2s (pendant drag on charge par 30j pour éviter lag)
       if (el.scrollLeft + el.clientWidth > el.scrollWidth - 600) {
         if (!expandRightRef.current && !expandCooldownRef.current) {
+          const isDraggingNow = el.dataset.dragging === '1';
           expandRightRef.current = setTimeout(() => {
             expandRightRef.current = null;
             expandCooldownRef.current = setTimeout(() => { expandCooldownRef.current = null; }, 2000);
-            setCalendarLength((prev) => prev + 100);
-          }, 250);
+            setCalendarLength((prev) => prev + (isDraggingNow ? 30 : 100));
+          }, isDraggingNow ? 100 : 250);
         }
       } else if (expandRightRef.current) {
         clearTimeout(expandRightRef.current);
@@ -2114,7 +2114,7 @@ export default function App() {
       )}
       </Suspense>
       </main>
-      <footer className="app-footer">Créé par Tom Corlay • v6-auto-scroll</footer>
+      <footer className="app-footer">Créé par Tom Corlay • v6.1-auto-fix</footer>
       {filterOpen && createPortal(
         <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
           <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setFilterOpen(false); }}>
