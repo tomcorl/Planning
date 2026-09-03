@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v3-paint-overlay';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v3.1-fix';
 
 const EMPTY = [];
 
@@ -386,9 +386,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
       }
     }
 
-    if (!cell) return;
-    const equipe = Number(cell.dataset.eq);
-    const date = cell.dataset.da;
+    if (!cell && type !== 'dragover' && type !== 'drop') return;
+    const equipe = cell ? Number(cell.dataset.eq) : null;
+    const date = cell ? cell.dataset.da : null;
 
     if (type === 'contextmenu') {
       e.preventDefault();
@@ -410,23 +410,26 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (type === 'dragover') {
       e.preventDefault();
-      // v3: hit test par maths (0 hit test) + overlay au lieu de classList sur 12k cells
-      const gridRect = gridRef.current?.getBoundingClientRect();
-      if (!gridRect) return;
-      const x = e.clientX - gridRect.left - 260;
-      const y = e.clientY - gridRect.top;
-      if (x < 0 || y < 0) return;
-      const dayIdx = Math.floor(x / cellWidth);
-      const rowIdx = Math.floor(y / rowHeight);
-      if (dayIdx < 0 || dayIdx >= visibleDays.length || rowIdx < 0 || rowIdx >= gridRows.length) return;
-      const row = gridRows[rowIdx];
-      if (!row || row.type === 'separator' || row.type === 'company-header') return;
-      const pEquipe = row.type === 'pending' ? row.equipeIndex : row.teamId;
-      const pDate = visibleDays[dayIdx]?.date;
-      if (!pDate) return;
-      const key = `${pEquipe}-${pDate}`;
+      // v3.1: overlay au lieu de classList sur 12k cells (hit test via closest, pas maths)
+      const cell = e.target.closest('[data-eq]');
+      if (!cell) return;
+      const equipe = Number(cell.dataset.eq);
+      const date = cell.dataset.da;
+      if (!equipe || !date) return;
+      const key = `${equipe}-${date}`;
       if (lastDragKeyRef.current === key && !rafDragRef.current) return;
-      pendingDragRef.current = { pEquipe, pDate, dayIdx, rowIdx, key };
+      const dayIdx = dayIdxMemo.get(date);
+      // trouver rowIdx pour positionner l'overlay (parcours gridRows)
+      let rowIdx = -1;
+      for (let i = 0; i < gridRows.length; i++) {
+        const r = gridRows[i];
+        const id = r.type === 'pending' ? r.equipeIndex : r.teamId;
+        if (id === equipe) { rowIdx = i; break; }
+        if (r.type === 'company-header' || r.type === 'separator') continue;
+      }
+      // fallback si equipe est pending avec offset
+      if (rowIdx === -1) rowIdx = gridRows.findIndex(r => (r.type === 'pending' ? r.equipeIndex : r.teamId) === equipe);
+      pendingDragRef.current = { pEquipe: equipe, pDate: date, dayIdx, rowIdx, key };
       if (rafDragRef.current) return;
       rafDragRef.current = requestAnimationFrame(() => {
         const t0 = performance.now();
@@ -438,40 +441,41 @@ const PlanningGrid = React.memo(function PlanningGrid({
         if (lastDragKeyRef.current === k) return;
         lastDragKeyRef.current = k;
         // overlay vert = case de début
-        const startLeft = 260 + di * cellWidth;
-        const top = ri * rowHeight;
-        if (dragOverlayRef.current) {
-          dragOverlayRef.current.style.left = startLeft + 'px';
-          dragOverlayRef.current.style.top = top + 'px';
-          dragOverlayRef.current.style.width = cellWidth + 'px';
-          dragOverlayRef.current.style.height = rowHeight + 'px';
-          dragOverlayRef.current.classList.add('visible');
-        }
-        highlightTargetDate(d);
-        // overlay rouge = case de fin
-        if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
-        if (draggedItemRef.current) {
-          const cacheKey = `${eq}|${d}`;
-          let endDate = endDateCacheRef.current?.get(cacheKey);
-          if (!endDate) {
-            endDate = cb.addWorkingDays(d, draggedItemRef.current.duree - 1, eq, { force_aout: draggedItemRef.current.force_aout });
-            endDateCacheRef.current?.set(cacheKey, endDate);
+        if (di != null && ri >= 0) {
+          const startLeft = 260 + di * cellWidth;
+          const top = ri * rowHeight;
+          if (dragOverlayRef.current) {
+            dragOverlayRef.current.style.left = startLeft + 'px';
+            dragOverlayRef.current.style.top = top + 'px';
+            dragOverlayRef.current.style.width = cellWidth + 'px';
+            dragOverlayRef.current.style.height = rowHeight + 'px';
+            dragOverlayRef.current.classList.add('visible');
           }
-          if (endDate) {
-            const endIdx = dayIdxMemo.get(endDate);
-            if (endIdx != null && endIdx >= 0) {
-              const endLeft = 260 + endIdx * cellWidth;
-              // vérifier même rangée (pas de débordement visuel si end hors viewport)
-              if (dragEndOverlayRef.current) {
-                dragEndOverlayRef.current.style.left = endLeft + 'px';
-                dragEndOverlayRef.current.style.top = top + 'px';
-                dragEndOverlayRef.current.style.width = cellWidth + 'px';
-                dragEndOverlayRef.current.style.height = rowHeight + 'px';
-                dragEndOverlayRef.current.classList.add('visible');
+          highlightTargetDate(d);
+          // overlay rouge = case de fin
+          if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
+          if (draggedItemRef.current) {
+            const cacheKey = `${eq}|${d}`;
+            let endDate = endDateCacheRef.current?.get(cacheKey);
+            if (!endDate) {
+              endDate = cb.addWorkingDays(d, draggedItemRef.current.duree - 1, eq, { force_aout: draggedItemRef.current.force_aout });
+              endDateCacheRef.current?.set(cacheKey, endDate);
+            }
+            if (endDate) {
+              const endIdx = dayIdxMemo.get(endDate);
+              if (endIdx != null && endIdx >= 0) {
+                const endLeft = 260 + endIdx * cellWidth;
+                if (dragEndOverlayRef.current) {
+                  dragEndOverlayRef.current.style.left = endLeft + 'px';
+                  dragEndOverlayRef.current.style.top = top + 'px';
+                  dragEndOverlayRef.current.style.width = cellWidth + 'px';
+                  dragEndOverlayRef.current.style.height = rowHeight + 'px';
+                  dragEndOverlayRef.current.classList.add('visible');
+                }
               }
             }
           }
-        }
+          }
         const dt = performance.now() - t0;
         if (dt > 8) console.log(`[drag] ${dt.toFixed(1)}ms key=${k} cells=${cellMapRef.current.size} di=${di} ri=${ri}`);
       });
@@ -494,23 +498,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
         prevDragEndCellRef.current.classList.remove('drag-end-preview');
         prevDragEndCellRef.current = null;
       }
-      // v3: drop via maths si closest a échoué (overlay a pointer-events:none mais fallback)
       let dropEquipe = equipe;
       let dropDate = date;
-      if (!dropEquipe || !dropDate) {
-        const gridRect = gridRef.current?.getBoundingClientRect();
-        if (gridRect) {
-          const x = e.clientX - gridRect.left - 260;
-          const y = e.clientY - gridRect.top;
-          const dayIdx = Math.floor(x / cellWidth);
-          const rowIdx = Math.floor(y / rowHeight);
-          const row = gridRows[rowIdx];
-          if (row && row.type !== 'separator' && row.type !== 'company-header' && visibleDays[dayIdx]) {
-            dropEquipe = row.type === 'pending' ? row.equipeIndex : row.teamId;
-            dropDate = visibleDays[dayIdx].date;
-          }
-        }
-      }
       draggedItemRef.current = null;
       endDateCacheRef.current = null;
       gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source');
