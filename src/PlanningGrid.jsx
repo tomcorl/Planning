@@ -187,6 +187,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const draggedItemRef = React.useRef(null);
   const prevDragEndCellRef = React.useRef(null);
   const endDateCacheRef = React.useRef(null);
+  const pendingDragRef = React.useRef(null);
+  const rafDragRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -311,22 +313,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const dco = e.target.closest('[data-co]');
       if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
       else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
-      const dragged = draggedItemRef.current;
-      if (dragged) {
-        const eqSet = new Set();
-        for (const row of gridRows) {
-          if (row.type === 'separator' || row.type === 'company-header') continue;
-          eqSet.add(row.type === 'pending' ? row.equipeIndex : row.teamId);
-        }
-        const cache = new Map();
-        const dateList = visibleDays.map(d => d.date);
-        for (const eq of eqSet) {
-          for (const d of dateList) {
-            cache.set(`${eq}|${d}`, cb.addWorkingDays(d, dragged.duree - 1, eq, { force_aout: dragged.force_aout }));
-          }
-        }
-        endDateCacheRef.current = cache;
-      }
+      // SAFE: cache lazy pour éviter freeze au dragStart (15k addWorkingDays sync)
+      endDateCacheRef.current = new Map();
       const dragSrc = dch || dco;
       if (dragSrc) dragSrc.classList.add('dragging-source');
       gridRef.current?.classList.add('dragging-active');
@@ -422,34 +410,52 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (type === 'dragover') {
       e.preventDefault();
       const key = `${equipe}-${date}`;
-      if (lastDragKeyRef.current === key) return;
-      lastDragKeyRef.current = key;
-      if (prevDragCellRef.current) {
-        prevDragCellRef.current.classList.remove('drag-preview');
-      }
-      if (cell) cell.classList.add('drag-preview');
-      prevDragCellRef.current = cell;
-      highlightTargetDate(date);
-      if (prevDragEndCellRef.current) {
-        prevDragEndCellRef.current.classList.remove('drag-end-preview');
-        prevDragEndCellRef.current = null;
-      }
-      if (draggedItemRef.current && cell?.dataset.da) {
-        const endDate = endDateCacheRef.current?.get(`${equipe}|${cell.dataset.da}`);
-        if (endDate) {
-          const endCell = cellMapRef.current.get(`${equipe}|${endDate}`);
-          if (endCell) {
-            endCell.classList.add('drag-end-preview');
-            prevDragEndCellRef.current = endCell;
+      // SAFE: throttling rAF pour éviter thrash layout à 60evt/s
+      if (lastDragKeyRef.current === key && !rafDragRef.current) return;
+      pendingDragRef.current = { equipe, date, cell, key };
+      if (rafDragRef.current) return;
+      rafDragRef.current = requestAnimationFrame(() => {
+        rafDragRef.current = null;
+        const pending = pendingDragRef.current;
+        pendingDragRef.current = null;
+        if (!pending) return;
+        const { equipe: pEquipe, date: pDate, cell: pCell, key: pKey } = pending;
+        if (lastDragKeyRef.current === pKey) return;
+        lastDragKeyRef.current = pKey;
+        if (prevDragCellRef.current) {
+          prevDragCellRef.current.classList.remove('drag-preview');
+        }
+        if (pCell) pCell.classList.add('drag-preview');
+        prevDragCellRef.current = pCell;
+        highlightTargetDate(pDate);
+        if (prevDragEndCellRef.current) {
+          prevDragEndCellRef.current.classList.remove('drag-end-preview');
+          prevDragEndCellRef.current = null;
+        }
+        if (draggedItemRef.current && pCell?.dataset.da) {
+          const cacheKey = `${pEquipe}|${pCell.dataset.da}`;
+          let endDate = endDateCacheRef.current?.get(cacheKey);
+          if (!endDate) {
+            endDate = cb.addWorkingDays(pCell.dataset.da, draggedItemRef.current.duree - 1, pEquipe, { force_aout: draggedItemRef.current.force_aout });
+            endDateCacheRef.current?.set(cacheKey, endDate);
+          }
+          if (endDate) {
+            const endCell = cellMapRef.current.get(`${pEquipe}|${endDate}`);
+            if (endCell) {
+              endCell.classList.add('drag-end-preview');
+              prevDragEndCellRef.current = endCell;
+            }
           }
         }
-      }
+      });
       return;
     }
     if (type === 'drop') {
       e.preventDefault();
       isDraggingRef.current = false;
       lastDragKeyRef.current = null;
+      if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; }
+      pendingDragRef.current = null;
       if (prevDragCellRef.current) {
         prevDragCellRef.current.classList.remove('drag-preview');
         prevDragCellRef.current = null;
@@ -526,7 +532,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
