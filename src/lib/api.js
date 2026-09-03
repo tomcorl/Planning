@@ -57,7 +57,7 @@ export async function logout() {
 export async function loadPlanningData() {
   const { data, error } = await supabase.rpc('get_planning_data');
   if (error) throw error;
-  if (!data) return { companies: [], equipes: [], conducteurs: [], chantiers: [], conges: [], customFeries: [] };
+  if (!data) return { companies: [], equipes: [], chantiers: [], conges: [], customFeries: [] };
 
   const seenChantier = new Set();
   const dedupedChantiers = (data.chantiers || [])
@@ -79,8 +79,7 @@ export async function loadPlanningData() {
 
   return {
     companies: data.companies || [],
-    equipes: (data.equipes || []).map((e) => ({ id: e.id, nom: e.nom, companyId: e.company_id, ordre: e.ordre })),
-    conducteurs: (data.conducteurs || []).map((c) => ({ id: c.id, nom: c.nom, color: c.color })),
+    equipes: (data.equipes || []).map((e) => ({ id: e.id, nom: e.nom, companyId: e.company_id, ordre: e.ordre, color: e.color || '#7dd3fc' })),
     chantiers: dedupedChantiers,
     conges: dedupedConges,
     customFeries: (data.custom_feries || []).map((f) => ({ ...f, companyId: f.company_id })),
@@ -88,11 +87,10 @@ export async function loadPlanningData() {
   };
 }
 
-export async function updateAllColors(chantierColors, conducteurColors) {
+export async function updateAllColors(chantierColors) {
   const { error } = await supabase
     .rpc('update_all_colors', {
       p_chantier_colors: chantierColors,
-      p_conducteur_colors: conducteurColors,
     });
   if (error) { console.error('update colors', error); throw error; }
 }
@@ -105,13 +103,18 @@ function normalizeChantier(c) {
     start: (c.start || '').split(' ')[0],
     duree: c.duree,
     nom: c.nom,
-    conducteurId: c.conducteurId,
     color: c.color,
     note: c.note || '',
     termine: !!c.termine,
     linked: !!c.linked,
     detail: c.detail || '',
     force_aout: !!c.force_aout,
+    permis: !!c.permis,
+    financement: !!c.financement,
+    danger: !!c.danger,
+    reunion: !!c.reunion,
+    facture: !!c.facture,
+    montantDevis: Number(c.montantDevis ?? c.montant_devis ?? 0) || 0,
   };
 }
 
@@ -125,13 +128,18 @@ export async function upsertChantiers(chantiers, companyId) {
       start: c.start,
       duree: c.duree,
       nom: c.nom,
-      conducteurId: c.conducteurId || 0,
       color: c.color || '#b7c6d8',
       note: c.note || '',
       termine: c.termine ? 1 : 0,
       linked: c.linked ? 1 : 0,
       detail: c.detail || '',
       force_aout: c.force_aout ? 1 : 0,
+      permis: c.permis ? 1 : 0,
+      financement: c.financement ? 1 : 0,
+      danger: c.danger ? 1 : 0,
+      reunion: c.reunion ? 1 : 0,
+      facture: c.facture ? 1 : 0,
+      montant_devis: Number(c.montantDevis ?? c.montant_devis ?? 0) || 0,
     };
     if (c.id && c.id > 0 && c.id <= 2147483647) row.id = c.id;
     return row;
@@ -187,11 +195,17 @@ export async function upsertConges(conges, companyId) {
 }
 
 export async function upsertEquipes(equipes, companyId) {
-  const rows = equipes.map((nom, i) => ({
-    company_id: companyId,
-    nom,
-    ordre: i + 1,
-  }));
+  const rows = equipes.map((e, i) => {
+    const nom = typeof e === 'string' ? e : e.nom;
+    const row = {
+      company_id: companyId,
+      nom,
+      ordre: (typeof e === 'object' && e.ordre != null) ? e.ordre : i + 1,
+      color: (typeof e === 'object' && e.color) ? e.color : (i < 5 ? '#7dd3fc' : '#f97316'),
+    };
+    if (typeof e === 'object' && e.id) row.id = e.id;
+    return row;
+  });
 
   if (rows.length === 0) {
     const { error: delErr } = await supabase
@@ -208,30 +222,6 @@ export async function upsertEquipes(equipes, companyId) {
   });
 
   if (error) { console.error('replace_equipes error', error); throw error; }
-  return data;
-}
-
-export async function upsertConducteurs(conducteurs) {
-  const rows = conducteurs.map((c) => {
-    const row = { nom: c.nom, color: c.color };
-    if (Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647) row.id = c.id;
-    return row;
-  });
-
-  if (rows.length === 0) {
-    const { error: delErr } = await supabase
-      .from('conducteurs')
-      .delete()
-      .neq('id', 0);
-    if (delErr) { console.error('delete conducteurs error', delErr); throw delErr; }
-    return [];
-  }
-
-  const { data, error } = await supabase.rpc('upsert_conducteurs', {
-    p_conducteurs: rows,
-  });
-
-  if (error) { console.error('upsert_conducteurs error', error); throw error; }
   return data;
 }
 
@@ -298,14 +288,16 @@ export async function updateUserProfile(userId, updates) {
 }
 
 export async function saveAllPlanningData(data) {
-  const { chantiers, conges, equipes, conducteurs, customFeries, chantierColors, conducteurColors } = data;
-  const mapRows = (items, companyId) => items.map(c => ({ ...c, company_id: companyId }));
+  const { chantiers, conges, equipes, customFeries, chantierColors } = data;
   const chantierRows = chantiers.map(c => ({
     id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
     company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
-    nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
+    nom: c.nom, color: c.color || '#b7c6d8',
     note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,
     detail: c.detail || '', force_aout: c.force_aout ? 1 : 0,
+    permis: c.permis ? 1 : 0, financement: c.financement ? 1 : 0,
+    danger: c.danger ? 1 : 0, reunion: c.reunion ? 1 : 0, facture: c.facture ? 1 : 0,
+    montant_devis: Number(c.montantDevis ?? c.montant_devis ?? 0) || 0,
   }));
   const congeRows = conges.map(c => ({
     id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
@@ -315,10 +307,7 @@ export async function saveAllPlanningData(data) {
   const equipeRows = equipes.map(e => ({
     id: Number.isInteger(e.id) && e.id !== 0 ? e.id : undefined,
     company_id: e.companyId, nom: e.nom, ordre: e.ordre,
-  }));
-  const conducteurRows = conducteurs.map(c => ({
-    id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
-    nom: c.nom, color: c.color,
+    color: e.color || '#7dd3fc',
   }));
   const ferieRows = customFeries.map(f => ({
     company_id: f.companyId, nom: f.nom, date: f.date,
@@ -328,10 +317,8 @@ export async function saveAllPlanningData(data) {
     p_chantiers: chantierRows,
     p_conges: congeRows,
     p_equipes: equipeRows,
-    p_conducteurs: conducteurRows,
     p_custom_feries: ferieRows,
     p_chantier_colors: chantierColors,
-    p_conducteur_colors: conducteurColors,
   });
   if (error) { console.error('save_all_planning_data RPC failed', error.message || error, error.details, error.hint); throw error; }
   return result;

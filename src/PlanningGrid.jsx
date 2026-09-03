@@ -1,8 +1,54 @@
 import React from 'react';
-// PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v4-math';
+import { createPortal } from 'react-dom';
 
 const EMPTY = [];
+
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+function hexToRgb(hex) {
+  const m = /^#?([a-f\d]{6})$/i.exec((hex || '').trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function rgbToHex({ r, g, b }) {
+  return '#' + [r, g, b].map((v) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')).join('');
+}
+
+function rgbToHsv({ r, g, b }) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return { h, s: max === 0 ? 0 : d / max, v: max };
+}
+
+function hsvToRgb({ h, s, v }) {
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; }
+  else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; }
+  else { r = c; b = x; }
+  return { r: (r + m) * 255, g: (g + m) * 255, b: (b + m) * 255 };
+}
+
+const PRESET_COLORS = [
+  '#7dd3fc', '#38bdf8', '#2563eb', '#0ea5e9', '#22c55e', '#84cc16',
+  '#ca8a04', '#f97316', '#ef4444', '#a855f7', '#ec4899', '#64748b',
+  '#ffffff', '#94a3b8', '#111827', '#b91c1c',
+];
 
 function sameOrAfter(a, b) {
   if (!a || !b) return false;
@@ -19,15 +65,139 @@ function isAugustClosure(dateStr) {
   return d.getMonth() === 7 && d.getDate() >= 1 && d.getDate() <= 21;
 }
 
-function getConducteur(conducteurs, id) {
-  return conducteurs.find((c) => c.id === Number(id));
-}
+const TeamColorPicker = React.memo(function TeamColorPicker({ initial, onPick, onClose, recentColors }) {
+  const rgb = hexToRgb(initial) || { r: 125, g: 211, b: 252 };
+  const [hsv, setHsv] = React.useState(rgbToHsv(rgb));
+  const [hex, setHex] = React.useState(rgbToHex(rgb));
+  const svAreaRef = React.useRef(null);
+  const hueRef = React.useRef(null);
+  const draggingRef = React.useRef(null);
+
+  const svBg = React.useMemo(
+    () => `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.h}, 100%, 50%))`,
+    [hsv.h]
+  );
+
+  function apply(updates) {
+    const next = { ...hsv, ...updates };
+    setHsv(next);
+    const c = hexToRgb(rgbToHex(hsvToRgb(next)));
+    setHex('#'.toLowerCase() + rgbToHex(c).replace('#', ''));
+  }
+
+  function applyHue(h) {
+    const nh = clamp(Math.round(h), 0, 359);
+    apply({ h: nh });
+  }
+
+  function onSvPointer(e) {
+    const el = svAreaRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const s = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    const v = 1 - clamp((e.clientY - rect.top) / rect.height, 0, 1);
+    apply({ s, v });
+  }
+
+  function onHuePointer(e) {
+    const el = hueRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    applyHue(((e.clientX - rect.left) / rect.width) * 360);
+  }
+
+  React.useEffect(() => {
+    function move(e) {
+      if (draggingRef.current === 'sv') onSvPointer(e);
+      else if (draggingRef.current === 'hue') onHuePointer(e);
+    }
+    function up() { draggingRef.current = null; }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hsv.h]);
+
+  const thumbPos = { left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%` };
+  const current = rgbToHex(hsvToRgb(hsv));
+
+  return (
+    createPortal(
+      <>
+        <div className="team-color-backdrop" onMouseDown={onClose} />
+        <div className="team-color-popover" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="tcp-header">
+            <h3>Couleur de l'équipe</h3>
+            <button className="tcp-close" onClick={onClose} aria-label="Fermer">×</button>
+          </div>
+          <div className="tcp-sv" ref={svAreaRef} style={{ background: svBg }}
+            onPointerDown={(e) => { draggingRef.current = 'sv'; onSvPointer(e); }}
+          >
+            <div className="tcp-sv-thumb" style={{ left: thumbPos.left, top: thumbPos.top }} />
+          </div>
+          <div className="tcp-hue" ref={hueRef}
+            onPointerDown={(e) => { draggingRef.current = 'hue'; onHuePointer(e); }}
+          >
+            <div className="tcp-hue-thumb" style={{ left: `${(hsv.h / 360) * 100}%` }} />
+          </div>
+          <div className="tcp-row">
+            <div className="tcp-preview" style={{ background: current }} />
+            <input
+              className="tcp-hex"
+              value={hex.toUpperCase()}
+              spellCheck={false}
+              onChange={(e) => {
+                const v = e.target.value.toUpperCase();
+                const prefixed = v.startsWith('#') ? v : '#' + v;
+                setHex(prefixed);
+                const c = hexToRgb(prefixed);
+                if (c) setHsv(rgbToHsv(c));
+              }}
+              onBlur={() => setHex(rgbToHex(hsvToRgb(hsv)))}
+              onKeyDown={(e) => { if (e.key === 'Enter') setHex(rgbToHex(hsvToRgb(hsv))); }}
+            />
+            <div className="tcp-presets">
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  className={`tcp-preset ${current === c.toLowerCase() || current === c ? 'sel' : ''}`}
+                  style={{ background: c }}
+                  onClick={() => { apply(rgbToHsv(hexToRgb(c) || { r: 125, g: 211, b: 252 })); }}
+                />
+              ))}
+            </div>
+            {recentColors.length > 0 && (
+              <div className="tcp-recents">
+                <span className="tcp-recents-label">Récemment utilisées</span>
+                <div className="tcp-recents-grid">
+                  {recentColors.map((c) => (
+                    <button
+                      key={c}
+                      className={`tcp-preset ${current === c.toLowerCase() || current === c ? 'sel' : ''}`}
+                      style={{ background: c }}
+                      onClick={() => { apply(rgbToHsv(hexToRgb(c) || { r: 125, g: 211, b: 252 })); }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <button className="tcp-apply" onClick={() => onPick(current)}>Appliquer</button>
+        </div>
+      </>,
+      document.body
+    )
+  );
+});
 
 const CellContent = React.memo(function CellContent({
   baseClassName, isSelected, isResizePreview,
   segments, congeItems, dayIdx,
-  cellWidth, blocH, blocT,
-  selectedItem, conducteurs, canEdit, resize,
+  cellWidth, blocLayout, rowHeightActual,
+  selectedItem, canEdit, resize,
   cb, dayEq, dayDa, dayIdxMap,
 }) {
   const cellClassName = baseClassName
@@ -41,7 +211,6 @@ const CellContent = React.memo(function CellContent({
   return (
     <div className={cellClassName} data-eq={dayEq} data-da={dayDa}>
       {segments.filter(({ seg }) => dayIdx === seg.start && dayIdx <= seg.end).map(({ chantier, seg, i, stack, segIndex, segCount, longestLen }) => {
-        const conducteur = getConducteur(conducteurs, chantier.conducteurId);
         const segLen = seg.end - seg.start + 1;
         const isFirstSegment = segIndex === 0;
         const isLastSegment = segIndex === segCount - 1;
@@ -54,11 +223,13 @@ const CellContent = React.memo(function CellContent({
           }
         }
         const isLongestSeg = segLen === longestLen;
+        const hasBadges = isLongestSeg && (chantier.permis || chantier.financement || chantier.danger || chantier.reunion || chantier.facture);
+        const { top, height } = blocLayout(i, stack);
 
         return (
           <div
             key={`${chantier.id}-${i}`}
-            className={`bloc chantier ${chantier.termine ? 'termine' : ''} ${selectedItem?.type === 'chantier' && selectedItem.id === chantier.id ? 'active-item' : ''}`}
+            className={`bloc chantier ${chantier.facture ? 'facture' : ''} ${hasBadges ? 'with-badges' : ''} ${selectedItem?.type === 'chantier' && selectedItem.id === chantier.id ? 'active-item' : ''}`}
             data-ch={chantier.id}
             data-start={chantier.start}
             data-duree={chantier.duree}
@@ -69,8 +240,8 @@ const CellContent = React.memo(function CellContent({
             style={{
               ...(resize?.id === chantier.id && !isFirstSegment ? { display: 'none' } : {}),
               width,
-              top: blocT,
-              height: blocH,
+              top,
+              height,
               background: chantier.color,
               zIndex: resize?.id === chantier.id ? 9999 : undefined,
               opacity: resize?.id === chantier.id ? 0.85 : undefined,
@@ -78,11 +249,24 @@ const CellContent = React.memo(function CellContent({
                 ? { left: 3 + (dayIndex(resize.previewStart) - seg.start) * cellWidth }
                 : {}),
             }}
-            title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
+            title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)${chantier.facture ? ' — Facturé' : ''}`}
           >
             {isFirstSegment && <div className="resize-handle left" data-rs="left" />}
-            {chantier.note && isFirstSegment && (
-              <div className="note-icon">💬<div className="tooltip">{chantier.note}</div></div>
+            {isLongestSeg && (
+              <div className="chantier-icons">
+                {chantier.note && (
+                  <div className="note-icon">💬<div className="tooltip">{chantier.note}</div></div>
+                )}
+                {(chantier.permis || chantier.financement || chantier.danger || chantier.reunion || chantier.facture) && (
+                  <span className="chantier-badges">
+                    {chantier.permis && <span className="badge" title="Permis de construire">📄</span>}
+                    {chantier.financement && <span className="badge" title="Financement">💶</span>}
+                    {chantier.danger && <span className="badge" title="Danger">⚠️</span>}
+                    {chantier.reunion && <span className="badge" title="Réunion">👥</span>}
+                    {chantier.facture && <span className="badge badge-facture" title="Facturé">€</span>}
+                  </span>
+                )}
+              </div>
             )}
             {chantier.linked && cellWidth >= 22 && <div className="link-icon">🔗</div>}
             <div className="chantier-content">
@@ -90,9 +274,8 @@ const CellContent = React.memo(function CellContent({
                 <strong>{chantier.nom}</strong>
               </div>
               {isLastSegment && <small>{chantier.duree} j</small>}
+              {chantier.detail && <div className="chantier-detail">{chantier.detail}</div>}
             </div>
-            {chantier.detail && <div className="chantier-detail">{chantier.detail}</div>}
-            <div className="conducteur-bar" style={{ background: conducteur?.color || '#64748b' }} />
             {isLastSegment && <div className="resize-handle right" data-rs="right" />}
           </div>
         );
@@ -100,8 +283,8 @@ const CellContent = React.memo(function CellContent({
 
       {congeItems.filter(({ seg }) => dayIdx === seg.start && dayIdx <= seg.end).map(({ conge, seg }) => {
         const segLen = seg.end - seg.start + 1;
-        const cH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
-        const cT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
+        const cH = Math.max(10, rowHeightActual - 4);
+        const cT = 2;
         return (
           <div
             key={conge.id}
@@ -126,10 +309,17 @@ const CellContent = React.memo(function CellContent({
         if (pStart === -1 || pEnd === -1) return null;
         if (dayIdx !== pStart) return null;
         const pLen = pEnd - pStart + 1;
+        const resizeEntry = resize?.id != null
+          ? segments.find(({ chantier }) => chantier.id === resize.id)
+          : null;
+        const { top: pTop, height: pH } = blocLayout(
+          resizeEntry ? resizeEntry.i : 0,
+          resizeEntry ? resizeEntry.stack : 1
+        );
         return (
           <div className="bloc resize-preview-bloc"
             style={{
-              width: pLen * cellWidth - 8, top: blocT, height: blocH,
+              width: pLen * cellWidth - 8, top: pTop, height: pH,
               left: 3, zIndex: 10000,
             }}
           />
@@ -140,11 +330,11 @@ const CellContent = React.memo(function CellContent({
 }, function areEqual(prev, next) {
   if (prev.dayIdx !== next.dayIdx || prev.baseClassName !== next.baseClassName) return false;
   if (prev.isSelected !== next.isSelected || prev.isResizePreview !== next.isResizePreview) return false;
-  if (prev.cellWidth !== next.cellWidth || prev.blocH !== next.blocH || prev.blocT !== next.blocT) return false;
+  if (prev.cellWidth !== next.cellWidth || prev.blocLayout !== next.blocLayout) return false;
+  if (prev.rowHeightActual !== next.rowHeightActual) return false;
   if (prev.dayEq !== next.dayEq || prev.dayDa !== next.dayDa) return false;
   if (prev.canEdit !== next.canEdit) return false;
   if (prev.segments !== next.segments || prev.congeItems !== next.congeItems) return false;
-  if (prev.conducteurs !== next.conducteurs) return false;
   if (prev.dayIdxMap !== next.dayIdxMap) return false;
 
   const ps = prev.selectedItem, ns = next.selectedItem;
@@ -163,7 +353,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   monthGroups,
   chantiersParCellule,
   congeSegments,
-  conducteurs,
   selectedItem,
   selection,
   cellWidth,
@@ -171,6 +360,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   resize,
   today,
   ferieSet,
+  teamColors,
   callbacksRef,
   scrollRef,
 }) {
@@ -189,16 +379,34 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const draggedItemRef = React.useRef(null);
   const prevDragEndCellRef = React.useRef(null);
   const endDateCacheRef = React.useRef(null);
-  const pendingDragRef = React.useRef(null);
-  const rafDragRef = React.useRef(null);
-  const dragOverlayRef = React.useRef(null);
-  const dragEndOverlayRef = React.useRef(null);
+  const [colorPickerTeam, setColorPickerTeam] = React.useState(null);
+  const [recentColors, setRecentColors] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem('recent_team_colors') || '[]'); } catch { return []; }
+  });
+  const rememberColor = React.useCallback((color) => {
+    setRecentColors((prev) => {
+      const next = [color.toLowerCase(), ...prev.filter((c) => c.toLowerCase() !== color.toLowerCase())].slice(0, 12);
+      try { localStorage.setItem('recent_team_colors', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
   const totalDays = visibleDays.length;
+
+  React.useEffect(() => {
+    if (colorPickerTeam === null) return;
+    function close(e) {
+      if (!e.target.closest('.team-color-btn') && !e.target.closest('.team-color-popover')) {
+        setColorPickerTeam(null);
+      }
+    }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [colorPickerTeam]);
 
   React.useEffect(() => {
     if (initialScrolled.current) return;
     initialScrolled.current = true;
-    const idx = dayIndex(today);
+    const idx = nearestDayIndex(today);
     if (idx < 0) return;
     const el = scrollRef.current;
     if (!el) return;
@@ -216,9 +424,47 @@ const PlanningGrid = React.memo(function PlanningGrid({
   }, [gridRows, visibleDays]);
 
   const gridTemplateColumns = `260px repeat(${totalDays}, ${cellWidth}px)`;
-  const rowHeight = Math.round(56 + (cellWidth - 26) * (78 - 56) / 26);
+  const rowHeight = Math.round(60 + (cellWidth - 26) * (82 - 60) / 26);
+  const blocH = Math.round(46 + (cellWidth - 26) * (72 - 46) / 26);
+  const blocT = Math.round((rowHeight - blocH) / 2);
   const dateGridH = Math.round(28 + (cellWidth - 26) * (44 - 28) / 26);
   const headerHeight = 28 + 30 + dateGridH;
+
+  const teamStackMap = React.useMemo(() => {
+    const m = new Map();
+    for (const arr of chantiersParCellule.values()) {
+      for (const entry of arr) {
+        const eq = entry?.chantier?.equipe;
+        if (eq === undefined || eq === null) continue;
+        if (entry.stack > (m.get(eq) || 0)) m.set(eq, entry.stack);
+      }
+    }
+    return m;
+  }, [chantiersParCellule]);
+
+  function teamRowHeight(equipeIndex) {
+    const stack = teamStackMap.get(equipeIndex) || 1;
+    if (stack <= 1) return rowHeight;
+    return Math.round(rowHeight + (stack - 1) * (blocH + 6));
+  }
+
+  const teamBlocLayoutsCacheRef = React.useRef(null);
+
+  function getTeamBlocLayout(equipeIndex) {
+    const rowH = teamRowHeight(equipeIndex);
+    const cache = teamBlocLayoutsCacheRef.current;
+    if (cache && cache.eq === equipeIndex && cache.rowH === rowH && cache.blocH === blocH && cache.blocT === blocT && cache.stack === teamStackMap.get(equipeIndex)) {
+      return cache.fn;
+    }
+    const fn = (lane, stack) => {
+      const effStack = stack > 0 ? stack : 1;
+      if (effStack <= 1) return { top: blocT, height: blocH };
+      const slot = Math.round((rowH - 6) / effStack);
+      return { top: Math.round(2 + lane * slot), height: Math.max(10, slot - 4) };
+    };
+    teamBlocLayoutsCacheRef.current = { eq: equipeIndex, rowH, blocH, blocT, stack: teamStackMap.get(equipeIndex), fn };
+    return fn;
+  }
 
   const targetDate = resize
     ? (resize.side === 'right' ? resize.previewEnd : resize.previewStart)
@@ -263,6 +509,22 @@ const PlanningGrid = React.memo(function PlanningGrid({
     return dayIdxMemo.get(date) ?? -1;
   }
 
+  function nearestDayIndex(date) {
+    const idx = dayIndex(date);
+    if (idx >= 0) return idx;
+    const t = new Date(date + 'T12:00:00').getTime();
+    let best = -1;
+    let bestDist = Infinity;
+    visibleDays.forEach((d, i) => {
+      const dist = Math.abs(new Date(d.date + 'T12:00:00').getTime() - t);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    });
+    return best;
+  }
+
   function isFerie(date) {
     return ferieSet.has(date);
   }
@@ -296,6 +558,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (addBtn) return;
     if (deleteBtn) return;
     if (teamInput) return;
+    if (e.target.closest('.team-color-btn')) return;
+    if (e.target.closest('.team-color-popover')) return;
 
     if (!canEdit && (type === 'dragstart' || type === 'drop' || type === 'dragover' || type === 'dblclick' || type === 'contextmenu' || type === 'mousedown')) return;
 
@@ -620,14 +884,39 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
             const equipeIndex = row.type === 'pending' ? row.equipeIndex : row.teamId;
             const isPending = row.type === 'pending';
+            const isCategory = row.type === 'category';
 
             return (
               <React.Fragment key={isPending ? row.id : `team-${row.teamId}`}>
-                <div className="grid-row" style={{ height: rowHeight }}>
-                  <div className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''}`}>
-                    {isPending ? null : (
+                <div className={`grid-row${isCategory ? ' category-row' : ''}${equipeIndex % 2 ? ' odd' : ''}`} style={{ height: teamRowHeight(equipeIndex) }}>
+                  <div
+                    className={`team-cell ${equipeIndex % 2 ? 'odd' : ''} ${isPending ? 'pending-team' : ''} ${isCategory ? 'category-cell' : ''} ${colorPickerTeam === row.teamId ? 'color-picker-open' : ''}`}
+                    style={isPending || isCategory ? undefined : { borderLeft: `6px solid ${row.color || '#7dd3fc'}`, boxShadow: `inset 0 0 0 999px ${row.color || '#7dd3fc'}12, 6px 0 16px var(--shadow)` }}
+                  >
+                    {isCategory ? (
+                      <span className="category-name">{row.name}</span>
+                    ) : isPending ? null : (
                       <>
-                        <div className="avatar">{row.numInCompany}</div>
+                        <div
+                          className={`avatar team-color-btn ${colorPickerTeam === row.teamId ? 'active' : ''}`}
+                          title="Changer la couleur de l'équipe"
+                          style={{ background: row.color || '#7dd3fc' }}
+                          onClick={() => setColorPickerTeam((prev) => prev === row.teamId ? null : row.teamId)}
+                        >
+                          {row.numInCompany}
+                        </div>
+                        {colorPickerTeam === row.teamId && (
+                          <TeamColorPicker
+                            initial={row.color || '#7dd3fc'}
+                            recentColors={recentColors}
+                            onClose={() => setColorPickerTeam(null)}
+                            onPick={(color) => {
+                              cb.updateTeamColor(row.teamId, color);
+                              rememberColor(color);
+                              setColorPickerTeam(null);
+                            }}
+                          />
+                        )}
                         <input
                           key={`name-${row.name}`}
                           defaultValue={row.name}
@@ -648,8 +937,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
                     {visibleDays.map((day, dayIdx) => {
                       const segments = chantiersParCellule.get(`${equipeIndex}-${dayIdx}`) || EMPTY;
                       const congeItems = (congeSegments.get(`${equipeIndex}-${dayIdx}`) || EMPTY);
-                      const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
-                      const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
 
                       const baseClassName = `cell${equipeIndex % 2 ? ' odd' : ''}${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${isAugustClosure(day.date) ? ' august-closure' : ''}${day.date === today ? ' today' : ''}${isPending ? ' pending-cell' : ''}`;
                       const sel = isSelected(equipeIndex, day.date);
@@ -665,10 +952,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           congeItems={congeItems}
                           dayIdx={dayIdx}
                           cellWidth={cellWidth}
-                          blocH={blocH}
-                          blocT={blocT}
+                          blocLayout={getTeamBlocLayout(equipeIndex)}
+                          rowHeightActual={teamRowHeight(equipeIndex)}
                           selectedItem={selectedItem}
-                          conducteurs={conducteurs}
                           canEdit={canEdit}
                           resize={resize}
                           cb={cb}

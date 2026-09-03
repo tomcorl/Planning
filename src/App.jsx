@@ -6,10 +6,11 @@ const AdminUsersPage = lazy(() => import('./AdminUsersPage.jsx'));
 const Modals = lazy(() => import('./Modals.jsx'));
 const LoginPage = lazy(() => import('./LoginPage.jsx'));
 const PasswordChangePage = lazy(() => import('./PasswordChangePage.jsx'));
-const PersonalPlanning = lazy(() => import('./PersonalPlanning.jsx'));
 import PlanningGrid from './PlanningGrid.jsx';
 import MobilePlanning from './MobilePlanning.jsx';
-import { supabase } from './lib/supabase.js';
+import CAModal from './CAModal.jsx';
+import { CATEGORIES } from './lib/categories.js';
+import { supabase, isLocalMode } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
 const CELL_WIDTH = 26;
@@ -25,16 +26,68 @@ const CHANTIER_COLORS = [
   '#7dd3fc', // bleu très clair
 ];
 
-const CONDUCTEUR_COLORS = [
+const TEAM_COLORS = [
+  '#7dd3fc',
+  '#38bdf8',
   '#2563eb',
-  '#16a34a',
-  '#dc2626',
-  '#9333ea',
-  '#ea580c',
-  '#0891b2',
+  '#0ea5e9',
+  '#22c55e',
+  '#84cc16',
   '#ca8a04',
-  '#be123c',
+  '#f97316',
+  '#ef4444',
+  '#a855f7',
+  '#ec4899',
+  '#64748b',
 ];
+
+function defaultTeamColor(index) {
+  return index < 5 ? '#7dd3fc' : '#f97316';
+}
+
+const MAX_LANES = 20;
+
+function lanesOverlap(aStart, aEnd, bStart, bEnd) {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+function assignLanes(items) {
+  // Grouper les segments par chantier : un chantier garde la même lane sur toute
+  // sa durée, même après un jour férié / congé qui le découpe en plusieurs segments.
+  const byChantier = new Map();
+  for (const it of items) {
+    const id = it.chantier.id;
+    if (!byChantier.has(id)) byChantier.set(id, { chantier: it.chantier, segs: [] });
+    byChantier.get(id).segs.push(it);
+  }
+  const chantiers = [...byChantier.values()];
+  chantiers.forEach((c) => {
+    c.start = Math.min(...c.segs.map((s) => s.seg.start));
+    c.end = Math.max(...c.segs.map((s) => s.seg.end));
+  });
+  // Ordre déterministe : celui qui commence le plus tôt est en haut (lane 0),
+  // puis chaque chantier suivant se place sous les premiers qu'il chevauche.
+  chantiers.sort((a, b) => a.start - b.start || a.chantier.id - b.chantier.id);
+
+  const laneChants = []; // lane -> liste de chantiers déjà placés
+  let totalLanes = 1;
+  for (const c of chantiers) {
+    // Cherche la première lane où ce chantier ne chevauche AUCUN autre chantier.
+    // Deux chantiers ne peuvent jamais partager la même lane à un moment donné,
+    // donc aucun chevauchement visuel n'est possible.
+    let lane = 0;
+    while (lane < MAX_LANES && (laneChants[lane] || []).some((o) => lanesOverlap(c.start, c.end, o.start, o.end))) {
+      lane++;
+    }
+    for (const seg of c.segs) {
+      seg.lane = lane;
+    }
+    if (!laneChants[lane]) laneChants[lane] = [];
+    laneChants[lane].push(c);
+    totalLanes = Math.max(totalLanes, lane + 1);
+  }
+  return Math.min(totalLanes, MAX_LANES);
+}
 
 const DEFAULT_TEAMS_COUNT = 12;
 
@@ -141,7 +194,6 @@ export default function App() {
 
   const [companies, setCompanies] = useState([]);
   const [teams, setTeams] = useState([]);
-  const [conducteurs, setConducteurs] = useState([]);
   const [customFeries, setCustomFeries] = useState([]);
 
   const [ferieForm, setFerieForm] = useState({ nom: '', date: today });
@@ -152,17 +204,6 @@ export default function App() {
   const [selection, setSelection] = useState(null);
   const [resize, setResize] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [filterConducteurIds, setFilterConducteurIds] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('filterConducteurIds')) || []; }
-    catch { return []; }
-  });
-  const [filterColors, setFilterColors] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('filterColors')) || []; }
-    catch { return []; }
-  });
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filterPos, setFilterPos] = useState({ top: 0, left: 0 });
-  const filterBtnRef = useRef(null);
   const selectionThrottle = useRef(null);
   const scrollThrottleRef = useRef(null);
   const expandRightRef = useRef(null);
@@ -180,25 +221,6 @@ export default function App() {
   const settingsDropdownRef = useRef(null);
   const [connectedUsers, setConnectedUsers] = useState([]);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-
-  useEffect(() => {
-    localStorage.setItem('filterConducteurIds', JSON.stringify(filterConducteurIds));
-  }, [filterConducteurIds]);
-
-  useEffect(() => {
-    localStorage.setItem('filterColors', JSON.stringify(filterColors));
-  }, [filterColors]);
-
-  useEffect(() => {
-    if (!filterOpen) return;
-    function close(e) {
-      if (!e.target.closest('.conducteur-filter-btn') && !e.target.closest('.conducteur-filter-dropdown')) {
-        setFilterOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [filterOpen]);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -231,7 +253,6 @@ export default function App() {
   const [form, setForm] = useState(null);
 
   const [chantierColors, setChantierColors] = useState([...CHANTIER_COLORS]);
-  const [conducteurColors, setConducteurColors] = useState([...CONDUCTEUR_COLORS]);
   const [colorManager, setColorManager] = useState(null);
 
   const allDays = useMemo(
@@ -263,7 +284,7 @@ export default function App() {
     if (congeBlockedSetRef.current?.key === key) return congeBlockedSetRef.current.set;
     const set = new Set();
     for (const c of conges) {
-      const end = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
+      const end = formatDate(addDays(toDate(c.start), (c.duree || 1) - 1));
       let cur = c.start;
       let safety = 0;
       while (sameOrBefore(cur, end) && safety < 1200) {
@@ -316,21 +337,24 @@ export default function App() {
     return groups;
   }, [visibleDays]);
   const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  const [caOpen, setCaOpen] = useState(false);
 
   const gridRows = useMemo(() => {
     const rows = [];
     for (let c = 0; c < companies.length; c++) {
       const comp = companies[c];
       rows.push({ type: 'company-header', name: comp.nom, id: `ch-${comp.id}` });
-      const companyTeams = teams.filter((t) => t.companyId === comp.id);
+      const companyTeams = teams
+        .filter((t) => t.companyId === comp.id)
+        .slice()
+        .sort((a, b) => (a.ordre ?? Number.MAX_SAFE_INTEGER) - (b.ordre ?? Number.MAX_SAFE_INTEGER));
       companyTeams.forEach((t, idx) => {
-        rows.push({ type: 'team', teamId: t.id, name: t.nom, numInCompany: idx + 1 });
+        rows.push({ type: 'team', teamId: t.id, name: t.nom, numInCompany: idx + 1, color: t.color || '#7dd3fc' });
       });
-      const offset = teams.reduce((max, t) => Math.max(max, t.id), 0) + 1 + c * 3;
-      rows.push({ type: 'pending', id: `p-${c}-0`, equipeIndex: offset });
-      rows.push({ type: 'pending', id: `p-${c}-1`, equipeIndex: offset + 1 });
-      rows.push({ type: 'pending', id: `p-${c}-2`, equipeIndex: offset + 2 });
       rows.push({ type: 'separator', id: `s-${c}` });
+    }
+    for (const cat of CATEGORIES) {
+      rows.push({ type: 'category', teamId: cat.equipe, name: cat.nom, color: '#94a3b8' });
     }
     return rows;
   }, [teams, companies]);
@@ -349,7 +373,7 @@ export default function App() {
   // ── Supabase Auth + Data Loading ──
   const loadedRef = useRef(false);
   const skipNextReflowRef = useRef(true);
-  const localIdRef = useRef(0);
+  const localIdRef = useRef(-1000);
 
   function nextLocalId() {
     localIdRef.current -= 1;
@@ -376,27 +400,9 @@ export default function App() {
           chantiers,
           conges: conges.map(c => ({ ...c, company_id: c.companyId || (teamById.get(c.equipe)?.companyId) })),
           equipes: teams,
-          conducteurs,
           customFeries,
           chantierColors,
-          conducteurColors,
         });
-        // Update conducteur IDs from DB response (new rows get real IDs)
-        if (result?.conducteurs) {
-          const nomToId = new Map(result.conducteurs.map(r => [r.nom, r.id]));
-          setConducteurs(prev => {
-            let changed = false;
-            const updated = prev.map(c => {
-              const dbId = nomToId.get(c.nom);
-              if (dbId && c.id !== dbId) {
-                changed = true;
-                return { ...c, id: dbId };
-              }
-              return c;
-            });
-            return changed ? updated : prev;
-          });
-        }
         // Update equipe IDs from DB response (new rows get real IDs)
         if (result?.equipes) {
           const eqNomCompanyIdToId = new Map(result.equipes.map(r => [`${r.nom}-${r.company_id}`, r.id]));
@@ -424,7 +430,7 @@ export default function App() {
     }, 800);
     saveTimerRef.current = timer;
     return () => { clearTimeout(timer); saveTimerRef.current = null; };
-  }, [chantiers, conges, teams, conducteurs, customFeries, chantierColors, conducteurColors, session, companies]);
+  }, [chantiers, conges, teams, customFeries, chantierColors, session, companies]);
 
   // ── Realtime subscription ──
   useEffect(() => {
@@ -476,7 +482,6 @@ export default function App() {
       if (!allData) return;
       setCompanies(allData.companies);
       setTeams(allData.equipes || []);
-      setConducteurs(allData.conducteurs || []);
       setChantiers(allData.chantiers || []);
       setConges(allData.conges || []);
       setCustomFeries(allData.customFeries || []);
@@ -484,7 +489,6 @@ export default function App() {
       if (allData.companies.length > 0) {
         const first = allData.companies[0];
         if (first.chantier_colors?.length) setChantierColors(first.chantier_colors);
-        if (first.conducteur_colors?.length) setConducteurColors(first.conducteur_colors);
       }
     } catch (e) {
       console.error('Realtime reload failed', e);
@@ -510,7 +514,7 @@ export default function App() {
       if (teams.length === 0) {
         for (const comp of allData.companies) {
           for (let i = 0; i < DEFAULT_TEAMS_COUNT; i++) {
-            teams.push({ id: nextLocalId(), nom: `Équipe ${i + 1}`, companyId: comp.id, ordre: i });
+            teams.push({ id: nextLocalId(), nom: `Équipe ${i + 1}`, companyId: comp.id, ordre: i, color: defaultTeamColor(i) });
           }
         }
         setTeams(teams);
@@ -520,7 +524,7 @@ export default function App() {
           if (result) {
             for (const row of result) {
               const t = teams.find(t => t.nom === row.nom && t.companyId === row.company_id);
-              if (t) t.id = row.id;
+              if (t) { t.id = row.id; if (row.color) t.color = row.color; }
             }
           }
         }
@@ -552,10 +556,8 @@ export default function App() {
             chantiers: allData.chantiers,
             conges: allData.conges.map(c => ({ ...c, company_id: c.company_id || c.companyId })),
             equipes: teams,
-            conducteurs: allData.conducteurs,
             customFeries: allData.customFeries,
             chantierColors: allData.companies[0]?.chantier_colors || [],
-            conducteurColors: allData.companies[0]?.conducteur_colors || [],
           });
           const { error } = await supabase.rpc('mark_equipes_migrated', { p_company_ids: unmigrated });
           if (error) console.error('mark_equipes_migrated error', error);
@@ -565,7 +567,6 @@ export default function App() {
       }
 
       setTeams(teams);
-      setConducteurs(allData.conducteurs);
       setChantiers(allData.chantiers);
       setConges(allData.conges);
       setCustomFeries(allData.customFeries);
@@ -573,7 +574,6 @@ export default function App() {
       if (allData.companies.length > 0) {
         const first = allData.companies[0];
         if (first.chantier_colors?.length) setChantierColors(first.chantier_colors);
-        if (first.conducteur_colors?.length) setConducteurColors(first.conducteur_colors);
       }
 
       setHistory({ past: [], future: [] });
@@ -675,7 +675,6 @@ export default function App() {
         setSession(null);
         setUsers([]);
         setTeams([]);
-        setConducteurs([]);
         setChantiers([]);
         setConges([]);
         setCustomFeries([]);
@@ -686,13 +685,16 @@ export default function App() {
     return () => listener?.subscription?.unsubscribe();
   }, []);
 
-  async function handleLogin(e) {
-    e.preventDefault();
+  async function handleLogin(e, emailOverride, passwordOverride) {
+    if (e?.preventDefault) e.preventDefault();
     setLoginError('');
     setLoggingIn(true);
 
+    const email = (emailOverride ?? loginForm.email).trim();
+    const password = passwordOverride ?? loginForm.password;
+
     try {
-      await api.login(loginForm.email.trim(), loginForm.password);
+      await api.login(email, password);
       setLoginForm((f) => ({ ...f, password: '' }));
       // Auth listener handles the rest (session + data loading)
     } catch {
@@ -700,6 +702,11 @@ export default function App() {
     } finally {
       setLoggingIn(false);
     }
+  }
+
+  function quickLogin(email, password) {
+    setLoginForm({ email, password });
+    handleLogin(null, email, password);
   }
 
   async function saveUsers(nextUsers) {
@@ -782,20 +789,18 @@ export default function App() {
   const chantiersRef = useRef(chantiers);
   const congesRef = useRef(conges);
   const teamsRef = useRef(teams);
-  const conducteursRef = useRef(conducteurs);
   const customFeriesRef = useRef(customFeries);
 
   useEffect(() => {
     chantiersRef.current = chantiers;
     congesRef.current = conges;
     teamsRef.current = teams;
-    conducteursRef.current = conducteurs;
     customFeriesRef.current = customFeries;
     keyRef.current = { selectedItem, modalOpen: modal.open, clipboard, canEdit };
   });
 
   function snapshot() {
-    return { chantiers: chantiersRef.current, conges: congesRef.current, teams: teamsRef.current, conducteurs: conducteursRef.current, customFeries: customFeriesRef.current };
+    return { chantiers: chantiersRef.current, conges: congesRef.current, teams: teamsRef.current, customFeries: customFeriesRef.current };
   }
 
   function restore(s) {
@@ -803,7 +808,6 @@ export default function App() {
     if (current.chantiers !== s.chantiers) setChantiers(s.chantiers);
     if (current.conges !== s.conges) setConges(s.conges);
     if (current.teams !== s.teams) setTeams(s.teams);
-    if (current.conducteurs !== s.conducteurs) setConducteurs(s.conducteurs);
     if (current.customFeries !== s.customFeries) setCustomFeries(s.customFeries);
   }
 
@@ -877,6 +881,22 @@ export default function App() {
     return visibleDays.findIndex((d) => d.date === date);
   }
 
+  function nearestDayIndex(date) {
+    const idx = dayIndex(date);
+    if (idx >= 0) return idx;
+    const t = toDate(date).getTime();
+    let best = -1;
+    let bestDist = Infinity;
+    visibleDays.forEach((d, i) => {
+      const dist = Math.abs(toDate(d.date).getTime() - t);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    });
+    return best;
+  }
+
   function visibleDateByIndex(index) {
     if (!visibleDays.length) return today;
     if (index < 0) return visibleDays[0].date;
@@ -946,10 +966,6 @@ export default function App() {
     return addWorkingDays(c.start, c.duree, c.equipe, { force_aout: c.force_aout });
   }
 
-  function getConducteur(id) {
-    return conducteurs.find((c) => c.id === Number(id));
-  }
-
   function splitChantier(chantier) {
     const endDate = getEndDateForChantier(chantier);
     const days = visibleDays
@@ -993,12 +1009,19 @@ export default function App() {
     });
   }
 
+  function updateTeamColor(id, color) {
+    if (!canEdit) return;
+    commit(() => {
+      setTeams((prev) => prev.map((t) => (t.id === id ? { ...t, color } : t)));
+    });
+  }
+
   function addTeamToCompany(companyId) {
     const companyTeams = teams.filter((t) => t.companyId === companyId);
     const numInCompany = companyTeams.length + 1;
     const name = `Équipe ${numInCompany}`;
     const ordre = companyTeams.reduce((max, t) => Math.max(max, t.ordre ?? 0), -1) + 1;
-    const newTeam = { id: nextLocalId(), nom: name, companyId, ordre };
+    const newTeam = { id: nextLocalId(), nom: name, companyId, ordre, color: TEAM_COLORS[0] };
     commit(() => {
       setTeams((prev) => {
         let idx = prev.length;
@@ -1079,13 +1102,18 @@ export default function App() {
       start: nextWorkingDay(start, selection.equipe),
       duree: workingCount,
       nom: '',
-      conducteurId: conducteurs[0]?.id || null,
       color: CHANTIER_COLORS[1],
       detail: '',
       note: '',
       termine: false,
       linked: false,
       force_aout: false,
+      permis: false,
+      financement: false,
+      danger: false,
+      reunion: false,
+      facture: false,
+      montantDevis: '',
     });
 
     setModal({ open: true, mode: 'creation', type: 'chantier' });
@@ -1127,7 +1155,7 @@ export default function App() {
 
   function saveModal() {
     if (!canEdit) return;
-    if (!form?.nom?.trim() && modal.type !== 'conducteur') {
+    if (!form?.nom?.trim()) {
       alert('Il faut donner un nom.');
       return;
     }
@@ -1141,13 +1169,18 @@ export default function App() {
           start: nextWorkingDay(form.start, Number(form.equipe)),
           duree: Number(form.duree),
           nom: form.nom,
-          conducteurId: Number(form.conducteurId),
           color: form.color,
           note: form.note || '',
           detail: form.detail || '',
           termine: !!form.termine,
           linked: !!form.linked,
           force_aout: !!form.force_aout,
+          permis: !!form.permis,
+          financement: !!form.financement,
+          danger: !!form.danger,
+          reunion: !!form.reunion,
+          facture: !!form.facture,
+          montantDevis: form.montantDevis !== '' && form.montantDevis != null ? Number(String(form.montantDevis).replace(/\s/g, '').replace(',', '.')) || 0 : 0,
         };
 
         setChantiers((prev) =>
@@ -1194,37 +1227,6 @@ export default function App() {
             : c
         );
 
-    const moved = next.find((c) => c.id === movedItem.id);
-    const movedEnd = getEndDateForChantier(moved);
-
-    let cursor = formatDate(addDays(toDate(movedEnd), 1));
-    cursor = nextWorkingDay(cursor, targetEquipe);
-
-    // include items that overlap with the moved item (end on or after targetStart)
-    const affected = next
-      .filter(
-        (c) =>
-          c.id !== moved.id &&
-          c.equipe === targetEquipe &&
-          sameOrAfter(getEndDateForChantier(c), targetStart)
-      )
-      .sort((a, b) => toDate(a.start) - toDate(b.start));
-
-    const movedEarlier = toDate(targetStart) < toDate(movedItem.start);
-    const changed = new Map();
-
-    affected.forEach((c) => {
-      if (!movedEarlier && toDate(c.start) >= toDate(cursor)) return;
-      const newStart = nextWorkingDay(cursor, targetEquipe);
-      changed.set(c.id, { ...c, start: newStart });
-
-      cursor = formatDate(
-        addDays(toDate(getEndDateForChantier({ ...c, start: newStart })), 1)
-      );
-      cursor = nextWorkingDay(cursor, targetEquipe);
-    });
-
-    next = next.map((c) => changed.get(c.id) || c);
     return next;
   }
 
@@ -1417,26 +1419,11 @@ export default function App() {
             const oldEnd = getEndDateForChantier({ start: originalStart, duree: originalDuree, ...baseInfo });
             const newEndCal = formatDate(addDays(toDate(oldEnd), delta));
             const newDuree = Math.max(1, countWorkingDays(originalStart, newEndCal, originalEquipe, originalForceAout));
-            let next = prev.map((c) =>
+            return prev.map((c) =>
               c.id === id
                 ? { ...c, start: originalStart, duree: newDuree }
                 : c
             );
-            const updatedEnd = getEndDateForChantier({ start: originalStart, duree: newDuree, ...baseInfo });
-            let cursor = formatDate(addDays(toDate(updatedEnd), 1));
-            cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
-            const changed = new Map();
-            const sorted = next
-              .filter((c) => c.id !== id && c.equipe === originalEquipe && toDate(c.start) > toDate(originalStart))
-              .sort((a, b) => toDate(a.start) - toDate(b.start));
-            for (const c of sorted) {
-              if (toDate(c.start) >= toDate(cursor)) break;
-              const newStart = nextWorkingDay(cursor, originalEquipe, originalForceAout);
-              changed.set(c.id, { ...c, start: newStart });
-              cursor = formatDate(addDays(toDate(getEndDateForChantier({ ...c, start: newStart })), 1));
-              cursor = nextWorkingDay(cursor, originalEquipe, originalForceAout);
-            }
-            return next.map((c) => changed.get(c.id) || c);
           }
           return (() => {
             let next = prev.map((c) => {
@@ -1448,23 +1435,6 @@ export default function App() {
               if (newDuree < 1 || (newStart === originalStart && newDuree === originalDuree)) return c;
               return { ...c, start: newStart, duree: newDuree };
             });
-
-            const resized = next.find(c => c.id === id);
-            if (resized && toDate(resized.start) < toDate(originalStart)) {
-              const prevItems = next
-                .filter(c => c.id !== id && c.equipe === originalEquipe && toDate(c.start) < toDate(originalStart))
-                .sort((a, b) => toDate(b.start) - toDate(a.start));
-              if (prevItems.length > 0) {
-                const prev = prevItems[0];
-                if (toDate(getEndDateForChantier(prev)) >= toDate(resized.start)) {
-                  const newPrevEnd = formatDate(addDays(toDate(resized.start), -1));
-                  const newPrevDuree = countWorkingDays(prev.start, newPrevEnd, originalEquipe, prev.force_aout);
-                  if (newPrevDuree >= 1) {
-                    next = next.map(c => c.id === prev.id ? { ...prev, duree: newPrevDuree } : c);
-                  }
-                }
-              }
-            }
 
             return next;
           })();
@@ -1537,7 +1507,7 @@ export default function App() {
   }
 
   function goToday() {
-    const idx = dayIndex(today);
+    const idx = nearestDayIndex(today);
     const el = scrollRef.current;
     if (el && idx >= 0) {
       el.scrollLeft = Math.max(0, idx * cellWidth - 500);
@@ -1569,12 +1539,18 @@ export default function App() {
       start: nextWorkingDay(today, firstTeamId),
       duree: 3,
       nom: '',
-      conducteurId: conducteurs[0]?.id || null,
       color: CHANTIER_COLORS[1],
       detail: '',
       note: '',
       termine: false,
       linked: false,
+      force_aout: false,
+      permis: false,
+      financement: false,
+      danger: false,
+      reunion: false,
+      facture: false,
+      montantDevis: '',
     });
 
     setModal({ open: true, mode: 'creation', type: 'chantier' });
@@ -1662,16 +1638,7 @@ export default function App() {
   const deferredConges = useDeferredValue(conges);
   const deferredVisibleDays = useDeferredValue(visibleDays);
 
-  const filteredChantiers = useMemo(() => {
-    const hasConducteurFilter = filterConducteurIds.length > 0;
-    const hasColorFilter = filterColors.length > 0;
-    if (!hasConducteurFilter && !hasColorFilter) return deferredChantiers;
-    return deferredChantiers.filter(c => {
-      const matchConducteur = hasConducteurFilter && filterConducteurIds.includes(c.conducteurId);
-      const matchColor = hasColorFilter && filterColors.includes(c.color);
-      return matchConducteur || matchColor;
-    });
-  }, [deferredChantiers, filterConducteurIds, filterColors]);
+  const filteredChantiers = deferredChantiers;
 
   const congeSegmentsCacheRef = useRef(null);
   const congeSegmentsMap = useMemo(() => {
@@ -1683,11 +1650,22 @@ export default function App() {
     const prevMap = cache ? cache.map : null;
     const map = new Map();
     for (const c of conges) {
-      const start = dayIndex(c.start);
-      if (start === -1) continue;
-      const endDate = addWorkingDays(c.start, c.duree, c.equipe || 0, { countConges: true });
-      const end = dayIndex(endDate);
-      if (end === -1) continue;
+      const endDate = formatDate(addDays(toDate(c.start), (c.duree || 1) - 1));
+      let start = dayIndex(c.start);
+      let end = dayIndex(endDate);
+      if (start === -1 || end === -1) {
+        let s = -1, e = -1;
+        for (let i = 0; i < visibleDays.length; i++) {
+          const d = visibleDays[i].date;
+          if (d >= c.start && d <= endDate) {
+            if (s === -1) s = i;
+            e = i;
+          }
+        }
+        if (s === -1) continue;
+        start = s;
+        end = e;
+      }
       const seg = { start, end: Math.max(start, end) };
       const eqs = c.allEquipes
         ? teams.filter(t => t.companyId === (c.companyId || teamById.get(c.equipe)?.companyId)).map(t => t.id)
@@ -1762,16 +1740,13 @@ export default function App() {
           });
         });
         Object.values(byEquipe).forEach((items) => {
-          items.sort((a, b) => a.seg.start - b.seg.start);
-          let lastEnd = -1;
-          items.forEach(({ chantier, seg, segIndex, segCount, longestLen }) => {
-            if (seg.start <= lastEnd) return;
+          const stack = assignLanes(items);
+          items.forEach(({ chantier, seg, lane, segIndex, segCount, longestLen }) => {
             for (let d = seg.start; d <= seg.end; d++) {
               const key = `${chantier.equipe}-${d}`;
               if (!map.has(key)) map.set(key, []);
-              map.get(key).push({ chantier, seg, i: 0, stack: 0, segIndex, segCount, longestLen });
+              map.get(key).push({ chantier, seg, i: lane, stack, segIndex, segCount, longestLen });
             }
-            lastEnd = seg.end;
           });
         });
         chantiersParCelluleCacheRef.current = { depsKey, map, byTeam: newByTeam };
@@ -1793,16 +1768,13 @@ export default function App() {
     });
 
     Object.values(byEquipe).forEach((items) => {
-      items.sort((a, b) => a.seg.start - b.seg.start);
-      let lastEnd = -1;
-      items.forEach(({ chantier, seg, segIndex, segCount, longestLen }) => {
-        if (seg.start <= lastEnd) return;
+      const stack = assignLanes(items);
+      items.forEach(({ chantier, seg, lane, segIndex, segCount, longestLen }) => {
         for (let d = seg.start; d <= seg.end; d++) {
           const key = `${chantier.equipe}-${d}`;
           if (!map.has(key)) map.set(key, []);
-          map.get(key).push({ chantier, seg, i: 0, stack: 0, segIndex, segCount, longestLen });
+          map.get(key).push({ chantier, seg, i: lane, stack, segIndex, segCount, longestLen });
         }
-        lastEnd = seg.end;
       });
     });
 
@@ -1816,20 +1788,20 @@ export default function App() {
   }, [filteredChantiers, conges, holidays, deferredVisibleDays]);
 
   const modalEndDate = useMemo(() => {
-    if (!form || modal.type === 'conducteur') return '';
+    if (!form) return '';
     if (modal.type === 'chantier') {
       return addWorkingDays(form.start, Number(form.duree || 1), Number(form.equipe || 0), { force_aout: form.force_aout });
     }
-    return addWorkingDays(form.start, Number(form.duree || 1), Number(form.equipe || 0), { countConges: true });
+    return formatDate(addDays(toDate(form.start), Number(form.duree || 1) - 1));
   }, [form?.start, form?.duree, form?.equipe, form?.force_aout, modal.type]);
 
   gridCallbacksRef.current = {
     addTeamToCompany,
     updateTeam,
+    updateTeamColor,
     deleteTeam,
     startSelection,
     updateSelection,
-    setConducteurs,
     setSelectedItem,
     openEditChantier,
     handleContextMenu,
@@ -1863,6 +1835,8 @@ export default function App() {
           loginError={loginError}
           loginForm={loginForm}
           loggingIn={loggingIn}
+          localMode={isLocalMode}
+          onQuickLogin={quickLogin}
           onChange={setLoginForm}
           onSubmit={handleLogin}
         />
@@ -1878,33 +1852,18 @@ export default function App() {
       <div className="topbar">
           <div className="title">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1" />
-            <rect x="14" y="3" width="7" height="7" rx="1" />
-            <rect x="3" y="14" width="7" height="7" rx="1" />
-            <rect x="14" y="14" width="7" height="7" rx="1" />
+            <path d="M3 17 12 6l9 11" />
+            <path d="M7 17l5-6.5L17 17" />
+            <path d="M10.5 17h3" />
           </svg>
-          Planning
-          <span>{companies.length > 0 ? `${companies[0].nom} + ${companies.length - 1}` : 'Planning'}</span>
+          Bati Ouest
+          {companies.length > 1 && <span>+ {companies.length - 1} autres sociétés</span>}
         </div>
 
         {activePage === 'planning' && (
           <div className="date-nav">
             <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
-            <div>
-              <button
-                ref={filterBtnRef}
-                className="today-btn"
-                onClick={() => {
-                  const rect = filterBtnRef.current?.getBoundingClientRect();
-                  if (rect) setFilterPos({ top: rect.bottom + 4, left: rect.left });
-                  setFilterOpen((v) => !v);
-                }}
-              >
-                {filterConducteurIds.length > 0 || filterColors.length > 0
-                  ? `Filtrer (${filterConducteurIds.length + filterColors.length})`
-                  : 'Filtrer'}
-              </button>
-            </div>
+            <button className="today-btn" style={{background:'#0ea5e9'}} onClick={()=>setCaOpen(true)}>📊 CA estimé</button>
           </div>
         )}
 
@@ -1915,12 +1874,6 @@ export default function App() {
               onClick={() => setActivePage('planning')}
             >
               Planning
-            </button>
-            <button
-              className={activePage === 'personal' ? 'active-nav' : ''}
-              onClick={() => setActivePage('personal')}
-            >
-              Mes plannings
             </button>
             {isAdmin && (
               <button
@@ -2036,10 +1989,6 @@ export default function App() {
         />
       )}
 
-      {activePage === 'personal' && (
-        <PersonalPlanning user={session} />
-      )}
-
       {activePage === 'planning' && (
         <>
       {isMobile ? (
@@ -2047,8 +1996,8 @@ export default function App() {
           chantiers={chantiers}
           conges={conges}
           teams={teams}
-          conducteurs={conducteurs}
           companies={companies}
+          categories={CATEGORIES}
           canEdit={canEdit}
           session={session}
           onEditChantier={openEditChantier}
@@ -2057,7 +2006,6 @@ export default function App() {
           onDeleteChantier={(id) => { setSelectedItem({ type: 'chantier', id }); deleteSelectedItem(); }}
           onDeleteConge={(id) => { setSelectedItem({ type: 'conge', id }); deleteSelectedItem(); }}
           getEndDateForChantier={getEndDateForChantier}
-          getConducteur={getConducteur}
           addWorkingDays={addWorkingDays}
         />
       ) : (
@@ -2069,7 +2017,6 @@ export default function App() {
         chantiersParCellule={chantiersParCellule}
         conges={conges}
         congeSegments={congeSegmentsMap}
-        conducteurs={conducteurs}
         selectedItem={selectedItem}
         selection={selection}
         cellWidth={cellWidth}
@@ -2079,6 +2026,7 @@ export default function App() {
         companies={companies}
         teams={teams}
         ferieSet={ferieSet}
+        teamColors={TEAM_COLORS}
         callbacksRef={gridCallbacksRef}
         scrollRef={scrollRef}
       />
@@ -2089,13 +2037,12 @@ export default function App() {
           form={form} setForm={setForm}
           modalEndDate={modalEndDate}
           companies={companies} teams={teams}
+          categories={CATEGORIES}
           chantierColors={chantierColors} setChantierColors={setChantierColors}
-          conducteurColors={conducteurColors} setConducteurColors={setConducteurColors}
           setColorManager={setColorManager} colorManager={colorManager}
           holidayModalOpen={holidayModalOpen} setHolidayModalOpen={setHolidayModalOpen}
           ferieForm={ferieForm} setFerieForm={setFerieForm}
           customFeries={customFeries} setCustomFeries={setCustomFeries}
-          conducteurs={conducteurs} setConducteurs={setConducteurs}
           contextMenu={contextMenu} setContextMenu={setContextMenu}
           clipboard={clipboard} setClipboard={setClipboard}
           chantiers={chantiers} conges={conges}
@@ -2104,67 +2051,16 @@ export default function App() {
           deleteSelectedItem={deleteSelectedItem}
           pasteClipboard={pasteClipboard}
           addCustomFerie={addCustomFerie}
-          nextLocalId={nextLocalId}
           commit={commit}
         />
+        {caOpen && (
+          <CAModal chantiers={chantiers} teams={teams} today={today} getEndDateForChantier={getEndDateForChantier} onClose={()=>setCaOpen(false)} />
+        )}
         </>
       )}
       </Suspense>
       </main>
-      <footer className="app-footer">Créé par Tom Corlay • v4-math</footer>
-      {filterOpen && createPortal(
-        <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
-          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setFilterOpen(false); }}>
-            <span className={!filterConducteurIds.length && !filterColors.length ? 'active' : ''}>●</span>
-            Tout afficher
-          </div>
-          <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
-          <div style={{ padding: '4px 14px 2px', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>CONDUCTEUR</div>
-          {conducteurs.map((c) => (
-            <div
-              key={c.id}
-              className={`conducteur-filter-item ${filterConducteurIds.includes(c.id) ? 'active' : ''}`}
-              onClick={() => {
-                setFilterConducteurIds((prev) =>
-                  prev.includes(c.id)
-                    ? prev.filter((x) => x !== c.id)
-                    : [...prev, c.id]
-                );
-              }}
-            >
-              <span className="filter-check">{filterConducteurIds.includes(c.id) ? '✓' : ''}</span>
-              {c.prenom} {c.nom}
-            </div>
-          ))}
-          <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
-          <div style={{ padding: '4px 14px 2px', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>COULEUR</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '4px 14px 8px' }}>
-            {CHANTIER_COLORS.map((color) => {
-              const active = filterColors.includes(color);
-              return (
-                <div
-                  key={color}
-                  onClick={() => {
-                    setFilterColors((prev) =>
-                      prev.includes(color)
-                        ? prev.filter((x) => x !== color)
-                        : [...prev, color]
-                    );
-                  }}
-                  style={{
-                    width: 24, height: 24, borderRadius: '50%', background: color, cursor: 'pointer',
-                    border: active ? '3px solid var(--text)' : '3px solid transparent',
-                    outline: active ? '2px solid ' + color : 'none',
-                    transition: 'border 0.15s',
-                  }}
-                  title={color}
-                />
-              );
-            })}
-          </div>
-        </div>,
-        document.body
-      )}
+      <footer className="app-footer">Fait par Tom Corlay</footer>
     </div>
   );
 }
