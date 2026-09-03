@@ -1487,10 +1487,13 @@ export default function App() {
 
   function handleScroll(e) {
     const el = e.currentTarget;
+    // ne pas déclencher d'expansion/recalcul pendant un drag (évite lag rechargement)
+    if (el.dataset.dragging === '1') return;
     const raf = scrollThrottleRef.current;
     if (raf) cancelAnimationFrame(raf);
     scrollThrottleRef.current = requestAnimationFrame(() => {
       scrollThrottleRef.current = null;
+      if (el.dataset.dragging === '1') return;
 
       // Throttle localStorage writes to max 1/s (synchronous IO is slow)
       if (!localStorageThrottleRef.current) {
@@ -2111,7 +2114,7 @@ export default function App() {
       )}
       </Suspense>
       </main>
-      <footer className="app-footer">Créé par Tom Corlay • v4.5-scroll-fix</footer>
+      <footer className="app-footer">Créé par Tom Corlay • v6-auto-scroll</footer>
       {filterOpen && createPortal(
         <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
           <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setFilterOpen(false); }}>

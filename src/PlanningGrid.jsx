@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v4.5-scroll-fix';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v6-auto-scroll';
 
 const EMPTY = [];
 
@@ -193,6 +193,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const rafDragRef = React.useRef(null);
   const dragOverlayRef = React.useRef(null);
   const dragEndOverlayRef = React.useRef(null);
+  const autoScrollRaf = React.useRef(null);
+  const dragClientPos = React.useRef({ x: 0, y: 0 });
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -259,6 +261,64 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
   }
 
+  // Auto-scroll pendant drag (vitesse modérée, pas de lag chargement)
+  const EDGE_X = 80;
+  const EDGE_Y = 60;
+  const MIN_SPEED = 4;
+  const MAX_SPEED = 12;
+  function lerpSpeed(distFromEdge, edge) {
+    const t = Math.max(0, Math.min(1, distFromEdge / edge));
+    return Math.round(MIN_SPEED + (MAX_SPEED - MIN_SPEED) * t * t);
+  }
+  function stopAutoScroll() {
+    if (autoScrollRaf.current) {
+      cancelAnimationFrame(autoScrollRaf.current);
+      autoScrollRaf.current = null;
+    }
+    if (scrollRef.current) scrollRef.current.removeAttribute('data-dragging');
+  }
+  function startAutoScrollIfNeeded() {
+    if (autoScrollRaf.current) return;
+    if (!isDraggingRef.current) return;
+    if (scrollRef.current) scrollRef.current.setAttribute('data-dragging', '1');
+    autoScrollRaf.current = requestAnimationFrame(tickAutoScroll);
+  }
+  function tickAutoScroll() {
+    autoScrollRaf.current = null;
+    if (!isDraggingRef.current) {
+      if (scrollRef.current) scrollRef.current.removeAttribute('data-dragging');
+      return;
+    }
+    const el = scrollRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const { x, y } = dragClientPos.current;
+    let dx = 0;
+    let dy = 0;
+    // Horizontal
+    if (x > rect.right - EDGE_X) dx = lerpSpeed(rect.right - x, EDGE_X);
+    else if (x < rect.left + 260 + EDGE_X && x > rect.left + 260) dx = -lerpSpeed(x - (rect.left + 260), EDGE_X);
+    // Vertical (exclure header)
+    const headerH = 28 + 30 + dateGridH;
+    const topLimit = rect.top + headerH;
+    if (y > rect.bottom - EDGE_Y) dy = lerpSpeed(rect.bottom - y, EDGE_Y);
+    else if (y < topLimit + EDGE_Y && y > topLimit) dy = -lerpSpeed(y - topLimit, EDGE_Y);
+    if (dx !== 0 || dy !== 0) {
+      el.scrollLeft += dx;
+      el.scrollTop += dy;
+      // resync overlay : le dragover ne fire pas quand souris immobile mais contenu bouge
+      // on ne déclenche pas de setState, juste on laisse le prochain dragover mettre à jour
+    }
+    if (dx !== 0 || dy !== 0) {
+      autoScrollRaf.current = requestAnimationFrame(tickAutoScroll);
+    } else {
+      // polling léger si curseur reste en zone
+      setTimeout(() => {
+        if (isDraggingRef.current) startAutoScrollIfNeeded();
+      }, 50);
+    }
+  }
+
   function dayIndex(date) {
     return dayIdxMemo.get(date) ?? -1;
   }
@@ -319,6 +379,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const dragSrc = dch || dco;
       if (dragSrc) dragSrc.classList.add('dragging-source');
       gridRef.current?.classList.add('dragging-active');
+      dragClientPos.current = { x: e.clientX, y: e.clientY };
+      if (scrollRef.current) scrollRef.current.setAttribute('data-dragging', '1');
+      startAutoScrollIfNeeded();
     }
 
     if (resizeHandle && type === 'mousedown') {
@@ -410,6 +473,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (type === 'dragover') {
       e.preventDefault();
+      dragClientPos.current = { x: e.clientX, y: e.clientY };
+      startAutoScrollIfNeeded();
       // v4.4: overlay + closest (revert maths qui buguait après scroll) + top correct
       const cell = e.target.closest('[data-eq]');
       if (!cell) return;
@@ -494,6 +559,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
       e.preventDefault();
       isDraggingRef.current = false;
       lastDragKeyRef.current = null;
+      stopAutoScroll();
       if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; }
       pendingDragRef.current = null;
       if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible');
@@ -601,7 +667,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible'); if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible'); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; stopAutoScroll(); if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible'); if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible'); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
