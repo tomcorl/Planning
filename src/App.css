@@ -1544,6 +1544,12 @@ button:active {
   pointer-events: none;
 }
 
+.main-grid.dragging-active .bloc {
+  box-shadow: none !important;
+  transition: none !important;
+  filter: none !important;
+}
+
 .drag-end-preview {
   background: rgba(220, 38, 38, 0.12) !important;
   box-shadow: inset 0 0 0 2px #dc2626;

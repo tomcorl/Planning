@@ -1,6 +1,6 @@
 import React from 'react';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
-if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v3.1-fix';
+if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v4-math';
 
 const EMPTY = [];
 
@@ -410,26 +410,41 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (type === 'dragover') {
       e.preventDefault();
-      // v3.1: overlay au lieu de classList sur 12k cells (hit test via closest, pas maths)
-      const cell = e.target.closest('[data-eq]');
-      if (!cell) return;
-      const equipe = Number(cell.dataset.eq);
-      const date = cell.dataset.da;
-      if (!equipe || !date) return;
-      const key = `${equipe}-${date}`;
-      if (lastDragKeyRef.current === key && !rafDragRef.current) return;
-      const dayIdx = dayIdxMemo.get(date);
-      // trouver rowIdx pour positionner l'overlay (parcours gridRows)
+      // v4: hit test par maths (0 closest) + overlay, gestion hauteurs variables
+      const gridRect = gridRef.current?.getBoundingClientRect();
+      if (!gridRect) return;
+      const x = e.clientX - gridRect.left - 260;
+      const y = e.clientY - gridRect.top;
+      if (x < 0 || y < 0) return;
+      const dayIdx = Math.floor(x / cellWidth);
+      if (dayIdx < 0 || dayIdx >= visibleDays.length) return;
+      const pDate = visibleDays[dayIdx]?.date;
+      if (!pDate) return;
+      // trouver rangée par Y en tenant compte des hauteurs variables (header 34, separator 8, row 56)
+      let acc = 0;
       let rowIdx = -1;
+      let top = 0;
+      let pEquipe = null;
+      let rowH = rowHeight;
       for (let i = 0; i < gridRows.length; i++) {
         const r = gridRows[i];
-        const id = r.type === 'pending' ? r.equipeIndex : r.teamId;
-        if (id === equipe) { rowIdx = i; break; }
-        if (r.type === 'company-header' || r.type === 'separator') continue;
+        let h = rowHeight;
+        if (r.type === 'company-header') h = 34;
+        else if (r.type === 'separator') h = 8;
+        if (y >= acc && y < acc + h) {
+          if (r.type === 'separator' || r.type === 'company-header') return;
+          pEquipe = r.type === 'pending' ? r.equipeIndex : r.teamId;
+          rowIdx = i;
+          top = acc;
+          rowH = h;
+          break;
+        }
+        acc += h;
       }
-      // fallback si equipe est pending avec offset
-      if (rowIdx === -1) rowIdx = gridRows.findIndex(r => (r.type === 'pending' ? r.equipeIndex : r.teamId) === equipe);
-      pendingDragRef.current = { pEquipe: equipe, pDate: date, dayIdx, rowIdx, key };
+      if (rowIdx === -1 || pEquipe == null) return;
+      const key = `${pEquipe}-${pDate}`;
+      if (lastDragKeyRef.current === key && !rafDragRef.current) return;
+      pendingDragRef.current = { pEquipe, pDate, dayIdx, rowIdx, top, rowH, key };
       if (rafDragRef.current) return;
       rafDragRef.current = requestAnimationFrame(() => {
         const t0 = performance.now();
@@ -437,18 +452,17 @@ const PlanningGrid = React.memo(function PlanningGrid({
         const pending = pendingDragRef.current;
         pendingDragRef.current = null;
         if (!pending) return;
-        const { pEquipe: eq, pDate: d, dayIdx: di, rowIdx: ri, key: k } = pending;
+        const { pEquipe: eq, pDate: d, dayIdx: di, rowIdx: ri, top: t, rowH: rh, key: k } = pending;
         if (lastDragKeyRef.current === k) return;
         lastDragKeyRef.current = k;
         // overlay vert = case de début
         if (di != null && ri >= 0) {
           const startLeft = 260 + di * cellWidth;
-          const top = ri * rowHeight;
           if (dragOverlayRef.current) {
             dragOverlayRef.current.style.left = startLeft + 'px';
-            dragOverlayRef.current.style.top = top + 'px';
+            dragOverlayRef.current.style.top = t + 'px';
             dragOverlayRef.current.style.width = cellWidth + 'px';
-            dragOverlayRef.current.style.height = rowHeight + 'px';
+            dragOverlayRef.current.style.height = rh + 'px';
             dragOverlayRef.current.classList.add('visible');
           }
           highlightTargetDate(d);
@@ -467,9 +481,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
                 const endLeft = 260 + endIdx * cellWidth;
                 if (dragEndOverlayRef.current) {
                   dragEndOverlayRef.current.style.left = endLeft + 'px';
-                  dragEndOverlayRef.current.style.top = top + 'px';
+                  dragEndOverlayRef.current.style.top = t + 'px';
                   dragEndOverlayRef.current.style.width = cellWidth + 'px';
-                  dragEndOverlayRef.current.style.height = rowHeight + 'px';
+                  dragEndOverlayRef.current.style.height = rh + 'px';
                   dragEndOverlayRef.current.classList.add('visible');
                 }
               }

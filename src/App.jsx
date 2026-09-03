@@ -135,8 +135,8 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('theme')) || 'light'; } catch { return 'light'; }
   });
   const cellWidth = CELL_WIDTH;
-  const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -140));
-  const [calendarLength, setCalendarLength] = useState(500);
+  const [calendarStart, setCalendarStart] = useState(() => addDays(new Date(), -100));
+  const [calendarLength, setCalendarLength] = useState(250);
   const [jumpDate, setJumpDate] = useState(today);
 
   const [companies, setCompanies] = useState([]);
@@ -1502,8 +1502,8 @@ export default function App() {
         }, 1000);
       }
 
-      // Right-edge expansion: debounced, cooldown 2s after each expansion
-      if (el.scrollLeft + el.clientWidth > el.scrollWidth - 900) {
+      // Right-edge expansion: debounced, cooldown 2s après chaque expansion (seuil réduit pour 250j)
+      if (el.scrollLeft + el.clientWidth > el.scrollWidth - 600) {
         if (!expandRightRef.current && !expandCooldownRef.current) {
           expandRightRef.current = setTimeout(() => {
             expandRightRef.current = null;
@@ -2111,7 +2111,7 @@ export default function App() {
       )}
       </Suspense>
       </main>
-      <footer className="app-footer">Créé par Tom Corlay • v3.1-fix</footer>
+      <footer className="app-footer">Créé par Tom Corlay • v4-math</footer>
       {filterOpen && createPortal(
         <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
           <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setFilterOpen(false); }}>
