@@ -528,6 +528,33 @@ const PlanningGrid = React.memo(function PlanningGrid({
       }
       let dropEquipe = equipe;
       let dropDate = date;
+      // fallback maths si drop sur overlay (pointer-events none)
+      if ((!dropEquipe || !dropDate) && gridRef.current) {
+        const gridRect = gridRef.current.getBoundingClientRect();
+        const x = e.clientX - gridRect.left - 260;
+        const y = e.clientY - gridRect.top;
+        if (x >= 0 && y >= 0) {
+          const dayIdx = Math.floor(x / cellWidth);
+          if (dayIdx >= 0 && dayIdx < visibleDays.length) {
+            dropDate = visibleDays[dayIdx]?.date;
+            // trouver rangée par Y
+            let acc = 0;
+            for (let i = 0; i < gridRows.length; i++) {
+              const r = gridRows[i];
+              let h = rowHeight;
+              if (r.type === 'company-header') h = 34;
+              else if (r.type === 'separator') h = 8;
+              if (y >= acc && y < acc + h) {
+                if (r.type !== 'separator' && r.type !== 'company-header') {
+                  dropEquipe = r.type === 'pending' ? r.equipeIndex : r.teamId;
+                }
+                break;
+              }
+              acc += h;
+            }
+          }
+        }
+      }
       draggedItemRef.current = null;
       endDateCacheRef.current = null;
       gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source');
