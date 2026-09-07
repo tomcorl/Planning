@@ -135,6 +135,7 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
   const dateCellRefs = React.useRef([]);
   const dragOverlayRef = React.useRef(null);
   const dragEndOverlayRef = React.useRef(null);
+  const draggedItemRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -236,6 +237,10 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
         e.preventDefault();
         return;
       }
+      // mémorise l'item draggé pour la case rouge de fin (comme planning général)
+      const b = e.target.closest('[data-item]');
+      if (b) draggedItemRef.current = { id: Number(b.dataset.item), duree: Number(b.dataset.duree) || 1 };
+      else draggedItemRef.current = null;
     }
 
     if (resizeHandle && type === 'mousedown') {
@@ -310,7 +315,6 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
       const key = `${rowId}-${date}`;
       if (lastDragKeyRef.current === key) return;
       lastDragKeyRef.current = key;
-      // overlay épuré comme planning général (au lieu de drag-preview sur cell)
       const dayIdx = dayIndex(date);
       let rowIdx = -1;
       for (let i = 0; i < gridRows.length; i++) if (gridRows[i].id === rowId) { rowIdx = i; break; }
@@ -324,12 +328,22 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
           dragOverlayRef.current.style.height = rowHeight + 'px';
           dragOverlayRef.current.classList.add('visible');
         }
-        // end overlay pour la fin du bloc draggé (si on a l'item)
-        const draggedId = Number(e.dataTransfer.getData('text/plain'));
-        const draggedItem = draggedId ? null : null; // on ne peut pas récupérer l'item ici, on laisse juste le start
-        // on calcule la fin via le cache si disponible (sinon on ne montre que le start)
-        if (draggedItem) {
-          // placeholder pour future extension
+        // case rouge = fin du bloc (même style épuré que planning général)
+        if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
+        if (draggedItemRef.current) {
+          const dur = draggedItemRef.current.duree || 1;
+          // la fin est à dayIdx + dur -1 en jours ouvrés, mais on approxime en jours calendaires pour l'overlay
+          // on utilise visibleDays pour trouver la date de fin
+          const endDate = visibleDays[dayIdx + dur - 1]?.date || visibleDays[dayIdx]?.date;
+          const endIdx = endDate ? dayIndex(endDate) : -1;
+          if (endIdx >= 0) {
+            const endLeft = 260 + endIdx * cellWidth;
+            dragEndOverlayRef.current.style.left = endLeft + 'px';
+            dragEndOverlayRef.current.style.top = top + 'px';
+            dragEndOverlayRef.current.style.width = cellWidth + 'px';
+            dragEndOverlayRef.current.style.height = rowHeight + 'px';
+            dragEndOverlayRef.current.classList.add('visible');
+          }
         }
       }
       highlightTargetDate(date);
@@ -339,6 +353,7 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
       e.preventDefault();
       isDraggingRef.current = false;
       lastDragKeyRef.current = null;
+      draggedItemRef.current = null;
       if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible');
       if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
       if (prevDragCellRef.current) {
@@ -409,7 +424,7 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible'); if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible'); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; draggedItemRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible'); if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible'); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
