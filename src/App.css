@@ -2586,11 +2586,14 @@ button:active {
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
 }
 
 .personal-color-picker.modern {
   gap: 12px;
-  padding: 4px 0;
+  padding: 8px 0;
+  justify-content: center;
+  align-items: center;
 }
 
 .personal-color-picker.small {
@@ -2624,6 +2627,8 @@ button:active {
 .personal-color-wrap {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .personal-color-swatch {
@@ -2714,9 +2719,10 @@ button:active {
 .personal-color-custom {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  margin-top: 12px;
-  padding: 10px 12px;
+  margin-top: 14px;
+  padding: 12px 14px;
   background: var(--surface-2);
   border: 1px solid var(--line-soft);
   border-radius: 10px;
