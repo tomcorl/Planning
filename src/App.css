@@ -2583,16 +2583,16 @@ button:active {
 
 .personal-color-picker {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .personal-color-picker.modern {
-  gap: 12px;
-  padding: 8px 0;
-  justify-content: center;
+  gap: 8px;
+  padding: 4px 0;
+  justify-content: flex-start;
   align-items: center;
 }
 
@@ -2632,9 +2632,9 @@ button:active {
 }
 
 .personal-color-swatch {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   cursor: pointer;
   border: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.04);
@@ -2749,6 +2749,15 @@ button:active {
   display: flex;
   align-items: center;
   line-height: 1;
+}
+
+.personal-color-custom-label.inline {
+  margin-left: 8px;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  gap: 6px;
 }
 
 .personal-color-custom-label input[type="color"] {

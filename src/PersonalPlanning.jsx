@@ -1083,9 +1083,7 @@ export default function PersonalPlanning({ user }) {
                   />
                   <span className="personal-color-add-icon">+</span>
                 </label>
-              </div>
-              <div className="personal-color-custom">
-                <label className="personal-color-custom-label">
+                <label className="personal-color-custom-label inline">
                   <input
                     type="color"
                     value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'}
@@ -1093,18 +1091,6 @@ export default function PersonalPlanning({ user }) {
                   />
                   <span>Personnalisée</span>
                 </label>
-                <span className="personal-color-hex">{form.color}</span>
-                <button
-                  type="button"
-                  className="personal-color-add-btn"
-                  onClick={() => {
-                    if (!personalColors.includes(form.color)) setPersonalColors((prev) => [...prev, form.color]);
-                  }}
-                  disabled={personalColors.includes(form.color)}
-                  title={personalColors.includes(form.color) ? 'Déjà dans la palette' : 'Ajouter à la palette'}
-                >
-                  Ajouter
-                </button>
               </div>
             </label>
 
