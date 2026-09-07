@@ -332,10 +332,14 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
         if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
         if (draggedItemRef.current) {
           const dur = draggedItemRef.current.duree || 1;
-          // la fin est à dayIdx + dur -1 en jours ouvrés, mais on approxime en jours calendaires pour l'overlay
-          // on utilise visibleDays pour trouver la date de fin
-          const endDate = visibleDays[dayIdx + dur - 1]?.date || visibleDays[dayIdx]?.date;
-          const endIdx = endDate ? dayIndex(endDate) : -1;
+          // trouver l'index de fin en comptant les jours ouvrés sans fériés
+          let endIdx = dayIdx;
+          let count = 1;
+          // visibleDays contient déjà sans weekend, on saute juste les fériés
+          for (let i = dayIdx + 1; count < dur && i < visibleDays.length; i++) {
+            if (!ferieSet.has(visibleDays[i].date)) count++;
+            endIdx = i;
+          }
           if (endIdx >= 0) {
             const endLeft = 260 + endIdx * cellWidth;
             dragEndOverlayRef.current.style.left = endLeft + 'px';

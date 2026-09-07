@@ -150,22 +150,43 @@ function cascadeGanttOnModify(originalItems, newItems, modifiedId, ferieSet) {
   const oldStart = toDate(sorted[idx].start);
   const newItem = newItems.find(it => it.id === modifiedId);
   if (!newItem) return newItems;
+  const oldItem = sorted[idx];
   const newStart = toDate(newItem.start);
   const deltaDays = Math.round((newStart - oldStart) / 86400000);
-  if (deltaDays === 0) return newItems;
+  const isResize = newItem.duree !== oldItem.duree;
+  if (deltaDays === 0 && !isResize) return newItems;
   const result = newItems.map(it => ({ ...it }));
   const m = result.find(it => it.id === modifiedId);
   if (m) m.start = nextWorkingDay(m.start, ferieSet);
-  for (let i = idx + 1; i < sorted.length; i++) {
-    const ref = sorted[i];
-    const rIdx = result.findIndex(it => it.id === ref.id);
-    if (rIdx === -1) continue;
-    const d = toDate(ref.start);
-    d.setDate(d.getDate() + deltaDays);
-    const y = d.getFullYear();
-    const mo = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    result[rIdx].start = nextWorkingDay(`${y}-${mo}-${dd}`, ferieSet);
+  // si c'est un resize (duree changée) on fait une vraie cascade Gantt, sinon simple décalage
+  if (isResize) {
+    const allSortedAfter = [...result].sort((a, b) => {
+      if (a.start !== b.start) return a.start.localeCompare(b.start);
+      return a.id - b.id;
+    });
+    const modIdx = allSortedAfter.findIndex(it => it.id === modifiedId);
+    for (let i = modIdx + 1; i < allSortedAfter.length; i++) {
+      const prev = allSortedAfter[i - 1];
+      const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
+      const expectedStart = addWorkingDays(prevEnd, 1, ferieSet);
+      const cur = allSortedAfter[i];
+      const rIdx = result.findIndex(it => it.id === cur.id);
+      if (rIdx !== -1 && result[rIdx].start !== expectedStart) {
+        result[rIdx].start = expectedStart;
+      }
+    }
+  } else {
+    for (let i = idx + 1; i < sorted.length; i++) {
+      const ref = sorted[i];
+      const rIdx = result.findIndex(it => it.id === ref.id);
+      if (rIdx === -1) continue;
+      const d = toDate(ref.start);
+      d.setDate(d.getDate() + deltaDays);
+      const y = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      result[rIdx].start = nextWorkingDay(`${y}-${mo}-${dd}`, ferieSet);
+    }
   }
   return result;
 }
