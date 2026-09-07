@@ -143,7 +143,7 @@ function cascadeGanttOnModify(originalItems, newItems, modifiedId, ferieSet) {
     for (let i = newIdx + 1; i < result.length; i++) {
       const prev = result[i - 1];
       const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
-      result[i].start = nextWorkingDay(addWorkingDays(prevEnd, 1, ferieSet), ferieSet);
+      result[i].start = addWorkingDays(prevEnd, 1, ferieSet);
     }
     return result;
   }
@@ -156,16 +156,22 @@ function cascadeGanttOnModify(originalItems, newItems, modifiedId, ferieSet) {
   const result = newItems.map(it => ({ ...it }));
   const m = result.find(it => it.id === modifiedId);
   if (m) m.start = nextWorkingDay(m.start, ferieSet);
-  for (let i = idx + 1; i < sorted.length; i++) {
-    const ref = sorted[i];
-    const rIdx = result.findIndex(it => it.id === ref.id);
-    if (rIdx === -1) continue;
-    const d = toDate(ref.start);
-    d.setDate(d.getDate() + deltaDays);
-    const y = d.getFullYear();
-    const mo = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    result[rIdx].start = nextWorkingDay(`${y}-${mo}-${dd}`, ferieSet);
+  // Gantt vrai cascade : chaque suivant démarre juste après le précédent
+  // on reconstruit l'ordre global après modif et on recale
+  const allSortedAfter = [...result].sort((a, b) => {
+    if (a.start !== b.start) return a.start.localeCompare(b.start);
+    return a.id - b.id;
+  });
+  const modIdx = allSortedAfter.findIndex(it => it.id === modifiedId);
+  for (let i = modIdx + 1; i < allSortedAfter.length; i++) {
+    const prev = allSortedAfter[i - 1];
+    const prevEnd = addWorkingDays(prev.start, prev.duree - 1, ferieSet);
+    const expectedStart = addWorkingDays(prevEnd, 1, ferieSet);
+    const cur = allSortedAfter[i];
+    const rIdx = result.findIndex(it => it.id === cur.id);
+    if (rIdx !== -1 && result[rIdx].start !== expectedStart) {
+      result[rIdx].start = expectedStart;
+    }
   }
   return result;
 }
@@ -698,10 +704,8 @@ export default function PersonalPlanning({ user }) {
         } else {
           const origEnd = getEndDate({ start: originalStart, duree: originalDuree }, ferieSet);
           const rawNewStart = addWorkingDays(originalStart, delta, ferieSet);
-          const newStartIdx = dayIndex(rawNewStart);
-          const endIdx = dayIndex(origEnd);
-          if (newStartIdx >= 0 && endIdx >= 0 && newStartIdx < endIdx) {
-            const newDuree = endIdx - newStartIdx + 1;
+          const newDuree = getWorkingDaysBetween(rawNewStart, origEnd, ferieSet);
+          if (newDuree >= 1) {
             if (!ganttMode) {
               const resized = { id, rowId: originalRowId, start: rawNewStart, duree: newDuree };
               if (hasOverlap(resized, id)) return;

@@ -133,6 +133,8 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
   const lastDragKeyRef = React.useRef(null);
   const isDraggingRef = React.useRef(false);
   const dateCellRefs = React.useRef([]);
+  const dragOverlayRef = React.useRef(null);
+  const dragEndOverlayRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -308,11 +310,28 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
       const key = `${rowId}-${date}`;
       if (lastDragKeyRef.current === key) return;
       lastDragKeyRef.current = key;
-      if (prevDragCellRef.current) {
-        prevDragCellRef.current.classList.remove('drag-preview');
+      // overlay épuré comme planning général (au lieu de drag-preview sur cell)
+      const dayIdx = dayIndex(date);
+      let rowIdx = -1;
+      for (let i = 0; i < gridRows.length; i++) if (gridRows[i].id === rowId) { rowIdx = i; break; }
+      if (dayIdx >= 0 && rowIdx >= 0) {
+        const left = 260 + dayIdx * cellWidth;
+        const top = rowIdx * rowHeight;
+        if (dragOverlayRef.current) {
+          dragOverlayRef.current.style.left = left + 'px';
+          dragOverlayRef.current.style.top = top + 'px';
+          dragOverlayRef.current.style.width = cellWidth + 'px';
+          dragOverlayRef.current.style.height = rowHeight + 'px';
+          dragOverlayRef.current.classList.add('visible');
+        }
+        // end overlay pour la fin du bloc draggé (si on a l'item)
+        const draggedId = Number(e.dataTransfer.getData('text/plain'));
+        const draggedItem = draggedId ? null : null; // on ne peut pas récupérer l'item ici, on laisse juste le start
+        // on calcule la fin via le cache si disponible (sinon on ne montre que le start)
+        if (draggedItem) {
+          // placeholder pour future extension
+        }
       }
-      if (cell) cell.classList.add('drag-preview');
-      prevDragCellRef.current = cell;
       highlightTargetDate(date);
       return;
     }
@@ -320,6 +339,8 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
       e.preventDefault();
       isDraggingRef.current = false;
       lastDragKeyRef.current = null;
+      if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible');
+      if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
       if (prevDragCellRef.current) {
         prevDragCellRef.current.classList.remove('drag-preview');
         prevDragCellRef.current = null;
@@ -388,10 +409,12 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible'); if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible'); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
+          <div ref={dragOverlayRef} className="drag-overlay" />
+          <div ref={dragEndOverlayRef} className="drag-end-overlay" />
           {gridRows.map((row, rowIndex) => {
             const rowId = row.id;
             const isOdd = rowIndex % 2 === 1;
