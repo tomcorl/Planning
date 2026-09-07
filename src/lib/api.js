@@ -453,16 +453,27 @@ export async function savePersonalPlan(planId, rows, items) {
   }
 
   // 4. Insert new items / update existing items with resolved row IDs
+  // note: colonne 'note' peut manquer sur anciennes Bases (PGRST204) -> on retente sans elle
   for (const it of items) {
     const realRowId = tempToReal.get(it.rowId) || it.rowId;
+    const basePayload = { row_id: realRowId, start: it.start, duree: it.duree, nom: it.nom || '', color: it.color || '#b7c6d8' };
+    const withNote = { ...basePayload, note: it.note || '' };
     if (it.id > 0) {
-      await supabase.from('personal_plan_items')
-        .update({ row_id: realRowId, start: it.start, duree: it.duree, nom: it.nom || '', color: it.color || '#b7c6d8', note: it.note || '' })
-        .eq('id', it.id);
+      let { error } = await supabase.from('personal_plan_items').update(withNote).eq('id', it.id);
+      if (error && error.code === 'PGRST204' && String(error.message).includes('note')) {
+        const retry = await supabase.from('personal_plan_items').update(basePayload).eq('id', it.id);
+        if (retry.error) { console.error('savePersonalPlan item update (sans note)', retry.error); throw retry.error; }
+      } else if (error) {
+        console.error('savePersonalPlan item update', error); throw error;
+      }
     } else {
-      const { error } = await supabase.from('personal_plan_items')
-        .insert({ plan_id: planId, row_id: realRowId, start: it.start, duree: it.duree, nom: it.nom || '', color: it.color || '#b7c6d8', note: it.note || '' });
-      if (error) { console.error('savePersonalPlan item insert', error); throw error; }
+      let { error } = await supabase.from('personal_plan_items').insert({ plan_id: planId, ...withNote });
+      if (error && error.code === 'PGRST204' && String(error.message).includes('note')) {
+        const retry = await supabase.from('personal_plan_items').insert({ plan_id: planId, ...basePayload });
+        if (retry.error) { console.error('savePersonalPlan item insert (sans note)', retry.error); throw retry.error; }
+      } else if (error) {
+        console.error('savePersonalPlan item insert', error); throw error;
+      }
     }
   }
 }

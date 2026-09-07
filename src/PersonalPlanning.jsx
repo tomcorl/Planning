@@ -379,10 +379,17 @@ export default function PersonalPlanning({ user }) {
 
   useEffect(() => {
     if (!activePlan) return;
-    setRows(activePlan.rows || []);
+    const initialRows = activePlan.rows && activePlan.rows.length > 0
+      ? activePlan.rows
+      : Array.from({ length: 5 }, (_, i) => ({ id: nextLocalId(), nom: `Tâche ${i + 1}`, ordre: i }));
+    setRows(initialRows);
     setItems(activePlan.items || []);
     setPlanName(activePlan.nom || '');
     initialScrolled.current = false;
+    // si on a créé des lignes placeholder, on les sauvegarde
+    if (!activePlan.rows || activePlan.rows.length === 0) {
+      doSave(initialRows, activePlan.items || []);
+    }
   }, [activePlan]);
 
   useEffect(() => {
