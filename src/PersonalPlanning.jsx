@@ -1078,11 +1078,7 @@ export default function PersonalPlanning({ user }) {
                   <input
                     type="color"
                     value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setForm({ ...form, color: v });
-                      if (!personalColors.includes(v)) setPersonalColors((prev) => [...prev, v]);
-                    }}
+                    onChange={(e) => setForm({ ...form, color: e.target.value })}
                     style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
                   />
                   <span className="personal-color-add-icon">+</span>
@@ -1093,15 +1089,22 @@ export default function PersonalPlanning({ user }) {
                   <input
                     type="color"
                     value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setForm({ ...form, color: v });
-                      if (!personalColors.includes(v)) setPersonalColors((prev) => [...prev, v]);
-                    }}
+                    onChange={(e) => setForm({ ...form, color: e.target.value })}
                   />
                   <span>Personnalisée</span>
                 </label>
                 <span className="personal-color-hex">{form.color}</span>
+                <button
+                  type="button"
+                  className="personal-color-add-btn"
+                  onClick={() => {
+                    if (!personalColors.includes(form.color)) setPersonalColors((prev) => [...prev, form.color]);
+                  }}
+                  disabled={personalColors.includes(form.color)}
+                  title={personalColors.includes(form.color) ? 'Déjà dans la palette' : 'Ajouter à la palette'}
+                >
+                  Ajouter
+                </button>
               </div>
             </label>
 

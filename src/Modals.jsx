@@ -262,11 +262,7 @@ export default function Modals({
                       ))}
                       <button className="color-dot color-add" title="Ajouter une couleur" onClick={() => setColorManager({ type: 'chantier', index: -1, color: '#2563eb' })}>+</button>
                       <label className="color-dot color-add" title="Palette complète" style={{ position: 'relative', overflow: 'hidden' }}>
-                        <input type="color" value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'} onChange={(e) => {
-                          const v = e.target.value;
-                          setForm({ ...form, color: v });
-                          if (!chantierColors.includes(v)) setChantierColors((prev) => [...prev, v]);
-                        }} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
+                        <input type="color" value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'} onChange={(e) => setForm({ ...form, color: e.target.value })} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
                         <span style={{ fontSize: 14 }}>🎨</span>
                       </label>
                     </div>
