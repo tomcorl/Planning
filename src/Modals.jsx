@@ -247,24 +247,38 @@ export default function Modals({
               {modal.type === 'chantier' && (
                 <>
                   <div className="modal-field">
-                    <label>Couleur du chantier</label>
-                    <div className="color-grid editable-colors">
-                      {chantierColors.map((c, ci) => (
-                        <div key={ci} className="color-dot-wrapper">
-                          <button className={`color-dot ${form.color === c ? 'selected-color' : ''}`} style={{ background: c }} onClick={() => setForm({ ...form, color: c })} />
-                          <button className="color-dot-edit" onClick={() => setColorManager({ type: 'chantier', index: ci, color: c })} title="Modifier">✎</button>
-                          <button className="color-dot-delete" onClick={() => {
-                            const next = chantierColors.filter((_, i) => i !== ci);
-                            setChantierColors(next.length > 0 ? next : [...CHANTIER_COLORS]);
-                            if (form.color === c) setForm({ ...form, color: next[0] || CHANTIER_COLORS[0] });
-                          }} title="Supprimer">×</button>
-                        </div>
-                      ))}
-                      <button className="color-dot color-add" title="Ajouter une couleur" onClick={() => setColorManager({ type: 'chantier', index: -1, color: '#2563eb' })}>+</button>
-                      <label className="color-dot color-add" title="Palette complète" style={{ position: 'relative', overflow: 'hidden' }}>
-                        <input type="color" value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'} onChange={(e) => setForm({ ...form, color: e.target.value })} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
-                        <span style={{ fontSize: 14 }}>🎨</span>
+                    <label>Palette</label>
+                    <div className="personal-color-picker modern small">
+                      {chantierColors.map((c) => {
+                        const isCustom = !CHANTIER_COLORS.includes(c);
+                        return (
+                          <div key={c} className="personal-color-wrap">
+                            <button type="button" className={`personal-color-swatch${form.color === c ? ' selected' : ''}`} style={{ background: c }} onClick={() => setForm({ ...form, color: c })} title={c}>
+                              {form.color === c && <span className="personal-color-check">✓</span>}
+                            </button>
+                            {isCustom && (
+                              <button type="button" className="personal-color-remove" onClick={(e) => {
+                                e.stopPropagation();
+                                const next = chantierColors.filter((x) => x !== c);
+                                setChantierColors(next.length > 0 ? next : [...CHANTIER_COLORS]);
+                                if (form.color === c) setForm({ ...form, color: next[0] || CHANTIER_COLORS[0] });
+                              }} title="Supprimer">×</button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <label className="personal-color-swatch personal-color-add" title="Nouvelle couleur">
+                        <input type="color" value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'} onChange={(e) => setForm({ ...form, color: e.target.value })} style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }} />
+                        <span className="personal-color-add-icon">+</span>
                       </label>
+                    </div>
+                    <div className="personal-color-custom small">
+                      <label className="personal-color-custom-label">
+                        <input type="color" value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+                        <span>Personnalisée</span>
+                      </label>
+                      <span className="personal-color-hex">{form.color}</span>
+                      <button type="button" className="personal-color-add-btn" onClick={() => { if (!chantierColors.includes(form.color)) setChantierColors((prev) => [...prev, form.color]); }} disabled={chantierColors.includes(form.color)} title={chantierColors.includes(form.color) ? 'Déjà dans la palette' : 'Ajouter à la palette'}>Ajouter</button>
                     </div>
                   </div>
                   <div className="modal-field">

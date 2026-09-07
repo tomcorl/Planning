@@ -2593,6 +2593,34 @@ button:active {
   padding: 4px 0;
 }
 
+.personal-color-picker.small {
+  gap: 8px;
+}
+
+.personal-color-picker.small .personal-color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.personal-color-picker.small .personal-color-check {
+  font-size: 14px;
+}
+
+.personal-color-custom.small {
+  padding: 8px 10px;
+  margin-top: 10px;
+}
+
+.personal-color-custom.small .personal-color-custom-label {
+  font-size: 12px;
+}
+
+.personal-color-custom.small input[type="color"] {
+  width: 28px;
+  height: 28px;
+}
+
 .personal-color-wrap {
   position: relative;
   display: inline-flex;
