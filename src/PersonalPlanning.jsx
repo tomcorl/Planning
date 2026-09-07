@@ -13,10 +13,10 @@ import { generatePdf } from './lib/pdfExport.js';
 
 const CELL_W = 26;
 const PERSONAL_COLORS = [
-  '#2563eb', '#93c5fd', '#eab308', '#15803d', '#6b7280',
-  '#f97316', '#7dd3fc', '#a78bfa', '#f472b6', '#34d399',
-  '#ef4444', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981',
-  '#ec4899', '#6366f1', '#14b8a6',
+  '#2563eb', // bleu pro
+  '#059669', // émeraude
+  '#f59e0b', // ambre
+  '#dc2626', // rouge signal
 ];
 const PERSONAL_COLORS_KEY = 'personalColors';
 
@@ -241,7 +241,15 @@ export default function PersonalPlanning({ user }) {
   const [personalColors, setPersonalColors] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(PERSONAL_COLORS_KEY));
-      if (Array.isArray(saved) && saved.length) return saved;
+      if (Array.isArray(saved) && saved.length) {
+        // migration : ancien 18 couleurs -> nouveau 4, on garde les customs
+        const isOld18 = saved.includes('#93c5fd') || saved.length > 8;
+        if (isOld18) {
+          const customs = saved.filter((c) => !PERSONAL_COLORS.includes(c) && /^#[0-9a-fA-F]{6}$/.test(c));
+          return [...PERSONAL_COLORS, ...customs].slice(0, 12);
+        }
+        return saved;
+      }
     } catch {}
     return [...PERSONAL_COLORS];
   });
@@ -1033,18 +1041,40 @@ export default function PersonalPlanning({ user }) {
             </label>
 
             <label className="personal-modal-field">
-              <span>Couleur</span>
-              <div className="personal-color-picker">
-                {personalColors.map((c) => (
-                  <div
-                    key={c}
-                    className={`personal-color-swatch${form.color === c ? ' selected' : ''}`}
-                    onClick={() => setForm({ ...form, color: c })}
-                    style={{ background: c }}
-                    title={c}
-                  />
-                ))}
-                <label className="personal-color-swatch personal-color-add" title="Couleur personnalisée">
+              <span>Palette</span>
+              <div className="personal-color-picker modern">
+                {personalColors.map((c) => {
+                  const isCustom = !PERSONAL_COLORS.includes(c);
+                  return (
+                    <div key={c} className="personal-color-wrap">
+                      <button
+                        type="button"
+                        className={`personal-color-swatch${form.color === c ? ' selected' : ''}`}
+                        onClick={() => setForm({ ...form, color: c })}
+                        style={{ background: c }}
+                        title={c}
+                        aria-label={`Couleur ${c}`}
+                      >
+                        {form.color === c && <span className="personal-color-check">✓</span>}
+                      </button>
+                      {isCustom && (
+                        <button
+                          type="button"
+                          className="personal-color-remove"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPersonalColors((prev) => prev.filter((x) => x !== c));
+                            if (form.color === c) setForm({ ...form, color: PERSONAL_COLORS[0] });
+                          }}
+                          title="Supprimer"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <label className="personal-color-swatch personal-color-add" title="Nouvelle couleur">
                   <input
                     type="color"
                     value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'}
@@ -1055,27 +1085,23 @@ export default function PersonalPlanning({ user }) {
                     }}
                     style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
                   />
-                  <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
+                  <span className="personal-color-add-icon">+</span>
                 </label>
               </div>
-              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                  type="color"
-                  value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'}
-                  onChange={(e) => setForm({ ...form, color: e.target.value })}
-                  style={{ width: 36, height: 28, padding: 0, border: '1px solid var(--line)', borderRadius: 6, cursor: 'pointer' }}
-                  title="Palette complète"
-                />
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>Palette complète</span>
-                {personalColors.length > PERSONAL_COLORS.length && (
-                  <button
-                    type="button"
-                    onClick={() => setPersonalColors([...PERSONAL_COLORS])}
-                    style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                  >
-                    Réinitialiser
-                  </button>
-                )}
+              <div className="personal-color-custom">
+                <label className="personal-color-custom-label">
+                  <input
+                    type="color"
+                    value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setForm({ ...form, color: v });
+                      if (!personalColors.includes(v)) setPersonalColors((prev) => [...prev, v]);
+                    }}
+                  />
+                  <span>Personnalisée</span>
+                </label>
+                <span className="personal-color-hex">{form.color}</span>
               </div>
             </label>
 
