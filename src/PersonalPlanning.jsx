@@ -18,6 +18,7 @@ const PERSONAL_COLORS = [
   '#ef4444', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981',
   '#ec4899', '#6366f1', '#14b8a6',
 ];
+const PERSONAL_COLORS_KEY = 'personalColors';
 
 let nextTempId = -1;
 
@@ -237,6 +238,16 @@ export default function PersonalPlanning({ user }) {
   const [pdfModal, setPdfModal] = useState(false);
   const [pdfStart, setPdfStart] = useState(() => addDays(today, -30));
   const [pdfEnd, setPdfEnd] = useState(() => addDays(today, 60));
+  const [personalColors, setPersonalColors] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PERSONAL_COLORS_KEY));
+      if (Array.isArray(saved) && saved.length) return saved;
+    } catch {}
+    return [...PERSONAL_COLORS];
+  });
+  useEffect(() => {
+    try { localStorage.setItem(PERSONAL_COLORS_KEY, JSON.stringify(personalColors)); } catch {}
+  }, [personalColors]);
 
   const saveTimerRef = useRef(null);
   const resizeRef = useRef(null);
@@ -505,7 +516,7 @@ export default function PersonalPlanning({ user }) {
       start: startDate,
       duree: duree || 5,
       nom: '',
-      color: PERSONAL_COLORS[Math.floor(Math.random() * PERSONAL_COLORS.length)],
+      color: personalColors[Math.floor(Math.random() * personalColors.length)] || PERSONAL_COLORS[0],
       note: '',
     });
     setModal({ open: true, mode: 'creation' });
@@ -1024,14 +1035,47 @@ export default function PersonalPlanning({ user }) {
             <label className="personal-modal-field">
               <span>Couleur</span>
               <div className="personal-color-picker">
-                {PERSONAL_COLORS.map((c) => (
+                {personalColors.map((c) => (
                   <div
                     key={c}
                     className={`personal-color-swatch${form.color === c ? ' selected' : ''}`}
                     onClick={() => setForm({ ...form, color: c })}
                     style={{ background: c }}
+                    title={c}
                   />
                 ))}
+                <label className="personal-color-swatch personal-color-add" title="Couleur personnalisée">
+                  <input
+                    type="color"
+                    value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setForm({ ...form, color: v });
+                      if (!personalColors.includes(v)) setPersonalColors((prev) => [...prev, v]);
+                    }}
+                    style={{ opacity: 0, width: 0, height: 0, position: 'absolute' }}
+                  />
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
+                </label>
+              </div>
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="color"
+                  value={form.color.startsWith('#') && /^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#2563eb'}
+                  onChange={(e) => setForm({ ...form, color: e.target.value })}
+                  style={{ width: 36, height: 28, padding: 0, border: '1px solid var(--line)', borderRadius: 6, cursor: 'pointer' }}
+                  title="Palette complète"
+                />
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>Palette complète</span>
+                {personalColors.length > PERSONAL_COLORS.length && (
+                  <button
+                    type="button"
+                    onClick={() => setPersonalColors([...PERSONAL_COLORS])}
+                    style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Réinitialiser
+                  </button>
+                )}
               </div>
             </label>
 
