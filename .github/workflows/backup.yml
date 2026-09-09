@@ -1,0 +1,33 @@
+name: Backup Supabase DB
+
+on:
+  schedule:
+    - cron: '0 3 * * *'    # 3h UTC (5h en France, hiver)
+    - cron: '0 15 * * *'   # 15h UTC (17h en France, hiver)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Dump database
+        run: |
+          mkdir -p backups
+          pg_dump "${{ secrets.DATABASE_URL }}" > backups/backup-$(date +'%Y-%m-%d-%H%M').sql
+
+      - name: Delete backups older than 14 days
+        run: |
+          find backups/ -name "*.sql" -mtime +14 -delete
+
+      - name: Commit backup
+        run: |
+          git config user.name "backup-bot"
+          git config user.email "backup-bot@users.noreply.github.com"
+          git add backups/
+          git commit -m "Backup $(date +'%Y-%m-%d %H:%M')" || echo "Rien à commit"
+          git push
