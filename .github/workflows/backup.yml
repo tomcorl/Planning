@@ -22,7 +22,7 @@ jobs:
       - name: Dump database
         run: |
           mkdir -p backups
-          pg_dump "${{ secrets.DATABASE_URL }}" > backups/backup-$(date +'%Y-%m-%d-%H%M').sql
+          /usr/lib/postgresql/17/bin/pg_dump "${{ secrets.DATABASE_URL }}" > backups/backup-$(date +'%Y-%m-%d-%H%M').sql
 
       - name: Delete backups older than 14 days
         run: |
