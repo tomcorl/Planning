@@ -57,7 +57,7 @@ export async function logout() {
 export async function loadPlanningData() {
   const { data, error } = await supabase.rpc('get_planning_data');
   if (error) throw error;
-  if (!data) return { companies: [], equipes: [], conducteurs: [], chantiers: [], conges: [], customFeries: [] };
+  if (!data) return { companies: [], equipes: [], conducteurs: [], vendeurs: [], typesChantier: [], chantiers: [], conges: [], customFeries: [] };
 
   const seenChantier = new Set();
   const dedupedChantiers = (data.chantiers || [])
@@ -81,6 +81,8 @@ export async function loadPlanningData() {
     companies: data.companies || [],
     equipes: (data.equipes || []).map((e) => ({ id: e.id, nom: e.nom, companyId: e.company_id, ordre: e.ordre })),
     conducteurs: (data.conducteurs || []).map((c) => ({ id: c.id, nom: c.nom, color: c.color })),
+    vendeurs: (data.vendeurs || []).map((v) => ({ id: v.id, nom: v.nom, color: v.color })),
+    typesChantier: (data.types_chantier || data.typesChantier || []).map((t) => ({ id: t.id, nom: t.nom, color: t.color })),
     chantiers: dedupedChantiers,
     conges: dedupedConges,
     customFeries: (data.custom_feries || []).map((f) => ({ ...f, companyId: f.company_id })),
@@ -112,6 +114,13 @@ function normalizeChantier(c) {
     linked: !!c.linked,
     detail: c.detail || '',
     force_aout: !!c.force_aout,
+    client_nom: c.client_nom || '',
+    client_adresse: c.client_adresse || '',
+    client_telephone: c.client_telephone || '',
+    numero_chantier: c.numero_chantier || '',
+    vendeurId: c.vendeurId ?? c.vendeur_id ?? 0,
+    typeChantierId: c.typeChantierId ?? c.type_chantier_id ?? 0,
+    montant_devis: Number(c.montant_devis) || 0,
   };
 }
 
@@ -298,14 +307,15 @@ export async function updateUserProfile(userId, updates) {
 }
 
 export async function saveAllPlanningData(data) {
-  const { chantiers, conges, equipes, conducteurs, customFeries, chantierColors, conducteurColors } = data;
-  const mapRows = (items, companyId) => items.map(c => ({ ...c, company_id: companyId }));
+  const { chantiers, conges, equipes, conducteurs, vendeurs = [], typesChantier = [], customFeries, chantierColors, conducteurColors } = data;
   const chantierRows = chantiers.map(c => ({
     id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
     company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
     nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
     note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,
     detail: c.detail || '', force_aout: c.force_aout ? 1 : 0,
+    client_nom: c.client_nom || '', client_adresse: c.client_adresse || '', client_telephone: c.client_telephone || '', numero_chantier: c.numero_chantier || '',
+    vendeurId: c.vendeurId || 0, typeChantierId: c.typeChantierId || 0, montant_devis: c.montant_devis || 0,
   }));
   const congeRows = conges.map(c => ({
     id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
@@ -320,21 +330,88 @@ export async function saveAllPlanningData(data) {
     id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
     nom: c.nom, color: c.color,
   }));
+  const vendeurRows = vendeurs.map(v => ({
+    id: Number.isInteger(v.id) && v.id >= -2147483648 && v.id <= 2147483647 ? v.id : undefined,
+    nom: v.nom, color: v.color,
+  }));
+  const typeRows = typesChantier.map(t => ({
+    id: Number.isInteger(t.id) && t.id >= -2147483648 && t.id <= 2147483647 ? t.id : undefined,
+    nom: t.nom, color: t.color,
+  }));
   const ferieRows = customFeries.map(f => ({
     company_id: f.companyId, nom: f.nom, date: f.date,
   }));
 
-  const { data: result, error } = await supabase.rpc('save_all_planning_data', {
+  const payload = {
     p_chantiers: chantierRows,
     p_conges: congeRows,
     p_equipes: equipeRows,
     p_conducteurs: conducteurRows,
+    p_vendeurs: vendeurRows,
+    p_types_chantier: typeRows,
     p_custom_feries: ferieRows,
     p_chantier_colors: chantierColors,
     p_conducteur_colors: conducteurColors,
-  });
+  };
+
+  let { data: result, error } = await supabase.rpc('save_all_planning_data', payload);
+  // Fallback si le backend n'a pas encore la migration (colonnes/vendeurs)
+  if (error && (error.code === 'PGRST204' || error.code === 'PGRST202' || /vendeur|typeChantier|client_nom|numero_chantier|montant_devis/i.test(error.message || ''))) {
+    console.warn('save_all_planning_data fallback sans nouveaux champs', error.message);
+    const fallbackRows = chantiers.map(c => ({
+      id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
+      company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
+      nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
+      note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,
+      detail: c.detail || '', force_aout: c.force_aout ? 1 : 0,
+    }));
+    const fallbackPayload = {
+      p_chantiers: fallbackRows,
+      p_conges: congeRows,
+      p_equipes: equipeRows,
+      p_conducteurs: conducteurRows,
+      p_custom_feries: ferieRows,
+      p_chantier_colors: chantierColors,
+      p_conducteur_colors: conducteurColors,
+    };
+    const retry = await supabase.rpc('save_all_planning_data', fallbackPayload);
+    if (retry.error) { console.error('save_all_planning_data retry failed', retry.error); throw retry.error; }
+    return retry.data;
+  }
   if (error) { console.error('save_all_planning_data RPC failed', error.message || error, error.details, error.hint); throw error; }
   return result;
+}
+
+export async function upsertVendeurs(vendeurs) {
+  const rows = vendeurs.map(v => {
+    const row = { nom: v.nom, color: v.color };
+    if (Number.isInteger(v.id) && v.id >= -2147483648 && v.id <= 2147483647) row.id = v.id;
+    return row;
+  });
+  if (rows.length === 0) {
+    const { error } = await supabase.from('vendeurs').delete().neq('id', 0);
+    if (error) { console.error('delete vendeurs', error); throw error; }
+    return [];
+  }
+  const { data, error } = await supabase.rpc('upsert_vendeurs', { p_vendeurs: rows });
+  if (error) { console.error('upsert_vendeurs', error); throw error; }
+  return data;
+}
+
+export async function upsertTypesChantier(types) {
+  const rows = types.map(t => {
+    const row = { nom: t.nom, color: t.color };
+    if (Number.isInteger(t.id) && t.id >= -2147483648 && t.id <= 2147483647) row.id = t.id;
+    return row;
+  });
+  if (rows.length === 0) {
+    const { error } = await supabase.from('types_chantier').delete().neq('id', 0);
+    if (error) { console.error('delete types_chantier', error); throw error; }
+    return [];
+  }
+  const { data, error } = await supabase.rpc('upsert_types_chantier', { p_types_chantier: rows });
+  if (error) { console.error('upsert_types_chantier', error); throw error; }
+  return data;
 }
 
 export async function createUser(email, password, nom, role, companyIds) {

@@ -24,6 +24,8 @@ export default function Modals({
   ferieForm, setFerieForm,
   customFeries, setCustomFeries,
   conducteurs, setConducteurs,
+  vendeurs, setVendeurs,
+  typesChantier, setTypesChantier,
   contextMenu, setContextMenu,
   clipboard, setClipboard,
   chantiers, conges,
@@ -247,6 +249,47 @@ export default function Modals({
               {modal.type === 'chantier' && (
                 <>
                   <div className="modal-field">
+                    <label>Nom du client</label>
+                    <input value={form.client_nom || ''} aria-label="Nom du client" onChange={(e) => setForm({ ...form, client_nom: e.target.value })} placeholder="Ex: Dupont" />
+                  </div>
+                  <div className="modal-field">
+                    <label>Adresse</label>
+                    <input value={form.client_adresse || ''} aria-label="Adresse" onChange={(e) => setForm({ ...form, client_adresse: e.target.value })} placeholder="Ex: 12 rue des Lilas, 35000 Rennes" />
+                  </div>
+                  <div className="modal-field">
+                    <label>Téléphone</label>
+                    <input type="tel" value={form.client_telephone || ''} aria-label="Téléphone" onChange={(e) => setForm({ ...form, client_telephone: e.target.value })} placeholder="Ex: 06 12 34 56 78" />
+                  </div>
+                  <div className="modal-field">
+                    <label>Numéro de chantier</label>
+                    <input value={form.numero_chantier || ''} aria-label="Numéro de chantier" onChange={(e) => setForm({ ...form, numero_chantier: e.target.value })} placeholder="Ex: CH-2025-001" />
+                  </div>
+                  <div className="modal-field">
+                    <label>Vendeur</label>
+                    <div className="conducteur-list">
+                      {vendeurs.map((v) => (
+                        <button key={v.id} type="button" className={`conducteur-choice ${Number(form.vendeurId) === v.id ? 'active-conducteur' : ''}`} onClick={() => setForm({ ...form, vendeurId: v.id })}>
+                          <span style={{ background: v.color }} /> {v.nom}
+                        </button>
+                      ))}
+                      {vendeurs.length === 0 && <span style={{ fontSize: 12, color: 'var(--muted)' }}>Aucun vendeur — ajoutez-en dans l'onglet Conducteur</span>}
+                    </div>
+                  </div>
+                  <div className="modal-field">
+                    <label>Type de chantier</label>
+                    <div className="conducteur-list">
+                      {typesChantier.map((t) => (
+                        <button key={t.id} type="button" className={`conducteur-choice ${Number(form.typeChantierId) === t.id ? 'active-conducteur' : ''}`} onClick={() => setForm({ ...form, typeChantierId: t.id })}>
+                          <span style={{ background: t.color }} /> {t.nom}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="modal-field">
+                    <label>Montant CA (€)</label>
+                    <input type="number" min="0" step="100" value={form.montant_devis || ''} aria-label="Montant CA" onChange={(e) => setForm({ ...form, montant_devis: e.target.value })} placeholder="Ex: 25000" />
+                  </div>
+                  <div className="modal-field">
                     <label>Palette</label>
                     <div className="personal-color-picker modern small">
                       {chantierColors.map((c) => {
@@ -295,33 +338,68 @@ export default function Modals({
                     <label>Détail chantier</label>
                     <input value={form.detail || ''} aria-label="Détail chantier" onChange={(e) => setForm({ ...form, detail: e.target.value })} />
                   </div>
-                  <div className="modal-field">
-                    <label>Notes</label>
-                    <textarea aria-label="Notes" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
-                  </div>
                 </>
               )}
               {modal.type === 'conducteur' && (
-                <div className="conducteurs-editor">
-                  {conducteurs.map((c, i) => (
-                    <div className="conducteur-edit-row" key={c.id}>
-                      <div className="color-picker-wrap">
-                        <input type="color" aria-label="Couleur du conducteur" value={c.color} onChange={(e) => setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, color: e.target.value } : x))} />
-                        <span className="color-swatch" style={{ background: c.color }} />
+                <>
+                  <h3 style={{ margin: '14px 0 8px', fontSize: 14, fontWeight: 800 }}>Conducteurs</h3>
+                  <div className="conducteurs-editor">
+                    {conducteurs.map((c, i) => (
+                      <div className="conducteur-edit-row" key={c.id}>
+                        <div className="color-picker-wrap">
+                          <input type="color" aria-label="Couleur du conducteur" value={c.color} onChange={(e) => setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, color: e.target.value } : x))} />
+                          <span className="color-swatch" style={{ background: c.color }} />
+                        </div>
+                        <input value={c.nom} aria-label="Nom du conducteur" onChange={(e) => setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, nom: e.target.value } : x))} />
+                        <button className="delete-conducteur" title="Supprimer ce conducteur" onClick={() => { if (window.confirm(`Supprimer ${c.nom} ?`)) setConducteurs((prev) => prev.filter((_, idx) => idx !== i)); }}>×</button>
                       </div>
-                      <input value={c.nom} aria-label="Nom du conducteur" onChange={(e) => setConducteurs((prev) => prev.map((x, idx) => idx === i ? { ...x, nom: e.target.value } : x))} />
-                      <button className="delete-conducteur" title="Supprimer ce conducteur" onClick={() => { if (window.confirm(`Supprimer ${c.nom} ?`)) setConducteurs((prev) => prev.filter((_, idx) => idx !== i)); }}>×</button>
-                    </div>
-                  ))}
-                  <button className="add-conducteur-btn" onClick={() => setConducteurs((prev) => [
-                    ...prev,
-                    {
-                      id: nextLocalId(),
-                      nom: `Conducteur ${prev.length + 1}`,
-                      color: conducteurColors[prev.length % conducteurColors.length] || conducteurColors[0] || '#2563eb',
-                    },
-                  ])}>+ Ajouter un conducteur</button>
-                </div>
+                    ))}
+                    <button className="add-conducteur-btn" onClick={() => setConducteurs((prev) => [
+                      ...prev,
+                      {
+                        id: nextLocalId(),
+                        nom: `Conducteur ${prev.length + 1}`,
+                        color: conducteurColors[prev.length % conducteurColors.length] || conducteurColors[0] || '#2563eb',
+                      },
+                    ])}>+ Ajouter un conducteur</button>
+                  </div>
+
+                  <h3 style={{ margin: '18px 0 8px', fontSize: 14, fontWeight: 800 }}>Vendeurs</h3>
+                  <div className="conducteurs-editor">
+                    {vendeurs.map((v, i) => (
+                      <div className="conducteur-edit-row" key={v.id}>
+                        <div className="color-picker-wrap">
+                          <input type="color" aria-label="Couleur du vendeur" value={v.color} onChange={(e) => setVendeurs((prev) => prev.map((x, idx) => idx === i ? { ...x, color: e.target.value } : x))} />
+                          <span className="color-swatch" style={{ background: v.color }} />
+                        </div>
+                        <input value={v.nom} aria-label="Nom du vendeur" onChange={(e) => setVendeurs((prev) => prev.map((x, idx) => idx === i ? { ...x, nom: e.target.value } : x))} />
+                        <button className="delete-conducteur" title="Supprimer ce vendeur" onClick={() => { if (window.confirm(`Supprimer ${v.nom} ?`)) setVendeurs((prev) => prev.filter((_, idx) => idx !== i)); }}>×</button>
+                      </div>
+                    ))}
+                    <button className="add-conducteur-btn" onClick={() => setVendeurs((prev) => [
+                      ...prev,
+                      { id: nextLocalId(), nom: `Vendeur ${prev.length + 1}`, color: '#2563eb' },
+                    ])}>+ Ajouter un vendeur</button>
+                  </div>
+
+                  <h3 style={{ margin: '18px 0 8px', fontSize: 14, fontWeight: 800 }}>Types de chantier</h3>
+                  <div className="conducteurs-editor">
+                    {typesChantier.map((t, i) => (
+                      <div className="conducteur-edit-row" key={t.id}>
+                        <div className="color-picker-wrap">
+                          <input type="color" aria-label="Couleur du type" value={t.color} onChange={(e) => setTypesChantier((prev) => prev.map((x, idx) => idx === i ? { ...x, color: e.target.value } : x))} />
+                          <span className="color-swatch" style={{ background: t.color }} />
+                        </div>
+                        <input value={t.nom} aria-label="Nom du type" onChange={(e) => setTypesChantier((prev) => prev.map((x, idx) => idx === i ? { ...x, nom: e.target.value } : x))} />
+                        <button className="delete-conducteur" title="Supprimer ce type" onClick={() => { if (window.confirm(`Supprimer ${t.nom} ?`)) setTypesChantier((prev) => prev.filter((_, idx) => idx !== i)); }}>×</button>
+                      </div>
+                    ))}
+                    <button className="add-conducteur-btn" onClick={() => setTypesChantier((prev) => [
+                      ...prev,
+                      { id: nextLocalId(), nom: `Type ${prev.length + 1}`, color: '#2563eb' },
+                    ])}>+ Ajouter un type</button>
+                  </div>
+                </>
               )}
             </div>
             <div className="modal-footer">

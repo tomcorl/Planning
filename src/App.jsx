@@ -7,6 +7,7 @@ const Modals = lazy(() => import('./Modals.jsx'));
 const LoginPage = lazy(() => import('./LoginPage.jsx'));
 const PasswordChangePage = lazy(() => import('./PasswordChangePage.jsx'));
 const PersonalPlanning = lazy(() => import('./PersonalPlanning.jsx'));
+const Dashboard = lazy(() => import('./Dashboard.jsx'));
 import PlanningGrid from './PlanningGrid.jsx';
 import MobilePlanning from './MobilePlanning.jsx';
 import { supabase } from './lib/supabase.js';
@@ -142,6 +143,9 @@ export default function App() {
   const [companies, setCompanies] = useState([]);
   const [teams, setTeams] = useState([]);
   const [conducteurs, setConducteurs] = useState([]);
+  const [vendeurs, setVendeurs] = useState([]);
+  const [typesChantier, setTypesChantier] = useState([]);
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [customFeries, setCustomFeries] = useState([]);
 
   const [ferieForm, setFerieForm] = useState({ nom: '', date: today });
@@ -377,11 +381,13 @@ export default function App() {
           conges: conges.map(c => ({ ...c, company_id: c.companyId || (teamById.get(c.equipe)?.companyId) })),
           equipes: teams,
           conducteurs,
+          vendeurs,
+          typesChantier,
           customFeries,
           chantierColors,
           conducteurColors,
         });
-        // Update conducteur IDs from DB response (new rows get real IDs)
+        // Update conducteur/vendeur/type IDs from DB response (new rows get real IDs)
         if (result?.conducteurs) {
           const nomToId = new Map(result.conducteurs.map(r => [r.nom, r.id]));
           setConducteurs(prev => {
@@ -393,6 +399,37 @@ export default function App() {
                 return { ...c, id: dbId };
               }
               return c;
+            });
+            return changed ? updated : prev;
+          });
+        }
+        if (result?.vendeurs) {
+          const nomToId = new Map(result.vendeurs.map(r => [r.nom, r.id]));
+          setVendeurs(prev => {
+            let changed = false;
+            const updated = prev.map(v => {
+              const dbId = nomToId.get(v.nom);
+              if (dbId && v.id !== dbId) {
+                changed = true;
+                return { ...v, id: dbId };
+              }
+              return v;
+            });
+            return changed ? updated : prev;
+          });
+        }
+        if (result?.types_chantier || result?.typesChantier) {
+          const arr = result.types_chantier || result.typesChantier;
+          const nomToId = new Map(arr.map(r => [r.nom, r.id]));
+          setTypesChantier(prev => {
+            let changed = false;
+            const updated = prev.map(t => {
+              const dbId = nomToId.get(t.nom);
+              if (dbId && t.id !== dbId) {
+                changed = true;
+                return { ...t, id: dbId };
+              }
+              return t;
             });
             return changed ? updated : prev;
           });
@@ -424,7 +461,7 @@ export default function App() {
     }, 800);
     saveTimerRef.current = timer;
     return () => { clearTimeout(timer); saveTimerRef.current = null; };
-  }, [chantiers, conges, teams, conducteurs, customFeries, chantierColors, conducteurColors, session, companies]);
+  }, [chantiers, conges, teams, conducteurs, vendeurs, typesChantier, customFeries, chantierColors, conducteurColors, session, companies]);
 
   // ── Realtime subscription ──
   useEffect(() => {
@@ -477,6 +514,8 @@ export default function App() {
       setCompanies(allData.companies);
       setTeams(allData.equipes || []);
       setConducteurs(allData.conducteurs || []);
+      setVendeurs(allData.vendeurs || []);
+      setTypesChantier(allData.typesChantier || []);
       setChantiers(allData.chantiers || []);
       setConges(allData.conges || []);
       setCustomFeries(allData.customFeries || []);
@@ -553,6 +592,8 @@ export default function App() {
             conges: allData.conges.map(c => ({ ...c, company_id: c.company_id || c.companyId })),
             equipes: teams,
             conducteurs: allData.conducteurs,
+            vendeurs: allData.vendeurs || [],
+            typesChantier: allData.typesChantier || [],
             customFeries: allData.customFeries,
             chantierColors: allData.companies[0]?.chantier_colors || [],
             conducteurColors: allData.companies[0]?.conducteur_colors || [],
@@ -566,6 +607,8 @@ export default function App() {
 
       setTeams(teams);
       setConducteurs(allData.conducteurs);
+      setVendeurs(allData.vendeurs || []);
+      setTypesChantier(allData.typesChantier || []);
       setChantiers(allData.chantiers);
       setConges(allData.conges);
       setCustomFeries(allData.customFeries);
@@ -783,6 +826,8 @@ export default function App() {
   const congesRef = useRef(conges);
   const teamsRef = useRef(teams);
   const conducteursRef = useRef(conducteurs);
+  const vendeursRef = useRef(vendeurs);
+  const typesChantierRef = useRef(typesChantier);
   const customFeriesRef = useRef(customFeries);
 
   useEffect(() => {
@@ -790,12 +835,14 @@ export default function App() {
     congesRef.current = conges;
     teamsRef.current = teams;
     conducteursRef.current = conducteurs;
+    vendeursRef.current = vendeurs;
+    typesChantierRef.current = typesChantier;
     customFeriesRef.current = customFeries;
     keyRef.current = { selectedItem, modalOpen: modal.open, clipboard, canEdit };
   });
 
   function snapshot() {
-    return { chantiers: chantiersRef.current, conges: congesRef.current, teams: teamsRef.current, conducteurs: conducteursRef.current, customFeries: customFeriesRef.current };
+    return { chantiers: chantiersRef.current, conges: congesRef.current, teams: teamsRef.current, conducteurs: conducteursRef.current, vendeurs: vendeursRef.current, typesChantier: typesChantierRef.current, customFeries: customFeriesRef.current };
   }
 
   function restore(s) {
@@ -804,6 +851,8 @@ export default function App() {
     if (current.conges !== s.conges) setConges(s.conges);
     if (current.teams !== s.teams) setTeams(s.teams);
     if (current.conducteurs !== s.conducteurs) setConducteurs(s.conducteurs);
+    if (current.vendeurs !== s.vendeurs) setVendeurs(s.vendeurs);
+    if (current.typesChantier !== s.typesChantier) setTypesChantier(s.typesChantier);
     if (current.customFeries !== s.customFeries) setCustomFeries(s.customFeries);
   }
 
@@ -1083,6 +1132,13 @@ export default function App() {
       color: CHANTIER_COLORS[1],
       detail: '',
       note: '',
+      client_nom: '',
+      client_adresse: '',
+      client_telephone: '',
+      numero_chantier: '',
+      vendeurId: vendeurs[0]?.id || 0,
+      typeChantierId: typesChantier[0]?.id || 0,
+      montant_devis: 0,
       termine: false,
       linked: false,
       force_aout: false,
@@ -1148,6 +1204,13 @@ export default function App() {
           termine: !!form.termine,
           linked: !!form.linked,
           force_aout: !!form.force_aout,
+          client_nom: form.client_nom || '',
+          client_adresse: form.client_adresse || '',
+          client_telephone: form.client_telephone || '',
+          numero_chantier: form.numero_chantier || '',
+          vendeurId: Number(form.vendeurId) || 0,
+          typeChantierId: Number(form.typeChantierId) || 0,
+          montant_devis: Number(form.montant_devis) || 0,
         };
 
         setChantiers((prev) =>
@@ -1576,6 +1639,13 @@ export default function App() {
       color: CHANTIER_COLORS[1],
       detail: '',
       note: '',
+      client_nom: '',
+      client_adresse: '',
+      client_telephone: '',
+      numero_chantier: '',
+      vendeurId: vendeurs[0]?.id || 0,
+      typeChantierId: typesChantier[0]?.id || 0,
+      montant_devis: 0,
       termine: false,
       linked: false,
     });
@@ -1933,6 +2003,14 @@ export default function App() {
                 Utilisateurs
               </button>
             )}
+            {isAdmin && (
+              <button
+                className={isDashboardOpen ? 'active-nav' : ''}
+                onClick={() => setIsDashboardOpen(true)}
+              >
+                Dashboard
+              </button>
+            )}
           </div>
 
           {activePage === 'planning' && canEdit && (
@@ -2099,6 +2177,8 @@ export default function App() {
           ferieForm={ferieForm} setFerieForm={setFerieForm}
           customFeries={customFeries} setCustomFeries={setCustomFeries}
           conducteurs={conducteurs} setConducteurs={setConducteurs}
+          vendeurs={vendeurs} setVendeurs={setVendeurs}
+          typesChantier={typesChantier} setTypesChantier={setTypesChantier}
           contextMenu={contextMenu} setContextMenu={setContextMenu}
           clipboard={clipboard} setClipboard={setClipboard}
           chantiers={chantiers} conges={conges}
@@ -2111,6 +2191,17 @@ export default function App() {
           commit={commit}
         />
         </>
+      )}
+      {isDashboardOpen && isAdmin && (
+        <Suspense fallback={null}>
+          <Dashboard
+            chantiers={chantiers}
+            vendeurs={vendeurs}
+            conducteurs={conducteurs}
+            typesChantier={typesChantier}
+            onClose={() => setIsDashboardOpen(false)}
+          />
+        </Suspense>
       )}
       </Suspense>
       </main>
