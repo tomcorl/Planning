@@ -239,14 +239,6 @@ button:active {
 .grid-row {
   display: flex;
   flex-shrink: 0;
-  contain: layout style;
-  content-visibility: auto;
-  contain-intrinsic-size: 0 56px;
-}
-
-.grid-row.company-header-row,
-.grid-row:has(.separator-row) {
-  content-visibility: visible;
 }
 
 .grid-row.company-header-row {
