@@ -2938,10 +2938,10 @@ button:active {
   flex-shrink: 0;
 }
 
-.kpi-green-bg { background: rgba(22, 163, 74, 0.12); color: var(--green); }
-.kpi-blue-bg { background: rgba(37, 99, 235, 0.12); color: #2563eb; }
-.kpi-amber-bg { background: rgba(234, 179, 8, 0.16); color: #b45309; }
-.kpi-purple-bg { background: rgba(139, 92, 246, 0.14); color: #7c3aed; }
+.kpi-green-bg { background: linear-gradient(135deg, #16a34a, #4ade80); color: #fff; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.35); }
+.kpi-blue-bg { background: linear-gradient(135deg, #2563eb, #60a5fa); color: #fff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35); }
+.kpi-amber-bg { background: linear-gradient(135deg, #d97706, #fbbf24); color: #fff; box-shadow: 0 4px 12px rgba(217, 119, 6, 0.35); }
+.kpi-purple-bg { background: linear-gradient(135deg, #7c3aed, #a78bfa); color: #fff; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35); }
 
 .dashboard-kpi strong.kpi-small {
   font-size: 20px;
@@ -3063,14 +3063,20 @@ button:active {
 .dashboard-kpi {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 16px 18px;
+  border-radius: 16px;
+  padding: 18px;
   box-shadow: 0 2px 10px var(--shadow);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 4px;
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+}
+
+.dashboard-kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px var(--shadow-md);
 }
 
 .dashboard-kpi span {
@@ -3103,9 +3109,14 @@ button:active {
 .dashboard-card {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 16px 18px;
+  border-radius: 16px;
+  padding: 18px;
   box-shadow: 0 2px 10px var(--shadow);
+  transition: box-shadow 0.15s ease-out;
+}
+
+.dashboard-card:hover {
+  box-shadow: 0 8px 24px var(--shadow-md);
 }
 
 .dashboard-card-head {
@@ -3153,7 +3164,23 @@ button:active {
 }
 
 .dashboard-table-scroll {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 420px;
+}
+
+.dashboard-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  z-index: 2;
+}
+
+.dashboard-table tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+.dashboard-table tbody tr {
+  transition: background 0.1s ease-out;
 }
 
 .dashboard-table {

@@ -153,14 +153,14 @@ function ChartCard({ icon, title, countLabel, data, color, emptyText }) {
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--line-soft)" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} angle={-18} textAnchor="end" height={60} />
-            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={52} />
+            <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} angle={-18} textAnchor="end" height={60} tickLine={false} axisLine={{ stroke: 'var(--line)' }} />
+            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={52} tickLine={false} axisLine={false} />
             <Tooltip
               cursor={{ fill: 'rgba(0,0,0,0.04)' }}
-              formatter={(v, _name, props) => [`${euro(v)} (${props?.payload?.count ?? 0} chantier(s))`, 'CA réalisé']}
-              contentStyle={{ borderRadius: 10, border: '1px solid var(--line)' }}
+              formatter={(v) => [euro(v), 'CA']}
+              contentStyle={{ borderRadius: 12, border: '1px solid var(--line)', boxShadow: '0 8px 24px var(--shadow-md)' }}
             />
-            <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={32}>
+            <Bar dataKey="value" radius={[8, 8, 8, 8]} barSize={26} background={{ fill: 'var(--surface-2)', radius: 8 }}>
               {data.map((entry, idx) => (
                 <Cell key={`${entry.name}-${idx}`} fill={color} />
               ))}
@@ -558,17 +558,17 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
               <span className="dashboard-pill">{byEquipe.length} équipe(s)</span>
             </div>
             {byEquipe.length > 0 && byEquipe.some((d) => d.value > 0 || d.count > 0) ? (
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={byEquipe} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line-soft)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} angle={-18} textAnchor="end" height={60} />
-                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={52} />
+              <ResponsiveContainer width="100%" height={Math.max(260, byEquipe.length * 44)}>
+                <BarChart data={byEquipe} layout="vertical" margin={{ top: 5, right: 16, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line-soft)" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={120} tickLine={false} />
                   <Tooltip
                     cursor={{ fill: 'rgba(0,0,0,0.04)' }}
                     formatter={(v, _name, props) => [`${euro(v)} (${props?.payload?.count ?? 0} chantier(s))`, 'CA réalisé']}
                     contentStyle={{ borderRadius: 10, border: '1px solid var(--line)' }}
                   />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={32}>
+                  <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={18} background={{ fill: 'var(--surface-2)', radius: 8 }}>
                     {byEquipe.map((entry, idx) => (
                       <Cell key={`${entry.name}-${idx}`} fill={CHART_COLORS.equipe} />
                     ))}
