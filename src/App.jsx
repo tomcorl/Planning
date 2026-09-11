@@ -2201,6 +2201,7 @@ export default function App() {
             conducteurs={conducteurs}
             typesChantier={typesChantier}
             equipes={teams}
+            companies={companies}
             onClose={() => setActivePage('planning')}
           />
         </Suspense>

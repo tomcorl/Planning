@@ -3230,3 +3230,48 @@ button:active {
   text-align: center;
   color: var(--muted);
 }
+
+.dashboard-filter-group {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.dashboard-group-title {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dashboard-btn-inline {
+  align-self: flex-end;
+}
+
+.dashboard-curve {
+  margin-bottom: 18px;
+}
+
+.pct-track {
+  height: 8px;
+  min-width: 120px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.pct-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 999px;
+}
+
+.dashboard-footnote {
+  padding: 10px 20px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12px;
+  color: var(--muted);
+}
