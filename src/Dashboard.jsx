@@ -147,11 +147,6 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
   );
   const avgCA = filtered.length ? Math.round(totalCA / filtered.length) : 0;
 
-  const topVendeur = useMemo(() => {
-    const byV = groupCA(filtered, (c) => c.vendeurId || 0, (k) => vendeurMap.get(k) || (k === 0 ? 'Non assigné' : `#${k}`));
-    return byV.length ? byV[0] : null;
-  }, [filtered, vendeurMap]);
-
   const byVendeur = useMemo(
     () => groupCA(filtered, (c) => c.vendeurId || 0, (k) => vendeurMap.get(k) || (k === 0 ? 'Non assigné' : `#${k}`)),
     [filtered, vendeurMap]
@@ -263,11 +258,6 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
             <div className="kpi-top"><span className="kpi-ico kpi-amber-bg">⌀</span><span>CA moyen / chantier</span></div>
             <strong>{euro(avgCA)}</strong>
             <small>Période {frDate(start)} → {frDate(end)}</small>
-          </div>
-          <div className="dashboard-kpi">
-            <div className="kpi-top"><span className="kpi-ico kpi-purple-bg">★</span><span>Top vendeur</span></div>
-            <strong className="kpi-small">{topVendeur ? topVendeur.name : '-'}</strong>
-            <small>{topVendeur ? euro(topVendeur.value) : 'Aucune donnée'}</small>
           </div>
         </div>
 

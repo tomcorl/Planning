@@ -939,6 +939,13 @@ button:active {
   display: block;
 }
 
+/* La bulle doit passer devant les lignes du dessous : le parent .bloc
+   crée un contexte d'empilement (z-index: 2), donc on soulève tout le
+   bloc survolé au-dessus des blocs des rangées suivantes */
+.bloc:has(.note-icon:hover) {
+  z-index: 99998 !important;
+}
+
 .link-icon {
   position: absolute;
   top: 2px;
@@ -3061,7 +3068,9 @@ button:active {
   box-shadow: 0 2px 10px var(--shadow);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
 }
 
 .dashboard-kpi span {
@@ -3102,14 +3111,19 @@ button:active {
 .dashboard-card-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 10px;
   margin-bottom: 12px;
+  text-align: center;
+  flex-wrap: wrap;
 }
 
 .dashboard-card-head h3 {
   margin: 0;
   font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .dashboard-pill {
@@ -3158,11 +3172,21 @@ button:active {
   border-bottom: 1px solid var(--line);
   font-weight: 800;
   white-space: nowrap;
+  text-align: center;
+}
+
+.dashboard-table th:nth-child(2),
+.dashboard-table td:nth-child(2),
+.dashboard-table th:nth-child(4),
+.dashboard-table td:nth-child(4) {
+  text-align: left;
 }
 
 .dashboard-table td {
   padding: 10px 14px;
   border-bottom: 1px solid var(--line-soft);
+  text-align: center;
+  vertical-align: middle;
 }
 
 .dashboard-table tbody tr:hover {
