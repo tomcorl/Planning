@@ -30,14 +30,13 @@ INSERT INTO vendeurs (nom, color) VALUES
 ON CONFLICT (nom) DO NOTHING;
 
 INSERT INTO types_chantier (nom, color) VALUES
-  ('Bâtiment agricole', '#16a34a'),
-  ('Bâtiment industriel', '#2563eb'),
-  ('Piscine', '#06b6d4'),
-  ('Dallage', '#eab308'),
-  ('Fondations', '#6b7280'),
-  ('Rénovation', '#f97316'),
-  ('Extension', '#7dd3fc'),
-  ('Autre', '#a78bfa')
+  ('Porc', '#f472b6'),
+  ('STEP', '#06b6d4'),
+  ('Stabule', '#15803d'),
+  ('Silo', '#eab308'),
+  ('Fosse', '#6b7280'),
+  ('Piscine', '#2563eb'),
+  ('Indust', '#f97316')
 ON CONFLICT (nom) DO NOTHING;
 
 -- 4. RLS (même politique que conducteurs : globale, lecture pour tous les authentifiés)

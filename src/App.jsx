@@ -2200,6 +2200,7 @@ export default function App() {
             vendeurs={vendeurs}
             conducteurs={conducteurs}
             typesChantier={typesChantier}
+            equipes={teams}
             onClose={() => setActivePage('planning')}
           />
         </Suspense>

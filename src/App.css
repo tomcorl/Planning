@@ -3209,6 +3209,22 @@ button:active {
   color: var(--muted);
 }
 
+.dashboard-table .tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+@media (min-width: 1100px) {
+  .dashboard-charts-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .dashboard-table-empty {
   padding: 24px;
   text-align: center;
