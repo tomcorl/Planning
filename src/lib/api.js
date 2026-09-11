@@ -63,7 +63,7 @@ export async function loadPlanningData() {
         supabase.from('vendeurs').select('*'),
         supabase.from('types_chantier').select('*'),
       ]);
-      console.error('[DIAG load] vendeurs:', vRes.data?.length ?? null, 'err:', vRes.error?.code, vRes.error?.message, '| types:', tRes.data?.length ?? null, 'err:', tRes.error?.code, tRes.error?.message);
+      console.debug('[load] vendeurs:', vRes.data?.length ?? null, 'types:', tRes.data?.length ?? null);
       if (!vRes.error && vRes.data) data.vendeurs = vRes.data;
       if (!tRes.error && tRes.data) data.types_chantier = tRes.data;
     } catch (e) { console.error('[DIAG load] exception', e?.message); }
@@ -390,7 +390,6 @@ export async function saveAllPlanningData(data) {
     };
     const retry = await supabase.rpc('save_all_planning_data', fallbackPayload);
     if (retry.error) { console.error('[DIAG save] retry 7params FAILED', retry.error.code, retry.error.message); throw retry.error; }
-    console.error('[DIAG save] retry 7params OK, push direct des nouveaux champs...');
     // Le save de base a réussi : on pousse les nouveaux champs + vendeurs/types
     // en direct (best effort, sans throw). Les ids temporaires (<=0) sont remappés
     // vers les vrais ids retournés par le RPC pour ne rien perdre sur les créations.
@@ -452,7 +451,7 @@ async function pushNewFieldsDirect(chantiers, vendeurs, typesChantier) {
       else ok++;
     }
   }
-  console.error(`[DIAG save] push direct: ${ok} ok, ${fail} echec, ${skipped} ignorés${firstErr ? ' | 1ere erreur: ' + firstErr : ''}`);
+  if (fail > 0) console.error(`[save] push direct: ${ok} ok, ${fail} echec, ${skipped} ignorés${firstErr ? ' | 1ere erreur: ' + firstErr : ''}`);
 }
 
 export async function upsertVendeurs(vendeurs) {
