@@ -80,10 +80,15 @@ const CellContent = React.memo(function CellContent({
             }}
             title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
           >
-            {isFirstSegment && <div className="resize-handle left" data-rs="left" />}
-            {chantier.note && isFirstSegment && (
-              <div className="note-icon">💬<div className="tooltip">{chantier.note}</div></div>
-            )}
+            {isFirstSegment && <div className="note-icon">💬<div className="tooltip">
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>{chantier.nom}</div>
+              {chantier.numero_chantier && <div><strong>N°:</strong> {chantier.numero_chantier}</div>}
+              {chantier.client_nom && <div><strong>Client:</strong> {chantier.client_nom}</div>}
+              {chantier.client_adresse && <div><strong>Adresse:</strong> {chantier.client_adresse}</div>}
+              {chantier.client_telephone && <div><strong>Tél:</strong> {chantier.client_telephone}</div>}
+              {chantier.montant_devis > 0 && <div><strong>CA:</strong> {Number(chantier.montant_devis).toLocaleString('fr-FR')} €</div>}
+              {chantier.detail && <div><strong>Détail:</strong> {chantier.detail}</div>}
+            </div></div>}
             {chantier.linked && cellWidth >= 22 && <div className="link-icon">🔗</div>}
             <div className="chantier-content">
               <div className="chantier-title-row">
