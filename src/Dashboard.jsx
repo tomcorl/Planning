@@ -14,9 +14,9 @@ function getExerciceForDate(d) {
   const year = date.getFullYear();
   const sept1 = new Date(year, 8, 1);
   if (date >= sept1) {
-    return { start: new Date(year, 8, 1), end: new Date(year + 1, 7, 31) };
+    return { start: new Date(year, 8, 1), end: new Date(year + 1, 7, 31), label: `${year} → ${year + 1}` };
   }
-  return { start: new Date(year - 1, 8, 1), end: new Date(year, 7, 31) };
+  return { start: new Date(year - 1, 8, 1), end: new Date(year, 7, 31), label: `${year - 1} → ${year}` };
 }
 
 function formatDateInput(d) {
@@ -31,6 +31,35 @@ function euro(v) {
   return `${Number(v || 0).toLocaleString('fr-FR')} €`;
 }
 
+function frDate(iso) {
+  if (!iso) return '-';
+  const [y, m, d] = String(iso).split(' ')[0].split('-');
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
+}
+
+// Fin estimée = start + (duree - 1) jours ouvrés (lun-ven, sans les fériés).
+// Approximation suffisante pour dire si un chantier est actif sur la période.
+function chantierEndDate(c) {
+  if (!c.start) return '2100-12-31';
+  const dur = Math.max(1, Number(c.duree) || 1);
+  const [y, m, d] = String(c.start).split(' ')[0].split('-').map(Number);
+  if (!y || !m || !d) return String(c.start).split(' ')[0];
+  const date = new Date(y, m - 1, d);
+  let counted = 1;
+  let guard = 0;
+  while (counted < dur && guard < 1200) {
+    date.setDate(date.getDate() + 1);
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) counted += 1;
+    guard += 1;
+  }
+  const yy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
 function groupCA(list, getKey, getNom) {
   const map = new Map();
   for (const c of list) {
@@ -43,12 +72,12 @@ function groupCA(list, getKey, getNom) {
     .sort((a, b) => b.value - a.value);
 }
 
-function ChartCard({ title, countLabel, data, color, emptyText }) {
+function ChartCard({ icon, title, countLabel, data, color, emptyText }) {
   const hasData = data.length > 0 && data.some((d) => d.value > 0);
   return (
     <div className="dashboard-card">
       <div className="dashboard-card-head">
-        <h3>{title}</h3>
+        <h3><span className="dashboard-card-ico">{icon}</span>{title}</h3>
         <span className="dashboard-pill">{countLabel}</span>
       </div>
       {hasData ? (
@@ -85,14 +114,21 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
   const [filterType, setFilterType] = useState('all');
 
   const vendeurMap = useMemo(() => new Map((vendeurs || []).map((v) => [v.id, v.nom])), [vendeurs]);
+  const vendeurColor = useMemo(() => new Map((vendeurs || []).map((v) => [v.id, v.color])), [vendeurs]);
   const conducteurMap = useMemo(() => new Map((conducteurs || []).map((c) => [c.id, c.nom])), [conducteurs]);
+  const conducteurColor = useMemo(() => new Map((conducteurs || []).map((c) => [c.id, c.color])), [conducteurs]);
   const typeMap = useMemo(() => new Map((typesChantier || []).map((t) => [t.id, t.nom])), [typesChantier]);
 
   const filtered = useMemo(() => {
     const s = start || '1900-01-01';
     const e = end || '2100-12-31';
     return (chantiers || []).filter((c) => {
-      if ((c.start || '') < s || (c.start || '') > e) return false;
+      const cs = String(c.start || '').split(' ')[0];
+      if (!cs) return false;
+      // chevauchement : compte aussi les chantiers déjà commencés avant le début
+      // mais encore en cours dessus (fin estimée >= début période)
+      const ce = chantierEndDate(c);
+      if (cs > e || ce < s) return false;
       if (filterVendeur !== 'all' && String(c.vendeurId ?? 0) !== String(filterVendeur)) return false;
       if (filterConducteur !== 'all' && String(c.conducteurId ?? 0) !== String(filterConducteur)) return false;
       if (filterType !== 'all' && String(c.typeChantierId ?? 0) !== String(filterType)) return false;
@@ -100,11 +136,21 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
     });
   }, [chantiers, start, end, filterVendeur, filterConducteur, filterType]);
 
+  const startedBefore = useMemo(() => {
+    const s = start || '1900-01-01';
+    return filtered.filter((c) => String(c.start || '').split(' ')[0] < s).length;
+  }, [filtered, start]);
+
   const totalCA = useMemo(
     () => filtered.reduce((sum, c) => sum + (Number(c.montant_devis) || 0), 0),
     [filtered]
   );
   const avgCA = filtered.length ? Math.round(totalCA / filtered.length) : 0;
+
+  const topVendeur = useMemo(() => {
+    const byV = groupCA(filtered, (c) => c.vendeurId || 0, (k) => vendeurMap.get(k) || (k === 0 ? 'Non assigné' : `#${k}`));
+    return byV.length ? byV[0] : null;
+  }, [filtered, vendeurMap]);
 
   const byVendeur = useMemo(
     () => groupCA(filtered, (c) => c.vendeurId || 0, (k) => vendeurMap.get(k) || (k === 0 ? 'Non assigné' : `#${k}`)),
@@ -139,18 +185,26 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
     setFilterType('all');
   }
 
+  const hasActiveFilters = filterVendeur !== 'all' || filterConducteur !== 'all' || filterType !== 'all';
+
   return (
     <div className="dashboard-page">
       <div className="dashboard-inner">
         <div className="dashboard-topbar">
           <div>
+            <div className="dashboard-eyebrow">Pilotage</div>
             <h1>Dashboard</h1>
-            <p>Chiffre d'affaires par période, vendeur, conducteur et type de chantier.</p>
+            <p>
+              Exercice {getExerciceForDate(new Date()).start.getFullYear()} → {getExerciceForDate(new Date()).end.getFullYear()}
+              {' '}· {filtered.length} chantier(s) actif(s) sur la période
+              {startedBefore > 0 && `, dont ${startedBefore} déjà en cours au ${frDate(start)}`}
+            </p>
           </div>
           <button type="button" className="dashboard-close" onClick={onClose}>× Fermer</button>
         </div>
 
         <div className="dashboard-filters">
+          <div className="dashboard-filters-title">Filtres</div>
           <label>
             <span>Début</span>
             <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
@@ -187,31 +241,39 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
             </select>
           </label>
           <div className="dashboard-filters-actions">
-            <button type="button" className="dashboard-btn ghost" onClick={clearFilters}>Réinitialiser</button>
+            {hasActiveFilters && (
+              <button type="button" className="dashboard-btn ghost" onClick={clearFilters}>Réinitialiser</button>
+            )}
             <button type="button" className="dashboard-btn primary" onClick={resetExercice}>Exercice 1 sept → 31 août</button>
           </div>
         </div>
 
         <div className="dashboard-kpis">
-          <div className="dashboard-kpi">
-            <span>CA total</span>
+          <div className="dashboard-kpi kpi-hero">
+            <div className="kpi-top"><span className="kpi-ico kpi-green-bg">€</span><span>CA total</span></div>
             <strong className="kpi-green">{euro(totalCA)}</strong>
-            <small>{filtered.length} chantier(s)</small>
+            <small>{filtered.length} chantier(s) · {startedBefore} en cours au début</small>
           </div>
           <div className="dashboard-kpi">
-            <span>CA moyen / chantier</span>
-            <strong>{euro(avgCA)}</strong>
-            <small>Période {start} → {end}</small>
-          </div>
-          <div className="dashboard-kpi">
-            <span>Chantiers filtrés</span>
+            <div className="kpi-top"><span className="kpi-ico kpi-blue-bg">🏗</span><span>Chantiers actifs</span></div>
             <strong>{filtered.length}</strong>
             <small>sur {(chantiers || []).length} au total</small>
+          </div>
+          <div className="dashboard-kpi">
+            <div className="kpi-top"><span className="kpi-ico kpi-amber-bg">⌀</span><span>CA moyen / chantier</span></div>
+            <strong>{euro(avgCA)}</strong>
+            <small>Période {frDate(start)} → {frDate(end)}</small>
+          </div>
+          <div className="dashboard-kpi">
+            <div className="kpi-top"><span className="kpi-ico kpi-purple-bg">★</span><span>Top vendeur</span></div>
+            <strong className="kpi-small">{topVendeur ? topVendeur.name : '-'}</strong>
+            <small>{topVendeur ? euro(topVendeur.value) : 'Aucune donnée'}</small>
           </div>
         </div>
 
         <div className="dashboard-charts">
           <ChartCard
+            icon="🤝"
             title="CA par vendeur"
             countLabel={`${byVendeur.length} vendeur(s)`}
             data={byVendeur}
@@ -219,6 +281,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
             emptyText="Aucune donnée vendeur sur cette période."
           />
           <ChartCard
+            icon="👷"
             title="CA par conducteur"
             countLabel={`${byConducteur.length} conducteur(s)`}
             data={byConducteur}
@@ -226,6 +289,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
             emptyText="Aucune donnée conducteur sur cette période."
           />
           <ChartCard
+            icon="🏠"
             title="CA par type de chantier"
             countLabel={`${byType.length} type(s)`}
             data={byType}
@@ -245,6 +309,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                 <tr>
                   <th>N°</th>
                   <th>Chantier</th>
+                  <th>Début</th>
                   <th>Client</th>
                   <th>Vendeur</th>
                   <th>Type</th>
@@ -254,16 +319,25 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
               </thead>
               <tbody>
                 {sortedTable.length === 0 ? (
-                  <tr><td colSpan={7} className="dashboard-table-empty">Aucun chantier dans cette période</td></tr>
+                  <tr><td colSpan={8} className="dashboard-table-empty">Aucun chantier actif sur cette période — élargis les dates ou réinitialise les filtres.</td></tr>
                 ) : (
                   sortedTable.map((c) => (
                     <tr key={c.id}>
                       <td className="mono">{c.numero_chantier || '-'}</td>
                       <td><strong>{c.nom}</strong></td>
+                      <td>{frDate(String(c.start || '').split(' ')[0])}</td>
                       <td>{c.client_nom || <span className="muted">-</span>}</td>
-                      <td>{vendeurMap.get(c.vendeurId) || <span className="muted">-</span>}</td>
+                      <td>
+                        {vendeurMap.get(c.vendeurId)
+                          ? <span className="tag" style={{ background: `${vendeurColor.get(c.vendeurId) || '#16a34a'}22`, borderColor: vendeurColor.get(c.vendeurId) || '#16a34a', color: vendeurColor.get(c.vendeurId) || '#16a34a' }}>{vendeurMap.get(c.vendeurId)}</span>
+                          : <span className="muted">-</span>}
+                      </td>
                       <td>{typeMap.get(c.typeChantierId) || <span className="muted">-</span>}</td>
-                      <td>{conducteurMap.get(c.conducteurId) || <span className="muted">-</span>}</td>
+                      <td>
+                        {conducteurMap.get(c.conducteurId)
+                          ? <span className="tag" style={{ background: `${conducteurColor.get(c.conducteurId) || '#2563eb'}22`, borderColor: conducteurColor.get(c.conducteurId) || '#2563eb', color: conducteurColor.get(c.conducteurId) || '#2563eb' }}>{conducteurMap.get(c.conducteurId)}</span>
+                          : <span className="muted">-</span>}
+                      </td>
                       <td className="num"><strong>{euro(c.montant_devis)}</strong></td>
                     </tr>
                   ))
