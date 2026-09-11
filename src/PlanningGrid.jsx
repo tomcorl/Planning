@@ -20,14 +20,20 @@ function isAugustClosure(dateStr) {
 }
 
 function getConducteur(conducteurs, id) {
-  return conducteurs.find((c) => c.id === Number(id));
+  return (conducteurs || []).find((c) => c.id === Number(id));
+}
+function getVendeur(vendeurs, id) {
+  return (vendeurs || []).find((v) => v.id === Number(id));
+}
+function getTypeChantier(typesChantier, id) {
+  return (typesChantier || []).find((t) => t.id === Number(id));
 }
 
 const CellContent = React.memo(function CellContent({
   baseClassName, isSelected, isResizePreview,
   segments, congeItems, dayIdx,
   cellWidth, blocH, blocT,
-  selectedItem, conducteurs, canEdit, resize,
+  selectedItem, conducteurs, vendeurs, typesChantier, canEdit, resize,
   cb, dayEq, dayDa, dayIdxMap,
 }) {
   const cellClassName = baseClassName
@@ -80,15 +86,26 @@ const CellContent = React.memo(function CellContent({
             }}
             title={`${chantier.nom}${chantier.detail ? ` — ${chantier.detail}` : ''} (${chantier.duree}j)`}
           >
-            {isFirstSegment && <div className="note-icon">💬<div className="tooltip">
-              <div style={{ fontWeight: 800, marginBottom: 6 }}>{chantier.nom}</div>
-              {chantier.numero_chantier && <div><strong>N°:</strong> {chantier.numero_chantier}</div>}
-              {chantier.client_nom && <div><strong>Client:</strong> {chantier.client_nom}</div>}
-              {chantier.client_adresse && <div><strong>Adresse:</strong> {chantier.client_adresse}</div>}
-              {chantier.client_telephone && <div><strong>Tél:</strong> {chantier.client_telephone}</div>}
-              {chantier.montant_devis > 0 && <div><strong>CA:</strong> {Number(chantier.montant_devis).toLocaleString('fr-FR')} €</div>}
-              {chantier.detail && <div><strong>Détail:</strong> {chantier.detail}</div>}
-            </div></div>}
+            {isFirstSegment && (() => {
+              const vendeur = getVendeur(vendeurs, chantier.vendeurId);
+              const typeChantier = getTypeChantier(typesChantier, chantier.typeChantierId);
+              const hasInfo = chantier.numero_chantier || chantier.client_nom || chantier.client_adresse || chantier.client_telephone || vendeur || typeChantier || conducteur || Number(chantier.montant_devis) > 0 || chantier.detail;
+              if (!hasInfo) return null;
+              return (
+                <div className="note-icon">💬<div className="tooltip">
+                  <div style={{ fontWeight: 800, marginBottom: 6 }}>{chantier.nom}</div>
+                  {chantier.numero_chantier && <div><strong>N°:</strong> {chantier.numero_chantier}</div>}
+                  {chantier.client_nom && <div><strong>Client:</strong> {chantier.client_nom}</div>}
+                  {chantier.client_adresse && <div><strong>Adresse:</strong> {chantier.client_adresse}</div>}
+                  {chantier.client_telephone && <div><strong>Tél:</strong> {chantier.client_telephone}</div>}
+                  {vendeur && <div><strong>Vendeur:</strong> {vendeur.nom}</div>}
+                  {typeChantier && <div><strong>Type:</strong> {typeChantier.nom}</div>}
+                  {conducteur && <div><strong>Conducteur:</strong> {conducteur.nom}</div>}
+                  {Number(chantier.montant_devis) > 0 && <div><strong>CA:</strong> {Number(chantier.montant_devis).toLocaleString('fr-FR')} €</div>}
+                  {chantier.detail && <div><strong>Détail:</strong> {chantier.detail}</div>}
+                </div></div>
+              );
+            })()}
             {chantier.linked && cellWidth >= 22 && <div className="link-icon">🔗</div>}
             <div className="chantier-content">
               <div className="chantier-title-row">
@@ -150,6 +167,8 @@ const CellContent = React.memo(function CellContent({
   if (prev.canEdit !== next.canEdit) return false;
   if (prev.segments !== next.segments || prev.congeItems !== next.congeItems) return false;
   if (prev.conducteurs !== next.conducteurs) return false;
+  if (prev.vendeurs !== next.vendeurs) return false;
+  if (prev.typesChantier !== next.typesChantier) return false;
   if (prev.dayIdxMap !== next.dayIdxMap) return false;
 
   const ps = prev.selectedItem, ns = next.selectedItem;
@@ -169,6 +188,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
   chantiersParCellule,
   congeSegments,
   conducteurs,
+  vendeurs,
+  typesChantier,
   selectedItem,
   selection,
   cellWidth,
@@ -443,15 +464,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
         e.preventDefault();
         cb.handleContextMenu(e, 'conge', id);
         return;
-      }
-    }
-
-    if (noteIcon && type === 'mouseover') {
-      const rect = noteIcon.getBoundingClientRect();
-      const tip = noteIcon.querySelector('.tooltip');
-      if (tip) {
-        tip.style.left = (rect.left - 260) + 'px';
-        tip.style.top = (rect.top - 10) + 'px';
       }
     }
 
@@ -761,6 +773,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           blocT={blocT}
                           selectedItem={selectedItem}
                           conducteurs={conducteurs}
+                          vendeurs={vendeurs}
+                          typesChantier={typesChantier}
                           canEdit={canEdit}
                           resize={resize}
                           cb={cb}

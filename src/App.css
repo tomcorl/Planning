@@ -891,29 +891,48 @@ button:active {
 
 .tooltip {
   display: none;
-  position: fixed;
-  width: 320px;
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300px;
+  max-width: 80vw;
   background: var(--surface);
   color: var(--text);
-  padding: 16px 18px;
+  padding: 14px 16px;
   border-radius: 14px;
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1.5;
   box-shadow: 0 12px 36px var(--shadow-md);
   border: 1px solid var(--line);
   z-index: 99999;
   white-space: pre-wrap;
+  pointer-events: none;
+  text-align: left;
+  font-weight: 400;
 }
 
 .tooltip::before {
-  content: 'Note chantier';
+  content: 'Infos chantier';
   display: block;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
   margin-bottom: 6px;
+}
+
+.tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 8px;
+  border-style: solid;
+  border-color: var(--surface) transparent transparent transparent;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.08));
 }
 
 .note-icon:hover .tooltip {
@@ -2840,3 +2859,268 @@ button:active {
   box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
 }
 .personal-modal-btn.primary:hover { background: var(--green-dark); }
+
+/* ═══════════════════════════════════════════════
+   DASHBOARD
+   ═══════════════════════════════════════════════ */
+
+.dashboard-page {
+  height: calc(100vh - 66px);
+  overflow: auto;
+  padding: 28px;
+  background: var(--bg);
+}
+
+.dashboard-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.dashboard-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.dashboard-topbar h1 {
+  margin: 0;
+  font-size: 34px;
+}
+
+.dashboard-topbar p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.dashboard-close {
+  padding: 9px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dashboard-filters {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 2px 10px var(--shadow);
+}
+
+.dashboard-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-filters input,
+.dashboard-filters select {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: none;
+  min-width: 140px;
+}
+
+.dashboard-filters input:focus,
+.dashboard-filters select:focus {
+  border-color: var(--green);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+}
+
+.dashboard-filters-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.dashboard-btn {
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--line);
+}
+
+.dashboard-btn.ghost {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.dashboard-btn.primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+.dashboard-btn.primary:hover { background: var(--green-dark); }
+
+.dashboard-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.dashboard-kpi {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 2px 10px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dashboard-kpi span {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dashboard-kpi strong {
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.dashboard-kpi strong.kpi-green { color: var(--green); }
+
+.dashboard-kpi small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dashboard-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.dashboard-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 2px 10px var(--shadow);
+}
+
+.dashboard-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dashboard-card-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.dashboard-pill {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.dashboard-empty {
+  padding: 48px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.dashboard-table-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px var(--shadow);
+  margin-bottom: 12px;
+}
+
+.dashboard-table-scroll {
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dashboard-table thead tr {
+  background: var(--surface-2);
+  text-align: left;
+}
+
+.dashboard-table th {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dashboard-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.dashboard-table tbody tr:hover {
+  background: var(--surface-2);
+}
+
+.dashboard-table th.num,
+.dashboard-table td.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dashboard-table td.mono {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dashboard-table .muted {
+  color: var(--muted);
+}
+
+.dashboard-table-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+}

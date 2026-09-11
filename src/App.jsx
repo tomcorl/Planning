@@ -145,7 +145,6 @@ export default function App() {
   const [conducteurs, setConducteurs] = useState([]);
   const [vendeurs, setVendeurs] = useState([]);
   const [typesChantier, setTypesChantier] = useState([]);
-  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [customFeries, setCustomFeries] = useState([]);
 
   const [ferieForm, setFerieForm] = useState({ nom: '', date: today });
@@ -2005,8 +2004,8 @@ export default function App() {
             )}
             {isAdmin && (
               <button
-                className={isDashboardOpen ? 'active-nav' : ''}
-                onClick={() => setIsDashboardOpen(true)}
+                className={activePage === 'dashboard' ? 'active-nav' : ''}
+                onClick={() => setActivePage('dashboard')}
               >
                 Dashboard
               </button>
@@ -2151,6 +2150,8 @@ export default function App() {
         conges={conges}
         congeSegments={congeSegmentsMap}
         conducteurs={conducteurs}
+        vendeurs={vendeurs}
+        typesChantier={typesChantier}
         selectedItem={selectedItem}
         selection={selection}
         cellWidth={cellWidth}
@@ -2192,14 +2193,14 @@ export default function App() {
         />
         </>
       )}
-      {isDashboardOpen && isAdmin && (
+      {activePage === 'dashboard' && isAdmin && (
         <Suspense fallback={null}>
           <Dashboard
             chantiers={chantiers}
             vendeurs={vendeurs}
             conducteurs={conducteurs}
             typesChantier={typesChantier}
-            onClose={() => setIsDashboardOpen(false)}
+            onClose={() => setActivePage('planning')}
           />
         </Suspense>
       )}

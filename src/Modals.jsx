@@ -250,19 +250,19 @@ export default function Modals({
                 <>
                   <div className="modal-field">
                     <label>Nom du client</label>
-                    <input value={form.client_nom || ''} aria-label="Nom du client" onChange={(e) => setForm({ ...form, client_nom: e.target.value })} placeholder="Ex: Dupont" />
+                    <input value={form.client_nom || ''} aria-label="Nom du client" onChange={(e) => setForm({ ...form, client_nom: e.target.value })} placeholder="" />
                   </div>
                   <div className="modal-field">
                     <label>Adresse</label>
-                    <input value={form.client_adresse || ''} aria-label="Adresse" onChange={(e) => setForm({ ...form, client_adresse: e.target.value })} placeholder="Ex: 12 rue des Lilas, 35000 Rennes" />
+                    <input value={form.client_adresse || ''} aria-label="Adresse" onChange={(e) => setForm({ ...form, client_adresse: e.target.value })} placeholder="" />
                   </div>
                   <div className="modal-field">
                     <label>Téléphone</label>
-                    <input type="tel" value={form.client_telephone || ''} aria-label="Téléphone" onChange={(e) => setForm({ ...form, client_telephone: e.target.value })} placeholder="Ex: 06 12 34 56 78" />
+                    <input type="tel" value={form.client_telephone || ''} aria-label="Téléphone" onChange={(e) => setForm({ ...form, client_telephone: e.target.value })} placeholder="" />
                   </div>
                   <div className="modal-field">
                     <label>Numéro de chantier</label>
-                    <input value={form.numero_chantier || ''} aria-label="Numéro de chantier" onChange={(e) => setForm({ ...form, numero_chantier: e.target.value })} placeholder="Ex: CH-2025-001" />
+                    <input value={form.numero_chantier || ''} aria-label="Numéro de chantier" onChange={(e) => setForm({ ...form, numero_chantier: e.target.value })} placeholder="" />
                   </div>
                   <div className="modal-field">
                     <label>Vendeur</label>
@@ -287,7 +287,7 @@ export default function Modals({
                   </div>
                   <div className="modal-field">
                     <label>Montant CA (€)</label>
-                    <input type="number" min="0" step="100" value={form.montant_devis || ''} aria-label="Montant CA" onChange={(e) => setForm({ ...form, montant_devis: e.target.value })} placeholder="Ex: 25000" />
+                    <input type="number" min="0" step="100" value={form.montant_devis || ''} aria-label="Montant CA" onChange={(e) => setForm({ ...form, montant_devis: e.target.value })} placeholder="" />
                   </div>
                   <div className="modal-field">
                     <label>Palette</label>
