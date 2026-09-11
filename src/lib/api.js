@@ -355,9 +355,11 @@ export async function saveAllPlanningData(data) {
   };
 
   let { data: result, error } = await supabase.rpc('save_all_planning_data', payload);
-  // Fallback si le backend n'a pas encore la migration (colonnes/vendeurs)
-  if (error && (error.code === 'PGRST204' || error.code === 'PGRST202' || /vendeur|typeChantier|client_nom|numero_chantier|montant_devis/i.test(error.message || ''))) {
-    console.warn('save_all_planning_data fallback sans nouveaux champs', error.message);
+  // Fallback si le backend n'a pas encore la migration RPC.
+  // Le RPC 7 params d'origine ne connaît pas les nouveaux champs : après le retry,
+  // on les pousse en écritures directes (les colonnes/tables existent déjà en base).
+  if (error && (error.code === 'PGRST204' || error.code === 'PGRST202' || /vendeur|typeChantier|client_nom|numero_chantier|montant_devis|save_all_planning_data/i.test(error.message || ''))) {
+    console.debug('save_all_planning_data: backend pas encore migré, fallback sans nouveaux champs');
     const fallbackRows = chantiers.map(c => ({
       id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
       company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
@@ -376,10 +378,64 @@ export async function saveAllPlanningData(data) {
     };
     const retry = await supabase.rpc('save_all_planning_data', fallbackPayload);
     if (retry.error) { console.error('save_all_planning_data retry failed', retry.error); throw retry.error; }
+    // Le save de base a réussi : on pousse les nouveaux champs + vendeurs/types
+    // en direct (best effort, sans throw). Les ids temporaires (<=0) sont remappés
+    // vers les vrais ids retournés par le RPC pour ne rien perdre sur les créations.
+    try {
+      const realByKey = new Map();
+      for (const r of (retry.data?.chantiers || [])) {
+        realByKey.set(`${r.company_id}|${r.equipe}|${r.start}|${r.nom}|${r.duree}`, r.id);
+      }
+      const withRealIds = chantiers.map(c => {
+        if (c.id > 0) return c;
+        const realId = realByKey.get(`${c.company_id}|${c.equipe}|${c.start}|${c.nom}|${c.duree}`);
+        return realId ? { ...c, id: realId } : c;
+      });
+      await pushNewFieldsDirect(withRealIds, vendeurs, typesChantier);
+    } catch {}
     return retry.data;
   }
   if (error) { console.error('save_all_planning_data RPC failed', error.message || error, error.details, error.hint); throw error; }
   return result;
+}
+
+// Pousse les nouveaux champs + listes vendeurs/types en écritures directes.
+// Utilisé par le fallback quand le RPC save_all 9 params n'existe pas encore en base.
+// Upsert par nom (nom UNIQUE), sans suppression : ne peut rien effacer.
+async function upsertLookupDirect(table, rows) {
+  for (const r of rows) {
+    if (!r.nom) continue;
+    const { data: existing, error: selErr } = await supabase.from(table).select('id,color').eq('nom', r.nom).maybeSingle();
+    if (selErr) continue;
+    if (existing) {
+      if (r.color && existing.color !== r.color) {
+        await supabase.from(table).update({ color: r.color }).eq('id', existing.id);
+      }
+    } else {
+      await supabase.from(table).insert({ nom: r.nom, color: r.color || '#2563eb' });
+    }
+  }
+}
+
+async function pushNewFieldsDirect(chantiers, vendeurs, typesChantier) {
+  if ((vendeurs || []).length) await upsertLookupDirect('vendeurs', vendeurs);
+  if ((typesChantier || []).length) await upsertLookupDirect('types_chantier', typesChantier);
+  for (const c of (chantiers || [])) {
+    if (!c.id || c.id <= 0) continue;
+    const patch = {};
+    if (c.client_nom) patch.client_nom = c.client_nom;
+    if (c.client_adresse) patch.client_adresse = c.client_adresse;
+    if (c.client_telephone) patch.client_telephone = c.client_telephone;
+    if (c.numero_chantier) patch.numero_chantier = c.numero_chantier;
+    if (c.vendeurId) patch.vendeurId = c.vendeurId;
+    if (c.typeChantierId) patch.typeChantierId = c.typeChantierId;
+    if (c.montant_devis) patch.montant_devis = c.montant_devis;
+    if (Object.keys(patch).length) {
+      const { error } = await supabase.from('chantiers').update(patch).eq('id', c.id);
+      // PGRST204 = colonne pas encore en base, on ignore (sera persisté après migration)
+      if (error && error.code !== 'PGRST204') console.debug('pushNewFieldsDirect chantiers', c.id, error.message);
+    }
+  }
 }
 
 export async function upsertVendeurs(vendeurs) {
