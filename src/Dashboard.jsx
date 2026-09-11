@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
   PieChart, Pie, Legend, AreaChart, Area,
@@ -184,6 +184,16 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
   const [filterType, setFilterType] = useState('all');
   const [filterEquipe, setFilterEquipe] = useState('all');
 
+  // Entreprise par défaut : Noree (la principale). Appliqué une seule fois
+  // à l'arrivée des données, sans écraser un choix manuel ensuite.
+  const defaultEntrepriseApplied = useRef(false);
+  useEffect(() => {
+    if (defaultEntrepriseApplied.current || !companies || !companies.length) return;
+    defaultEntrepriseApplied.current = true;
+    const noree = companies.find((c) => c.id === 'noree' || /norée|noree/i.test(c.nom || ''));
+    if (noree) setFilterEntreprise(String(noree.id));
+  }, [companies]);
+
   const vendeurMap = useMemo(() => new Map((vendeurs || []).map((v) => [v.id, v.nom])), [vendeurs]);
   const vendeurColor = useMemo(() => new Map((vendeurs || []).map((v) => [v.id, v.color])), [vendeurs]);
   const conducteurMap = useMemo(() => new Map((conducteurs || []).map((c) => [c.id, c.nom])), [conducteurs]);
@@ -248,9 +258,24 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
     () => groupCA(filtered, (c) => c.typeChantierId || 0, (k) => typeMap.get(k) || (k === 0 ? 'Non assigné' : `#${k}`)),
     [filtered, typeMap]
   );
+  // Équipes inconnues (id orphelin) → "Non assigné" (jamais de #id).
+  // Quand une entreprise est sélectionnée, seules ses équipes sont détaillées :
+  // les chantiers affectés à une équipe d'une autre entreprise vont dans
+  // "⇄ Autres entreprises" au lieu de polluer le classement.
+  const OUTSIDER = '⇄ Autres entreprises';
   const byEquipe = useMemo(
-    () => groupCA(filtered, (c) => c.equipe ?? 0, (k) => equipeMap.get(k) || (k === 0 ? 'Non assigné' : `#${k}`)),
-    [filtered, equipeMap]
+    () =>
+      groupCA(
+        filtered,
+        (c) => {
+          const id = Number(c.equipe ?? 0);
+          if (!id || !equipeMap.has(id)) return 0;
+          if (filterEntreprise !== 'all' && String(teamCompany.get(id) ?? '') !== String(filterEntreprise)) return OUTSIDER;
+          return id;
+        },
+        (k) => (k === 0 ? 'Non assigné' : k === OUTSIDER ? OUTSIDER : equipeMap.get(k) || 'Non assigné')
+      ),
+    [filtered, equipeMap, teamCompany, filterEntreprise]
   );
   const byCompany = useMemo(
     () => groupCA(filtered, (c) => companyOf(c) || '?', (k) => companyMap.get(k) || (k === '?' ? 'Non assigné' : String(k))),
@@ -449,6 +474,8 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
           </div>
         </div>
 
+        <div className="dashboard-section"><span>Évolution</span></div>
+
         <div className="dashboard-card dashboard-curve">
           <div className="dashboard-card-head">
             <h3><span className="dashboard-card-ico">📈</span>CA réalisé par mois</h3>
@@ -523,6 +550,8 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
             </table>
           </div>
         </div>
+
+        <div className="dashboard-section"><span>Analyses</span></div>
 
         <div className="dashboard-charts">
           <ChartCard
@@ -618,6 +647,8 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
           </div>
         </div>
 
+        <div className="dashboard-section"><span>Détail</span></div>
+
         <div className="dashboard-table-card">
           <div className="dashboard-card-head">
             <h3>CA et chantiers par équipe</h3>
@@ -698,7 +729,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                           ? <span className="tag" style={{ background: `${conducteurColor.get(c.conducteurId) || '#2563eb'}22`, borderColor: conducteurColor.get(c.conducteurId) || '#2563eb', color: conducteurColor.get(c.conducteurId) || '#2563eb' }}>{conducteurMap.get(c.conducteurId)}</span>
                           : <span className="muted">-</span>}
                       </td>
-                      <td>{equipeMap.get(c.equipe) || <span className="muted">-</span>}</td>
+                      <td>{equipeMap.get(Number(c.equipe)) ?? equipeMap.get(c.equipe) ?? <span className="muted">-</span>}</td>
                       <td className="num"><strong>{euro(c.montant_devis)}</strong></td>
                     </tr>
                   ))
