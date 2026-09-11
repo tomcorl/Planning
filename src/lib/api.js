@@ -55,7 +55,19 @@ export async function logout() {
 // ─── COMPANY DATA LOADING ──────────────────────────────
 
 export async function loadPlanningData() {
-  const { data, error } = await supabase.rpc('get_planning_data');
+  let { data, error } = await supabase.rpc('get_planning_data');
+  // Le RPC en prod ne renvoie pas encore vendeurs/types_chantier : on complète en direct.
+  if (!error && data && ((!data.vendeurs || data.vendeurs.length === 0) || (!data.types_chantier && !data.typesChantier))) {
+    try {
+      const [vRes, tRes] = await Promise.all([
+        supabase.from('vendeurs').select('*'),
+        supabase.from('types_chantier').select('*'),
+      ]);
+      console.error('[DIAG load] vendeurs:', vRes.data?.length ?? null, 'err:', vRes.error?.code, vRes.error?.message, '| types:', tRes.data?.length ?? null, 'err:', tRes.error?.code, tRes.error?.message);
+      if (!vRes.error && vRes.data) data.vendeurs = vRes.data;
+      if (!tRes.error && tRes.data) data.types_chantier = tRes.data;
+    } catch (e) { console.error('[DIAG load] exception', e?.message); }
+  }
   if (error) throw error;
   if (!data) return { companies: [], equipes: [], conducteurs: [], vendeurs: [], typesChantier: [], chantiers: [], conges: [], customFeries: [] };
 
@@ -377,7 +389,8 @@ export async function saveAllPlanningData(data) {
       p_conducteur_colors: conducteurColors,
     };
     const retry = await supabase.rpc('save_all_planning_data', fallbackPayload);
-    if (retry.error) { console.error('save_all_planning_data retry failed', retry.error); throw retry.error; }
+    if (retry.error) { console.error('[DIAG save] retry 7params FAILED', retry.error.code, retry.error.message); throw retry.error; }
+    console.error('[DIAG save] retry 7params OK, push direct des nouveaux champs...');
     // Le save de base a réussi : on pousse les nouveaux champs + vendeurs/types
     // en direct (best effort, sans throw). Les ids temporaires (<=0) sont remappés
     // vers les vrais ids retournés par le RPC pour ne rien perdre sur les créations.
@@ -420,8 +433,10 @@ async function upsertLookupDirect(table, rows) {
 async function pushNewFieldsDirect(chantiers, vendeurs, typesChantier) {
   if ((vendeurs || []).length) await upsertLookupDirect('vendeurs', vendeurs);
   if ((typesChantier || []).length) await upsertLookupDirect('types_chantier', typesChantier);
+  let ok = 0, fail = 0, skipped = 0;
+  let firstErr = null;
   for (const c of (chantiers || [])) {
-    if (!c.id || c.id <= 0) continue;
+    if (!c.id || c.id <= 0) { skipped++; continue; }
     const patch = {};
     if (c.client_nom) patch.client_nom = c.client_nom;
     if (c.client_adresse) patch.client_adresse = c.client_adresse;
@@ -432,10 +447,12 @@ async function pushNewFieldsDirect(chantiers, vendeurs, typesChantier) {
     if (c.montant_devis) patch.montant_devis = c.montant_devis;
     if (Object.keys(patch).length) {
       const { error } = await supabase.from('chantiers').update(patch).eq('id', c.id);
-      // PGRST204 = colonne pas encore en base, on ignore (sera persisté après migration)
-      if (error && error.code !== 'PGRST204') console.debug('pushNewFieldsDirect chantiers', c.id, error.message);
+      if (error && error.code === 'PGRST204') { skipped++; continue; }
+      if (error) { fail++; if (!firstErr) firstErr = `${error.code} ${error.message}`; }
+      else ok++;
     }
   }
+  console.error(`[DIAG save] push direct: ${ok} ok, ${fail} echec, ${skipped} ignorés${firstErr ? ' | 1ere erreur: ' + firstErr : ''}`);
 }
 
 export async function upsertVendeurs(vendeurs) {
