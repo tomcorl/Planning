@@ -406,7 +406,9 @@ export async function saveAllPlanningData(data) {
       return realId ? { ...c, id: realId } : c;
     });
     await pushNewFieldsDirect(withRealIds, vendeurs, typesChantier);
-  } catch {}
+  } catch (e) {
+    console.error('[save] push direct exception', e?.message || e);
+  }
 
   return result;
 }
@@ -450,6 +452,7 @@ async function pushNewFieldsDirect(chantiers, vendeurs, typesChantier) {
     }
   }
   if (fail > 0) console.error(`[save] push direct: ${ok} ok, ${fail} echec, ${skipped} ignorés${firstErr ? ' | 1ere erreur: ' + firstErr : ''}`);
+  if (ok > 0) console.debug(`[save] push direct: ${ok} chantier(s) mis à jour`);
 }
 
 export async function upsertVendeurs(vendeurs) {
