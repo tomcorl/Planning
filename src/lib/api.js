@@ -320,15 +320,6 @@ export async function updateUserProfile(userId, updates) {
 
 export async function saveAllPlanningData(data) {
   const { chantiers, conges, equipes, conducteurs, vendeurs = [], typesChantier = [], customFeries, chantierColors, conducteurColors } = data;
-  const chantierRows = chantiers.map(c => ({
-    id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
-    company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
-    nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
-    note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,
-    detail: c.detail || '', force_aout: c.force_aout ? 1 : 0,
-    client_nom: c.client_nom || '', client_adresse: c.client_adresse || '', client_telephone: c.client_telephone || '', numero_chantier: c.numero_chantier || '',
-    vendeurId: c.vendeurId || 0, typeChantierId: c.typeChantierId || 0, montant_devis: c.montant_devis || 0,
-  }));
   const congeRows = conges.map(c => ({
     id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
     company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
@@ -354,60 +345,44 @@ export async function saveAllPlanningData(data) {
     company_id: f.companyId, nom: f.nom, date: f.date,
   }));
 
+  // Le RPC en base ne connaît que la signature 7 params (sans vendeurs/types_chantier).
+  // On appelle directement cette signature pour éviter un 404 réseau inutile,
+  // puis on pousse les nouveaux champs + vendeurs/types en écritures directes.
+  const baseRows = chantiers.map(c => ({
+    id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
+    company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
+    nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
+    note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,
+    detail: c.detail || '', force_aout: c.force_aout ? 1 : 0,
+  }));
   const payload = {
-    p_chantiers: chantierRows,
+    p_chantiers: baseRows,
     p_conges: congeRows,
     p_equipes: equipeRows,
     p_conducteurs: conducteurRows,
-    p_vendeurs: vendeurRows,
-    p_types_chantier: typeRows,
     p_custom_feries: ferieRows,
     p_chantier_colors: chantierColors,
     p_conducteur_colors: conducteurColors,
   };
 
-  let { data: result, error } = await supabase.rpc('save_all_planning_data', payload);
-  // Fallback si le backend n'a pas encore la migration RPC.
-  // Le RPC 7 params d'origine ne connaît pas les nouveaux champs : après le retry,
-  // on les pousse en écritures directes (les colonnes/tables existent déjà en base).
-  if (error && (error.code === 'PGRST204' || error.code === 'PGRST202' || /vendeur|typeChantier|client_nom|numero_chantier|montant_devis|save_all_planning_data/i.test(error.message || ''))) {
-    console.debug('save_all_planning_data: backend pas encore migré, fallback sans nouveaux champs');
-    const fallbackRows = chantiers.map(c => ({
-      id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
-      company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
-      nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
-      note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,
-      detail: c.detail || '', force_aout: c.force_aout ? 1 : 0,
-    }));
-    const fallbackPayload = {
-      p_chantiers: fallbackRows,
-      p_conges: congeRows,
-      p_equipes: equipeRows,
-      p_conducteurs: conducteurRows,
-      p_custom_feries: ferieRows,
-      p_chantier_colors: chantierColors,
-      p_conducteur_colors: conducteurColors,
-    };
-    const retry = await supabase.rpc('save_all_planning_data', fallbackPayload);
-    if (retry.error) { console.error('[DIAG save] retry 7params FAILED', retry.error.code, retry.error.message); throw retry.error; }
-    // Le save de base a réussi : on pousse les nouveaux champs + vendeurs/types
-    // en direct (best effort, sans throw). Les ids temporaires (<=0) sont remappés
-    // vers les vrais ids retournés par le RPC pour ne rien perdre sur les créations.
-    try {
-      const realByKey = new Map();
-      for (const r of (retry.data?.chantiers || [])) {
-        realByKey.set(`${r.company_id}|${r.equipe}|${r.start}|${r.nom}|${r.duree}`, r.id);
-      }
-      const withRealIds = chantiers.map(c => {
-        if (c.id > 0) return c;
-        const realId = realByKey.get(`${c.company_id}|${c.equipe}|${c.start}|${c.nom}|${c.duree}`);
-        return realId ? { ...c, id: realId } : c;
-      });
-      await pushNewFieldsDirect(withRealIds, vendeurs, typesChantier);
-    } catch {}
-    return retry.data;
-  }
+  const { data: result, error } = await supabase.rpc('save_all_planning_data', payload);
   if (error) { console.error('save_all_planning_data RPC failed', error.message || error, error.details, error.hint); throw error; }
+
+  // Best effort : pousse vendeurs/types + champs client/montant en direct.
+  // Les ids temporaires (<=0) sont remappés vers les vrais ids retournés par le RPC.
+  try {
+    const realByKey = new Map();
+    for (const r of (result?.chantiers || [])) {
+      realByKey.set(`${r.company_id}|${r.equipe}|${r.start}|${r.nom}|${r.duree}`, r.id);
+    }
+    const withRealIds = chantiers.map(c => {
+      if (c.id > 0) return c;
+      const realId = realByKey.get(`${c.company_id}|${c.equipe}|${c.start}|${c.nom}|${c.duree}`);
+      return realId ? { ...c, id: realId } : c;
+    });
+    await pushNewFieldsDirect(withRealIds, vendeurs, typesChantier);
+  } catch {}
+
   return result;
 }
 
