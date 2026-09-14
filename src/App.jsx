@@ -165,6 +165,7 @@ export default function App() {
   });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterPos, setFilterPos] = useState({ top: 0, left: 0 });
+  const [chantierSearch, setChantierSearch] = useState('');
   const filterBtnRef = useRef(null);
   const selectionThrottle = useRef(null);
   const scrollThrottleRef = useRef(null);
@@ -1745,6 +1746,20 @@ export default function App() {
     });
   }, [deferredChantiers, filterConducteurIds, filterColors]);
 
+  const chantierMatches = useMemo(() => {
+    const q = chantierSearch.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (!q) return [];
+    const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const prefix = [], contains = [];
+    for (const c of chantiers) {
+      const n = norm(c.nom);
+      if (!n) continue;
+      if (n.startsWith(q)) prefix.push(c);
+      else if (n.includes(q)) contains.push(c);
+    }
+    return [...prefix, ...contains].slice(0, 8);
+  }, [chantiers, chantierSearch]);
+
   const congeSegmentsCacheRef = useRef(null);
   const congeSegmentsMap = useMemo(() => {
     const cache = congeSegmentsCacheRef.current;
@@ -1970,7 +1985,7 @@ export default function App() {
                 onClick={() => {
                   const rect = filterBtnRef.current?.getBoundingClientRect();
                   if (rect) setFilterPos({ top: rect.bottom + 4, left: rect.left });
-                  setFilterOpen((v) => !v);
+                  setFilterOpen((v) => { if (!v) setChantierSearch(''); return !v; });
                 }}
               >
                 {filterConducteurIds.length > 0 || filterColors.length > 0
@@ -2212,7 +2227,54 @@ export default function App() {
       <footer className="app-footer">Créé par Tom Corlay • v6.2-vitesse+</footer>
       {filterOpen && createPortal(
         <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
-          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setFilterOpen(false); }}>
+          <div style={{ padding: '6px 10px' }}>
+            <input
+              className="chantier-search-input"
+              value={chantierSearch}
+              onChange={(e) => setChantierSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && chantierMatches.length > 0) {
+                  const c = chantierMatches[0];
+                  jumpToDate(c.start);
+                  openEditChantier(c);
+                  setFilterOpen(false);
+                  setChantierSearch('');
+                }
+              }}
+              placeholder="Rechercher un chantier…"
+              autoFocus
+            />
+          </div>
+          {chantierMatches.length > 0 && (
+            <>
+              <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
+              <div style={{ padding: '4px 14px 2px', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>CHANTIERS</div>
+              {chantierMatches.map((c) => (
+                <div
+                  key={c.id}
+                  className="conducteur-filter-item"
+                  onClick={() => {
+                    jumpToDate(c.start);
+                    openEditChantier(c);
+                    setFilterOpen(false);
+                    setChantierSearch('');
+                  }}
+                  style={{ alignItems: 'center' }}
+                >
+                  <span className="filter-check" style={{ color: 'var(--muted)' }}>›</span>
+                  <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ fontWeight: 600 }}>{c.nom}</span>
+                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                      {c.start} • {teamById.get(c.equipe)?.nom || `Équipe #${c.equipe}`}
+                      {c.client_nom ? ` • ${c.client_nom}` : ''}
+                    </span>
+                  </span>
+                </div>
+              ))}
+              <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
+            </>
+          )}
+          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setChantierSearch(''); setFilterOpen(false); }}>
             <span className={!filterConducteurIds.length && !filterColors.length ? 'active' : ''}>●</span>
             Tout afficher
           </div>

@@ -656,6 +656,21 @@ button:active {
   font-weight: 700;
 }
 
+.chantier-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+.chantier-search-input:focus {
+  border-color: var(--green);
+}
+
 /* ═══════════════════════════════════════════════
    CELLS (grid body)
    ═══════════════════════════════════════════════ */
