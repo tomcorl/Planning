@@ -6,8 +6,12 @@ export default function LoginPage({
   onChange,
   onSubmit,
   loggingIn,
+  onResetUserPassword,
 }) {
   const [loaded, setLoaded] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetMsg, setResetMsg] = useState('');
+  const [resetErr, setResetErr] = useState('');
 
   useEffect(() => {
     setLoaded(true);
@@ -16,6 +20,27 @@ export default function LoginPage({
   const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit(e);
+  };
+
+  const handleReset = async () => {
+    const email = loginForm.email.trim();
+    if (!email) {
+      setResetErr('Saisissez votre email pour réinitialiser le mot de passe.');
+      setResetMsg('');
+      return;
+    }
+    if (!onResetUserPassword) return;
+    setResetting(true);
+    setResetErr('');
+    setResetMsg('');
+    try {
+      await onResetUserPassword(email);
+      setResetMsg('Un email de réinitialisation vient d\'être envoyé. Vérifiez votre boîte de réception.');
+    } catch {
+      setResetErr('Impossible d\'envoyer l\'email. Contactez votre administrateur.');
+    } finally {
+      setResetting(false);
+    }
   };
 
   return (
@@ -347,6 +372,29 @@ export default function LoginPage({
           .login-image { flex: 0.3; }
           .login-form-panel { flex: 1; }
         }
+
+        .reset-zone { margin-top: 16px; text-align: center; }
+        .reset-link {
+          background: none;
+          border: none;
+          padding: 0;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 13px;
+          font-weight: 600;
+          color: #16a34a;
+          cursor: pointer;
+          text-decoration: none;
+        }
+        .reset-link:hover { text-decoration: underline; }
+        .reset-link:disabled { opacity: 0.6; cursor: default; }
+        .reset-msg {
+          margin-bottom: 10px;
+          font-family: 'DM Sans', sans-serif;
+          font-size: 13px;
+          line-height: 1.4;
+        }
+        .reset-msg.reset-ok { color: #15803d; }
+        .reset-msg.reset-err { color: #b91c1c; }
       `}</style>
 
       {/* ── LEFT: Image side ── */}
@@ -408,6 +456,15 @@ export default function LoginPage({
             <button type="submit" className="submit-btn" disabled={loggingIn}>
               {loggingIn ? 'Connexion\u2026' : 'Se connecter'}
             </button>
+            {onResetUserPassword && (
+              <div className="reset-zone">
+                {resetErr && <div className="reset-msg reset-err">{resetErr}</div>}
+                {resetMsg && <div className="reset-msg reset-ok">{resetMsg}</div>}
+                <button type="button" className="reset-link" onClick={handleReset} disabled={resetting}>
+                  {resetting ? 'Envoi\u2026' : 'Mot de passe oublié ?'}
+                </button>
+              </div>
+            )}
           </form>
 
         </div>

@@ -1937,6 +1937,7 @@ export default function App() {
           loggingIn={loggingIn}
           onChange={setLoginForm}
           onSubmit={handleLogin}
+          onResetUserPassword={resetUserPassword}
         />
       </Suspense>
     );
