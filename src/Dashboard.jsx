@@ -345,6 +345,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
     }
     return Array.from(counts.values())
       .map((e, i) => ({ ...e, percent: totalCA ? Math.round((e.value / total) * 100) : 0, fill: e.color || PIE_FALLBACK[i % PIE_FALLBACK.length] }))
+      .filter((e) => e.value > 0)
       .sort((a, b) => b.value - a.value);
   }, [filtered, typeMap, typeColor, totalCA]);
 
@@ -630,32 +631,38 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
               <span className="dash-pill">% du CA</span>
             </div>
             {typeShare.length > 0 && totalCA > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={typeShare}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={64}
-                    outerRadius={98}
-                    paddingAngle={2}
-                    label={({ percent }) => (percent > 0.05 ? `${Math.round(percent * 100)} %` : '')}
-                    labelLine={false}
-                  >
-                    {typeShare.map((entry) => (
-                      <Cell key={entry.name} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(_v, _name, props) => [
-                      `${props?.payload?.count ?? 0} chantier(s) · ${props?.payload?.percent ?? 0} % · ${euro(props?.payload?.value)}`,
-                      props?.payload?.name ?? '',
-                    ]}
-                    contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)' }}
-                  />
-                  <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12, color: '#1a2e1a' }} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="dash-donut-wrap">
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={typeShare}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={64}
+                      outerRadius={98}
+                      paddingAngle={2}
+                      label={({ percent }) => (percent > 0.05 ? `${Math.round(percent * 100)} %` : '')}
+                      labelLine={false}
+                    >
+                      {typeShare.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(_v, _name, props) => [
+                        `${props?.payload?.percent ?? 0} % · ${props?.payload?.count ?? 0} chantier(s) · ${euro(props?.payload?.value)}`,
+                        props?.payload?.name ?? '',
+                      ]}
+                      contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)' }}
+                    />
+                    <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12, color: '#1a2e1a' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="dash-donut-center">
+                  <strong>100 %</strong>
+                  <span>{typeShare.length} type(s) · {euro(totalCA)}</span>
+                </div>
+              </div>
             ) : (
               <div className="dash-empty">Aucun CA sur cette période.</div>
             )}
