@@ -173,7 +173,7 @@ function ChartCard({ icon, title, countLabel, data, color, emptyText }) {
               formatter={(v) => [euro(v), 'CA']}
               contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)', fontSize: 13 }}
             />
-            <Bar dataKey="value" radius={[8, 8, 8, 8]} barSize={26} background={{ fill: 'var(--dash-surface-2)', radius: 8 }}>
+            <Bar dataKey="value" radius={[8, 8, 8, 8]} barSize={26} background={{ fill: 'var(--dash-surface-2)', radius: 8 }} animationDuration={800} animationEasing="ease-out">
               {data.map((entry, idx) => (
                 <Cell key={`${entry.name}-${idx}`} fill={color} />
               ))}
@@ -533,7 +533,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                   }}
                   contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)', fontSize: 13 }}
                 />
-                <Area type="monotone" dataKey="value" stroke={CHART_COLORS.curve} strokeWidth={2.4} fill="url(#caFill2)" dot={{ r: 2.5, strokeWidth: 0, fill: CHART_COLORS.curve }} activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }} />
+                <Area type="monotone" dataKey="value" stroke={CHART_COLORS.curve} strokeWidth={2.4} fill="url(#caFill2)" dot={{ r: 2.5, strokeWidth: 0, fill: CHART_COLORS.curve }} activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }} animationDuration={1100} animationEasing="ease-out" />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
@@ -610,7 +610,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                     formatter={(v, _name, props) => [`${euro(v)} (${props?.payload?.count ?? 0} chantier(s))`, 'CA réalisé']}
                     contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)' }}
                   />
-                  <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={18} background={{ fill: 'var(--dash-surface-2)', radius: 8 }}>
+                  <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={18} background={{ fill: 'var(--dash-surface-2)', radius: 8 }} animationDuration={800} animationEasing="ease-out">
                     {byEquipe.map((entry, idx) => (
                       <Cell key={`${entry.name}-${idx}`} fill={CHART_COLORS.equipe} />
                     ))}
@@ -641,8 +641,11 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                       innerRadius={64}
                       outerRadius={98}
                       paddingAngle={2}
-                      label={({ percent }) => (percent > 0.05 ? `${Math.round(percent * 100)} %` : '')}
+                      label={({ payload }) => (payload.percent > 5 ? `${payload.percent} %` : '')}
                       labelLine={false}
+                      animationBegin={0}
+                      animationDuration={900}
+                      animationEasing="ease-out"
                     >
                       {typeShare.map((entry) => (
                         <Cell key={entry.name} fill={entry.fill} />
