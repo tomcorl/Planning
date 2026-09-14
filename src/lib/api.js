@@ -4,6 +4,30 @@ import { supabase } from './supabase.js';
 
 const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
 
+// Snapshot des nouveaux champs (client_*, vendeurId, typeChantierId, montant_devis)
+// au dernier chargement/save réussi. Permet de n'écrire que ce qui a réellement
+// changé (y compris un champ vidé → '' ou 0) sans écritures no-op à chaque autosave.
+let lastNewFieldsByChantier = new Map();
+
+function pickNewFields(c) {
+  return {
+    client_nom: c.client_nom ?? '',
+    client_adresse: c.client_adresse ?? '',
+    client_telephone: c.client_telephone ?? '',
+    numero_chantier: c.numero_chantier ?? '',
+    vendeurId: Number(c.vendeurId) || 0,
+    typeChantierId: Number(c.typeChantierId) || 0,
+    montant_devis: Number(c.montant_devis) || 0,
+  };
+}
+
+function refreshChantierFieldSnapshot(chantiers) {
+  for (const c of chantiers || []) {
+    if (!Number.isInteger(c.id) || c.id <= 0) continue;
+    lastNewFieldsByChantier.set(c.id, pickNewFields(c));
+  }
+}
+
 export async function login(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
@@ -80,6 +104,7 @@ export async function loadPlanningData() {
       return true;
     })
     .map(normalizeChantier);
+  refreshChantierFieldSnapshot(dedupedChantiers);
 
   const seenConge = new Set();
   const dedupedConges = (data.conges || []).filter((c) => {
@@ -411,19 +436,17 @@ async function pushNewFieldsDirect(chantiers, vendeurs, typesChantier) {
   let firstErr = null;
   for (const c of (chantiers || [])) {
     if (!c.id || c.id <= 0) { skipped++; continue; }
+    const fields = pickNewFields(c);
+    const prev = lastNewFieldsByChantier.get(c.id) || pickNewFields({});
     const patch = {};
-    if (c.client_nom) patch.client_nom = c.client_nom;
-    if (c.client_adresse) patch.client_adresse = c.client_adresse;
-    if (c.client_telephone) patch.client_telephone = c.client_telephone;
-    if (c.numero_chantier) patch.numero_chantier = c.numero_chantier;
-    if (c.vendeurId) patch.vendeurId = c.vendeurId;
-    if (c.typeChantierId) patch.typeChantierId = c.typeChantierId;
-    if (c.montant_devis) patch.montant_devis = c.montant_devis;
+    for (const k of Object.keys(fields)) {
+      if (fields[k] !== prev[k]) patch[k] = fields[k];
+    }
     if (Object.keys(patch).length) {
       const { error } = await supabase.from('chantiers').update(patch).eq('id', c.id);
       if (error && error.code === 'PGRST204') { skipped++; continue; }
       if (error) { fail++; if (!firstErr) firstErr = `${error.code} ${error.message}`; }
-      else ok++;
+      else { ok++; lastNewFieldsByChantier.set(c.id, fields); }
     }
   }
   if (fail > 0) console.error(`[save] push direct: ${ok} ok, ${fail} echec, ${skipped} ignorés${firstErr ? ' | 1ere erreur: ' + firstErr : ''}`);
