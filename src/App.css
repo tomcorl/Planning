@@ -1150,6 +1150,33 @@ button:active {
   margin-bottom: 4px;
 }
 
+.chantier-info-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.info-action-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.info-action-btn:hover {
+  background: rgba(22, 163, 74, 0.08);
+  border-color: var(--green);
+}
+.info-feedback {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+}
+
 .modal-field input,
 .modal-field select,
 .modal-field textarea {

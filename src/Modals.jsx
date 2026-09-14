@@ -1,3 +1,4 @@
+import { useState } from 'react';
 const CHANTIER_COLORS = [
   '#2563eb',
   '#93c5fd',
@@ -33,6 +34,30 @@ export default function Modals({
   saveModal, closeModal, deleteSelectedItem,
   pasteClipboard, addCustomFerie, nextLocalId, commit,
 }) {
+  const [infoFeedback, setInfoFeedback] = useState('');
+  const pickInfo = (f) => ({
+    client_nom: f.client_nom || '',
+    client_adresse: f.client_adresse || '',
+    client_telephone: f.client_telephone || '',
+    numero_chantier: f.numero_chantier || '',
+    vendeurId: Number(f.vendeurId) || 0,
+    typeChantierId: Number(f.typeChantierId) || 0,
+    montant_devis: Number(f.montant_devis) || 0,
+  });
+  const handleCopyInfo = () => {
+    localStorage.setItem('infoChantierClipboard', JSON.stringify(pickInfo(form)));
+    setInfoFeedback('Copié ✓');
+    setTimeout(() => setInfoFeedback(''), 1500);
+  };
+  const handlePasteInfo = () => {
+    const raw = localStorage.getItem('infoChantierClipboard');
+    if (!raw) { setInfoFeedback('Rien à coller'); setTimeout(() => setInfoFeedback(''), 1500); return; }
+    try {
+      setForm({ ...form, ...pickInfo(JSON.parse(raw)) });
+      setInfoFeedback('Collé ✓');
+      setTimeout(() => setInfoFeedback(''), 1500);
+    } catch { setInfoFeedback('Erreur'); setTimeout(() => setInfoFeedback(''), 1500); }
+  };
   return (
     <>
       {contextMenu && (
@@ -248,6 +273,11 @@ export default function Modals({
               )}
               {modal.type === 'chantier' && (
                 <>
+                  <div className="chantier-info-actions">
+                    <button type="button" className="info-action-btn" onClick={handleCopyInfo}>Copier les infos</button>
+                    <button type="button" className="info-action-btn" onClick={handlePasteInfo}>Coller les infos</button>
+                    {infoFeedback && <span className="info-feedback">{infoFeedback}</span>}
+                  </div>
                   <div className="modal-field">
                     <label>Nom du client</label>
                     <input value={form.client_nom || ''} aria-label="Nom du client" onChange={(e) => setForm({ ...form, client_nom: e.target.value })} placeholder="" />
