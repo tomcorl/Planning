@@ -625,30 +625,31 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
           <div className="dash-card">
             <div className="dash-card-head">
               <div className="dash-card-title">
-                <span className="dash-card-icon" style={{ background: '#f9731614', color: '#f97316', borderColor: '#f9731620' }}>◍</span>
+                <span className="dash-card-icon dash-card-icon--orange">◍</span>
                 <h3>Part des types vendus</h3>
               </div>
               <span className="dash-pill">% du CA</span>
             </div>
             {typeShare.length > 0 && totalCA > 0 ? (
               <div className="dash-donut-wrap">
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
                     <Pie
                       data={typeShare}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={64}
-                      outerRadius={98}
-                      paddingAngle={2}
-                      label={({ payload }) => (payload.percent > 5 ? `${payload.percent} %` : '')}
+                      innerRadius={70}
+                      outerRadius={105}
+                      paddingAngle={3}
+                      cornerRadius={6}
                       labelLine={false}
-                      animationBegin={0}
-                      animationDuration={900}
+                      label={false}
+                      animationBegin={200}
+                      animationDuration={1000}
                       animationEasing="ease-out"
                     >
                       {typeShare.map((entry) => (
-                        <Cell key={entry.name} fill={entry.fill} />
+                        <Cell key={entry.name} fill={entry.fill} stroke="rgba(255,255,255,0.7)" strokeWidth={2} />
                       ))}
                     </Pie>
                     <Tooltip
@@ -656,18 +657,28 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                         `${props?.payload?.percent ?? 0} % · ${props?.payload?.count ?? 0} chantier(s) · ${euro(props?.payload?.value)}`,
                         props?.payload?.name ?? '',
                       ]}
-                      contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)' }}
+                      contentStyle={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.6)', boxShadow: '0 12px 28px rgba(16,30,18,0.14)', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)' }}
                     />
-                    <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12, color: '#1a2e1a' }} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="dash-donut-center">
-                  <strong>100 %</strong>
-                  <span>{typeShare.length} type(s) · {euro(totalCA)}</span>
+                  <strong>{totalCA ? `${Math.round((typeShare[0]?.value || 0) / totalCA * 100)} %` : '0 %'}</strong>
+                  <span>Type principal : {typeShare[0]?.name || '-'}</span>
                 </div>
               </div>
             ) : (
               <div className="dash-empty">Aucun CA sur cette période.</div>
+            )}
+            {typeShare.length > 0 && (
+              <div className="dash-legend">
+                {typeShare.map((t) => (
+                  <div key={t.name} className="dash-legend-item">
+                    <span className="dash-legend-dot" style={{ background: t.fill }} />
+                    <span className="dash-legend-name">{t.name}</span>
+                    <span className="dash-legend-value">{t.percent} %</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
