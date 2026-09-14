@@ -8,11 +8,11 @@ const CHART_COLORS = {
   vendeur: '#16a34a',
   conducteur: '#2563eb',
   type: '#eab308',
-  equipe: '#8b5cf6',
+  equipe: '#7c3aed',
   curve: '#16a34a',
 };
 
-const PIE_FALLBACK = ['#16a34a', '#2563eb', '#eab308', '#8b5cf6', '#f97316', '#06b6d4', '#f472b6', '#6b7280'];
+const PIE_FALLBACK = ['#16a34a', '#2563eb', '#eab308', '#7c3aed', '#f97316', '#06b6d4', '#ec4899', '#6b7280'];
 
 function getExerciceForDate(d) {
   const date = d instanceof Date ? d : new Date(d);
@@ -56,7 +56,6 @@ function isoOf(date) {
   return `${y}-${m}-${d}`;
 }
 
-// Jours ouvrés (lun-ven) entre deux dates ISO incluses.
 function workingDaysInRange(a, b) {
   const d1 = parseISO(a);
   const d2 = parseISO(b);
@@ -73,8 +72,6 @@ function workingDaysInRange(a, b) {
   return n;
 }
 
-// Fin estimée = start + (duree - 1) jours ouvrés.
-// Approximation suffisante pour dire si un chantier est actif sur la période.
 function chantierEndDate(c) {
   if (!c.start) return '2100-12-31';
   const dur = Math.max(1, Number(c.duree) || 1);
@@ -92,8 +89,6 @@ function chantierEndDate(c) {
   return isoOf(date);
 }
 
-// CA réalisé d'un chantier sur [s, e] : montant réparti au prorata des jours
-// ouvrés (le plus juste quand un chantier chevauche les bornes de période).
 function realizedCA(c, s, e) {
   const montant = Number(c.montant_devis) || 0;
   if (!montant) return 0;
@@ -132,7 +127,9 @@ function groupCA(list, getKey, getNom) {
   const map = new Map();
   for (const c of list) {
     const key = getKey(c);
+    if (key == null) continue;
     const nom = getNom(key);
+    if (!nom) continue;
     const entry = map.get(nom) || { name: nom, value: 0, count: 0 };
     entry.value += c._real || 0;
     entry.count += 1;
@@ -141,26 +138,42 @@ function groupCA(list, getKey, getNom) {
   return Array.from(map.values()).sort((a, b) => b.value - a.value);
 }
 
+function Kpi({ icon, label, value, sub, accent }) {
+  return (
+    <div className={`dash-kpi ${accent ? `dash-kpi--${accent}` : ''}`}>
+      <div className="dash-kpi-head">
+        <span className={`dash-kpi-icon dash-kpi-icon--${accent || 'green'}`}>{icon}</span>
+        <span className="dash-kpi-label">{label}</span>
+      </div>
+      <div className="dash-kpi-value">{value}</div>
+      <div className="dash-kpi-sub">{sub}</div>
+    </div>
+  );
+}
+
 function ChartCard({ icon, title, countLabel, data, color, emptyText }) {
   const hasData = data.length > 0 && data.some((d) => d.value > 0);
   return (
-    <div className="dashboard-card">
-      <div className="dashboard-card-head">
-        <h3><span className="dashboard-card-ico">{icon}</span>{title}</h3>
-        <span className="dashboard-pill">{countLabel}</span>
+    <div className="dash-card">
+      <div className="dash-card-head">
+        <div className="dash-card-title">
+          <span className="dash-card-icon" style={{ background: `${color}14`, color, borderColor: `${color}28` }}>{icon}</span>
+          <h3>{title}</h3>
+        </div>
+        <span className="dash-pill">{countLabel}</span>
       </div>
       {hasData ? (
         <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--line-soft)" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} angle={-18} textAnchor="end" height={60} tickLine={false} axisLine={{ stroke: 'var(--line)' }} />
-            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={52} tickLine={false} axisLine={false} />
+          <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 36 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--dash-line)" vertical={false} />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6b7a6e' }} interval={0} angle={-18} textAnchor="end" height={56} tickLine={false} axisLine={{ stroke: 'var(--dash-line)' }} />
+            <YAxis tick={{ fontSize: 11, fill: '#6b7a6e' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={46} tickLine={false} axisLine={false} />
             <Tooltip
-              cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+              cursor={{ fill: 'rgba(22,163,74,0.06)' }}
               formatter={(v) => [euro(v), 'CA']}
-              contentStyle={{ borderRadius: 12, border: '1px solid var(--line)', boxShadow: '0 8px 24px var(--shadow-md)' }}
+              contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)', fontSize: 13 }}
             />
-            <Bar dataKey="value" radius={[8, 8, 8, 8]} barSize={26} background={{ fill: 'var(--surface-2)', radius: 8 }}>
+            <Bar dataKey="value" radius={[8, 8, 8, 8]} barSize={26} background={{ fill: 'var(--dash-surface-2)', radius: 8 }}>
               {data.map((entry, idx) => (
                 <Cell key={`${entry.name}-${idx}`} fill={color} />
               ))}
@@ -168,7 +181,7 @@ function ChartCard({ icon, title, countLabel, data, color, emptyText }) {
           </BarChart>
         </ResponsiveContainer>
       ) : (
-        <div className="dashboard-empty">{emptyText}</div>
+        <div className="dash-empty">{emptyText}</div>
       )}
     </div>
   );
@@ -184,8 +197,6 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
   const [filterType, setFilterType] = useState('all');
   const [filterEquipe, setFilterEquipe] = useState('all');
 
-  // Entreprise par défaut : Noree (la principale). Appliqué une seule fois
-  // à l'arrivée des données, sans écraser un choix manuel ensuite.
   const defaultEntrepriseApplied = useRef(false);
   useEffect(() => {
     if (defaultEntrepriseApplied.current || !companies || !companies.length) return;
@@ -220,8 +231,6 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
       .filter((c) => {
         const cs = String(c.start || '').split(' ')[0];
         if (!cs) return false;
-        // chevauchement : compte aussi les chantiers déjà commencés avant le début
-        // mais encore en cours dessus (fin estimée >= début période)
         const ce = chantierEndDate(c);
         if (cs > e || ce < s) return false;
         if (filterEntreprise !== 'all' && String(companyOf(c)) !== String(filterEntreprise)) return false;
@@ -240,10 +249,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
     return filtered.filter((c) => String(c.start || '').split(' ')[0] < s).length;
   }, [filtered, start]);
 
-  const totalCA = useMemo(
-    () => filtered.reduce((sum, c) => sum + (c._real || 0), 0),
-    [filtered]
-  );
+  const totalCA = useMemo(() => filtered.reduce((sum, c) => sum + (c._real || 0), 0), [filtered]);
   const avgCA = filtered.length ? Math.round(totalCA / filtered.length) : 0;
 
   const byVendeur = useMemo(
@@ -258,32 +264,38 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
     () => groupCA(filtered, (c) => c.typeChantierId || 0, (k) => typeMap.get(k) || (k === 0 ? 'Non assigné' : `#${k}`)),
     [filtered, typeMap]
   );
-  // Équipes inconnues (id orphelin) → "Non assigné" (jamais de #id).
-  // Quand une entreprise est sélectionnée, seules ses équipes sont détaillées :
-  // les chantiers affectés à une équipe d'une autre entreprise vont dans
-  // "⇄ Autres entreprises" au lieu de polluer le classement.
-  const OUTSIDER = '⇄ Autres entreprises';
-  const byEquipe = useMemo(
-    () =>
-      groupCA(
+  // Équipes: scope strict. Hors scope (orphelin ou autre entreprise) = exclu du breakdown
+  // pour ne jamais afficher "Autre entreprise" / "#id" comme une équipe.
+  const byEquipe = useMemo(() => {
+    if (filterEntreprise === 'all') {
+      return groupCA(
         filtered,
         (c) => {
           const id = Number(c.equipe ?? 0);
-          if (!id || !equipeMap.has(id)) return 0;
-          if (filterEntreprise !== 'all' && String(teamCompany.get(id) ?? '') !== String(filterEntreprise)) return OUTSIDER;
+          if (!id || !equipeMap.has(id)) return null;
           return id;
         },
-        (k) => (k === 0 ? 'Non assigné' : k === OUTSIDER ? OUTSIDER : equipeMap.get(k) || 'Non assigné')
-      ),
-    [filtered, equipeMap, teamCompany, filterEntreprise]
-  );
+        (k) => equipeMap.get(k) || null
+      );
+    }
+    return groupCA(
+      filtered,
+      (c) => {
+        const id = Number(c.equipe ?? 0);
+        if (!id || !equipeMap.has(id)) return null;
+        if (String(teamCompany.get(id) ?? '') !== String(filterEntreprise)) return null;
+        return id;
+      },
+      (k) => equipeMap.get(k) || null
+    );
+  }, [filtered, equipeMap, teamCompany, filterEntreprise]);
+
   const byCompany = useMemo(
     () => groupCA(filtered, (c) => companyOf(c) || '?', (k) => companyMap.get(k) || (k === '?' ? 'Non assigné' : String(k))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [filtered, companyMap, teamCompany]
   );
 
-  // Courbe mensuelle du CA réalisé (prorata jours ouvrés).
   const monthly = useMemo(() => {
     const s = start || '1900-01-01';
     const e = end || '2100-12-31';
@@ -299,7 +311,6 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
       if (!total) continue;
       const from = cs > s ? cs : s;
       const to = ce < e ? ce : e;
-      // jours ouvrés du chantier compris dans la période, ventilés par mois
       const d0 = parseISO(from);
       const d1 = parseISO(to);
       if (!d0 || !d1) continue;
@@ -321,7 +332,6 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
 
   const monthlyHasData = monthly.some((b) => b.value > 0);
 
-  // Part de chaque type en % du CA réalisé (ex : 40 % Fosse, 20 % STEP).
   const typeShare = useMemo(() => {
     const total = totalCA || 1;
     const counts = new Map();
@@ -368,154 +378,178 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
   }
 
   const hasActiveFilters = filterEntreprise !== 'all' || filterVendeur !== 'all' || filterConducteur !== 'all' || filterType !== 'all' || filterEquipe !== 'all';
+  const activeChips = [];
+  if (filterEntreprise !== 'all') activeChips.push({ k: 'Entreprise', v: companyMap.get(filterEntreprise) || filterEntreprise, clear: () => pickEntreprise('all') });
+  if (filterEquipe !== 'all') activeChips.push({ k: 'Équipe', v: equipeMap.get(Number(filterEquipe)) || `#${filterEquipe}`, clear: () => setFilterEquipe('all') });
+  if (filterVendeur !== 'all') activeChips.push({ k: 'Vendeur', v: vendeurMap.get(Number(filterVendeur)) || filterVendeur, clear: () => setFilterVendeur('all') });
+  if (filterConducteur !== 'all') activeChips.push({ k: 'Conducteur', v: conducteurMap.get(Number(filterConducteur)) || filterConducteur, clear: () => setFilterConducteur('all') });
+  if (filterType !== 'all') activeChips.push({ k: 'Type', v: typeMap.get(Number(filterType)) || filterType, clear: () => setFilterType('all') });
+
+  const exLabel = `${getExerciceForDate(new Date()).start.getFullYear()} → ${getExerciceForDate(new Date()).end.getFullYear()}`;
 
   return (
-    <div className="dashboard-page">
-      <div className="dashboard-inner">
-        <div className="dashboard-topbar">
-          <div>
-            <div className="dashboard-eyebrow">Pilotage</div>
-            <h1>Dashboard</h1>
-            <p>
-              Exercice {getExerciceForDate(new Date()).start.getFullYear()} → {getExerciceForDate(new Date()).end.getFullYear()}
-              {' '}· {filtered.length} chantier(s) actif(s) sur la période
-              {startedBefore > 0 && `, dont ${startedBefore} déjà en cours au ${frDate(start)}`}
+    <div className="dash">
+      <div className="dash-wrap">
+        {/* TOP */}
+        <div className="dash-top">
+          <div className="dash-top-left">
+            <div className="dash-eyebrow"><span className="dash-eyebrow-dot" /> Pilotage · Exercice {exLabel}</div>
+            <h1 className="dash-title">Dashboard</h1>
+            <p className="dash-subtitle">
+              <strong>{filtered.length}</strong> chantier{filtered.length !== 1 ? 's' : ''} actif{filtered.length !== 1 ? 's' : ''} sur la période
+              {startedBefore > 0 && <span className="dash-sub-muted"> · dont {startedBefore} déjà en cours au {frDate(start)}</span>}
+              <span className="dash-sub-muted"> · CA proratisé aux jours ouvrés</span>
             </p>
           </div>
-          <button type="button" className="dashboard-close" onClick={onClose}>× Fermer</button>
-        </div>
-
-        <div className="dashboard-filters">
-          <div className="dashboard-filter-group">
-            <div className="dashboard-group-title">Période</div>
-            <label>
-              <span>Début</span>
-              <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-            </label>
-            <label>
-              <span>Fin</span>
-              <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
-            </label>
-            <button type="button" className="dashboard-btn primary dashboard-btn-inline" onClick={resetExercice}>Exercice 1 sept → 31 août</button>
-          </div>
-          <div className="dashboard-filter-group">
-            <div className="dashboard-group-title">Structure</div>
-            <label>
-              <span>Entreprise</span>
-              <select value={filterEntreprise} onChange={(e) => pickEntreprise(e.target.value)}>
-                <option value="all">Toutes les entreprises</option>
-                {(companies || []).map((c) => (
-                  <option key={c.id} value={c.id}>{c.nom || c.id}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Équipe</span>
-              <select value={filterEquipe} onChange={(e) => setFilterEquipe(e.target.value)}>
-                <option value="all">Toutes les équipes</option>
-                {equipeOptions.map((e) => (
-                  <option key={e.id} value={e.id}>{e.nom}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="dashboard-filter-group">
-            <div className="dashboard-group-title">Acteurs</div>
-            <label>
-              <span>Vendeur</span>
-              <select value={filterVendeur} onChange={(e) => setFilterVendeur(e.target.value)}>
-                <option value="all">Tous les vendeurs</option>
-                {(vendeurs || []).map((v) => (
-                  <option key={v.id} value={v.id}>{v.nom}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Conducteur</span>
-              <select value={filterConducteur} onChange={(e) => setFilterConducteur(e.target.value)}>
-                <option value="all">Tous les conducteurs</option>
-                {(conducteurs || []).map((c) => (
-                  <option key={c.id} value={c.id}>{c.nom}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Type de chantier</span>
-              <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-                <option value="all">Tous les types</option>
-                {(typesChantier || []).map((t) => (
-                  <option key={t.id} value={t.id}>{t.nom}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="dashboard-filters-actions">
-            {hasActiveFilters && (
-              <button type="button" className="dashboard-btn ghost" onClick={clearFilters}>Réinitialiser</button>
-            )}
+          <div className="dash-top-actions">
+            <span className="dash-live"><span className="dash-live-dot" /> temps réel</span>
+            <button type="button" className="dash-close" onClick={onClose}>✕ Fermer</button>
           </div>
         </div>
 
-        <div className="dashboard-kpis">
-          <div className="dashboard-kpi kpi-hero">
-            <div className="kpi-top"><span className="kpi-ico kpi-green-bg">€</span><span>CA réalisé</span></div>
-            <strong className="kpi-green">{euro(totalCA)}</strong>
-            <small>{filtered.length} chantier(s) · prorata jours ouvrés</small>
+        {/* FILTERS */}
+        <div className="dash-filters">
+          <div className="dash-filters-grid">
+            <div className="dash-fcol">
+              <div className="dash-fcol-head"><span className="dash-fcol-icon">◷</span> Période</div>
+              <div className="dash-fcol-fields">
+                <label className="dash-field">
+                  <span>Début</span>
+                  <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+                </label>
+                <label className="dash-field">
+                  <span>Fin</span>
+                  <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+                </label>
+              </div>
+              <button type="button" className="dash-link" onClick={resetExercice}>↺ Exercice 1 sept → 31 août</button>
+            </div>
+
+            <div className="dash-fcol">
+              <div className="dash-fcol-head"><span className="dash-fcol-icon">▦</span> Structure</div>
+              <div className="dash-fcol-fields">
+                <label className="dash-field">
+                  <span>Entreprise</span>
+                  <select value={filterEntreprise} onChange={(e) => pickEntreprise(e.target.value)}>
+                    <option value="all">Toutes les entreprises</option>
+                    {(companies || []).map((c) => (
+                      <option key={c.id} value={c.id}>{c.nom || c.id}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="dash-field">
+                  <span>Équipe</span>
+                  <select value={filterEquipe} onChange={(e) => setFilterEquipe(e.target.value)}>
+                    <option value="all">Toutes les équipes</option>
+                    {equipeOptions.map((e) => (
+                      <option key={e.id} value={e.id}>{e.nom}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="dash-fcol">
+              <div className="dash-fcol-head"><span className="dash-fcol-icon">◐</span> Acteurs</div>
+              <div className="dash-fcol-fields dash-fcol-fields--3">
+                <label className="dash-field">
+                  <span>Vendeur</span>
+                  <select value={filterVendeur} onChange={(e) => setFilterVendeur(e.target.value)}>
+                    <option value="all">Tous</option>
+                    {(vendeurs || []).map((v) => (
+                      <option key={v.id} value={v.id}>{v.nom}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="dash-field">
+                  <span>Conducteur</span>
+                  <select value={filterConducteur} onChange={(e) => setFilterConducteur(e.target.value)}>
+                    <option value="all">Tous</option>
+                    {(conducteurs || []).map((c) => (
+                      <option key={c.id} value={c.id}>{c.nom}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="dash-field">
+                  <span>Type</span>
+                  <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+                    <option value="all">Tous</option>
+                    {(typesChantier || []).map((t) => (
+                      <option key={t.id} value={t.id}>{t.nom}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
           </div>
-          <div className="dashboard-kpi">
-            <div className="kpi-top"><span className="kpi-ico kpi-blue-bg">🏗</span><span>Chantiers actifs</span></div>
-            <strong>{filtered.length}</strong>
-            <small>sur {(chantiers || []).length} au total</small>
-          </div>
-          <div className="dashboard-kpi">
-            <div className="kpi-top"><span className="kpi-ico kpi-amber-bg">⌀</span><span>CA moyen / chantier</span></div>
-            <strong>{euro(avgCA)}</strong>
-            <small>Période {frDate(start)} → {frDate(end)}</small>
-          </div>
+          {hasActiveFilters && (
+            <div className="dash-chips">
+              <div className="dash-chips-left">
+                {activeChips.map((c) => (
+                  <span key={c.k} className="dash-chip">{c.k} : <strong>{c.v}</strong> <button type="button" onClick={c.clear}>×</button></span>
+                ))}
+              </div>
+              <button type="button" className="dash-chip-clear" onClick={clearFilters}>Effacer les filtres</button>
+            </div>
+          )}
         </div>
 
-        <div className="dashboard-section"><span>Évolution</span></div>
+        {/* KPIs */}
+        <div className="dash-kpis">
+          <Kpi icon="€" label="CA réalisé" value={euro(totalCA)} sub={`${filtered.length} chantier(s) · prorata jours ouvrés`} accent="hero" />
+          <Kpi icon="▭" label="Chantiers actifs" value={String(filtered.length)} sub={`sur ${(chantiers || []).length} au total`} accent="neutral" />
+          <Kpi icon="⌀" label="CA moyen / chantier" value={euro(avgCA)} sub={`${frDate(start)} → ${frDate(end)}`} accent="neutral" />
+        </div>
 
-        <div className="dashboard-card dashboard-curve">
-          <div className="dashboard-card-head">
-            <h3><span className="dashboard-card-ico">📈</span>CA réalisé par mois</h3>
-            <span className="dashboard-pill">prorata jours ouvrés</span>
+        {/* EVOLUTION */}
+        <div className="dash-section"><span>Évolution</span></div>
+        <div className="dash-card dash-card--curve">
+          <div className="dash-card-head">
+            <div className="dash-card-title">
+              <span className="dash-card-icon" style={{ background: '#16a34a14', color: '#16a34a', borderColor: '#16a34a20' }}>↗</span>
+              <h3>CA réalisé par mois</h3>
+              <span className="dash-card-hint">prorata jours ouvrés</span>
+            </div>
+            <span className="dash-pill dash-pill--soft">{monthly.length} mois</span>
           </div>
           {monthlyHasData ? (
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={monthly} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="caFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={CHART_COLORS.curve} stopOpacity={0.35} />
-                    <stop offset="100%" stopColor={CHART_COLORS.curve} stopOpacity={0.03} />
+                  <linearGradient id="caFill2" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={CHART_COLORS.curve} stopOpacity={0.28} />
+                    <stop offset="100%" stopColor={CHART_COLORS.curve} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--line-soft)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} interval="preserveStartEnd" minTickGap={24} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={52} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--dash-line)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7a6e' }} interval="preserveStartEnd" minTickGap={24} tickLine={false} axisLine={{ stroke: 'var(--dash-line)' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#6b7a6e' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={52} tickLine={false} axisLine={false} />
                 <Tooltip
                   formatter={(v) => [euro(v), 'CA réalisé']}
                   labelFormatter={(_, payload) => {
                     const b = payload && payload[0] && payload[0].payload;
                     return b ? `Mois de ${b.label}` : '';
                   }}
-                  contentStyle={{ borderRadius: 10, border: '1px solid var(--line)' }}
+                  contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)', fontSize: 13 }}
                 />
-                <Area type="monotone" dataKey="value" stroke={CHART_COLORS.curve} strokeWidth={2.5} fill="url(#caFill)" dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                <Area type="monotone" dataKey="value" stroke={CHART_COLORS.curve} strokeWidth={2.4} fill="url(#caFill2)" dot={{ r: 2.5, strokeWidth: 0, fill: CHART_COLORS.curve }} activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="dashboard-empty">Aucun CA sur cette période.</div>
+            <div className="dash-empty">Aucun CA sur cette période.</div>
           )}
         </div>
 
-        <div className="dashboard-table-card">
-          <div className="dashboard-card-head">
-            <h3>CA par entreprise</h3>
-            <span className="dashboard-pill">{byCompany.length} entreprise(s)</span>
+        <div className="dash-card">
+          <div className="dash-card-head">
+            <div className="dash-card-title">
+              <span className="dash-card-icon" style={{ background: '#0ea5e914', color: '#0ea5e9', borderColor: '#0ea5e920' }}>◇</span>
+              <h3>CA par entreprise</h3>
+            </div>
+            <span className="dash-pill">{byCompany.length} entreprise(s)</span>
           </div>
-          <div className="dashboard-table-scroll">
-            <table className="dashboard-table">
+          <div className="dash-table-scroll">
+            <table className="dash-table">
               <thead>
                 <tr>
                   <th>Entreprise</th>
@@ -527,7 +561,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
               </thead>
               <tbody>
                 {byCompany.length === 0 ? (
-                  <tr><td colSpan={5} className="dashboard-table-empty">Aucune entreprise active sur cette période.</td></tr>
+                  <tr><td colSpan={5} className="dash-table-empty">Aucune entreprise active sur cette période.</td></tr>
                 ) : (
                   byCompany.map((e) => {
                     const pct = totalCA ? Math.round((e.value / totalCA) * 100) : 0;
@@ -537,11 +571,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                         <td className="num">{e.count}</td>
                         <td className="num"><strong>{euro(e.value)}</strong></td>
                         <td className="num">{pct} %</td>
-                        <td>
-                          <div className="pct-track">
-                            <div className="pct-fill" style={{ width: `${pct}%` }} />
-                          </div>
-                        </td>
+                        <td><div className="dash-pct"><div className="dash-pct-fill" style={{ width: `${pct}%` }} /></div></td>
                       </tr>
                     );
                   })
@@ -551,53 +581,35 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
           </div>
         </div>
 
-        <div className="dashboard-section"><span>Analyses</span></div>
+        <div className="dash-section"><span>Analyses</span></div>
 
-        <div className="dashboard-charts">
-          <ChartCard
-            icon="🤝"
-            title="CA par vendeur"
-            countLabel={`${byVendeur.length} vendeur(s)`}
-            data={byVendeur}
-            color={CHART_COLORS.vendeur}
-            emptyText="Aucune donnée vendeur sur cette période."
-          />
-          <ChartCard
-            icon="👷"
-            title="CA par conducteur"
-            countLabel={`${byConducteur.length} conducteur(s)`}
-            data={byConducteur}
-            color={CHART_COLORS.conducteur}
-            emptyText="Aucune donnée conducteur sur cette période."
-          />
-          <ChartCard
-            icon="🏠"
-            title="CA par type de chantier"
-            countLabel={`${byType.length} type(s)`}
-            data={byType}
-            color={CHART_COLORS.type}
-            emptyText="Aucune donnée par type sur cette période."
-          />
+        <div className="dash-grid dash-grid--3">
+          <ChartCard icon="◎" title="CA par vendeur" countLabel={`${byVendeur.length} vendeur(s)`} data={byVendeur} color={CHART_COLORS.vendeur} emptyText="Aucune donnée vendeur sur cette période." />
+          <ChartCard icon="⬡" title="CA par conducteur" countLabel={`${byConducteur.length} conducteur(s)`} data={byConducteur} color={CHART_COLORS.conducteur} emptyText="Aucune donnée conducteur sur cette période." />
+          <ChartCard icon="⬢" title="CA par type" countLabel={`${byType.length} type(s)`} data={byType} color={CHART_COLORS.type} emptyText="Aucune donnée par type sur cette période." />
         </div>
 
-        <div className="dashboard-charts dashboard-charts-2">
-          <div className="dashboard-card">
-            <div className="dashboard-card-head">
-              <h3><span className="dashboard-card-ico">🏗</span>CA par équipe</h3>
-              <span className="dashboard-pill">{byEquipe.length} équipe(s)</span>
+        <div className="dash-grid dash-grid--2">
+          <div className="dash-card">
+            <div className="dash-card-head">
+              <div className="dash-card-title">
+                <span className="dash-card-icon" style={{ background: '#7c3aed14', color: '#7c3aed', borderColor: '#7c3aed20' }}>▤</span>
+                <h3>CA par équipe</h3>
+              </div>
+              <span className="dash-pill">{byEquipe.length} équipe(s)</span>
             </div>
             {byEquipe.length > 0 && byEquipe.some((d) => d.value > 0 || d.count > 0) ? (
-              <ResponsiveContainer width="100%" height={Math.max(260, byEquipe.length * 44)}>
+              <ResponsiveContainer width="100%" height={Math.max(260, byEquipe.length * 42)}>
                 <BarChart data={byEquipe} layout="vertical" margin={{ top: 5, right: 16, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line-soft)" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={120} tickLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--dash-line)" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: '#6b7a6e' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: '#1a2e1a' }} width={118} tickLine={false} axisLine={false} />
                   <Tooltip
-                    cursor={{ fill: 'rgba(0,0,0,0.04)' }}
+                    cursor={{ fill: 'rgba(124,58,237,0.06)' }}
                     formatter={(v, _name, props) => [`${euro(v)} (${props?.payload?.count ?? 0} chantier(s))`, 'CA réalisé']}
-                    contentStyle={{ borderRadius: 10, border: '1px solid var(--line)' }}
+                    contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)' }}
                   />
-                  <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={18} background={{ fill: 'var(--surface-2)', radius: 8 }}>
+                  <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={18} background={{ fill: 'var(--dash-surface-2)', radius: 8 }}>
                     {byEquipe.map((entry, idx) => (
                       <Cell key={`${entry.name}-${idx}`} fill={CHART_COLORS.equipe} />
                     ))}
@@ -605,24 +617,27 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="dashboard-empty">Aucune donnée par équipe sur cette période.</div>
+              <div className="dash-empty">Aucune donnée par équipe sur cette période.</div>
             )}
           </div>
 
-          <div className="dashboard-card">
-            <div className="dashboard-card-head">
-              <h3><span className="dashboard-card-ico">🥧</span>Part des types vendus</h3>
-              <span className="dashboard-pill">% du CA</span>
+          <div className="dash-card">
+            <div className="dash-card-head">
+              <div className="dash-card-title">
+                <span className="dash-card-icon" style={{ background: '#f9731614', color: '#f97316', borderColor: '#f9731620' }}>◍</span>
+                <h3>Part des types vendus</h3>
+              </div>
+              <span className="dash-pill">% du CA</span>
             </div>
             {typeShare.length > 0 && totalCA > 0 ? (
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
                     data={typeShare}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={60}
-                    outerRadius={95}
+                    innerRadius={64}
+                    outerRadius={98}
                     paddingAngle={2}
                     label={({ percent }) => (percent > 0.05 ? `${Math.round(percent * 100)} %` : '')}
                     labelLine={false}
@@ -636,26 +651,29 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                       `${props?.payload?.count ?? 0} chantier(s) · ${props?.payload?.percent ?? 0} % · ${euro(props?.payload?.value)}`,
                       props?.payload?.name ?? '',
                     ]}
-                    contentStyle={{ borderRadius: 10, border: '1px solid var(--line)' }}
+                    contentStyle={{ borderRadius: 12, border: '1px solid var(--dash-line)', boxShadow: '0 12px 28px rgba(16,30,18,0.12)' }}
                   />
-                  <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12 }} />
+                  <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12, color: '#1a2e1a' }} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="dashboard-empty">Aucun CA sur cette période.</div>
+              <div className="dash-empty">Aucun CA sur cette période.</div>
             )}
           </div>
         </div>
 
-        <div className="dashboard-section"><span>Détail</span></div>
+        <div className="dash-section"><span>Détail</span></div>
 
-        <div className="dashboard-table-card">
-          <div className="dashboard-card-head">
-            <h3>CA et chantiers par équipe</h3>
-            <span className="dashboard-pill">{byEquipe.length} équipe(s)</span>
+        <div className="dash-card">
+          <div className="dash-card-head">
+            <div className="dash-card-title">
+              <span className="dash-card-icon" style={{ background: '#16a34a14', color: '#16a34a', borderColor: '#16a34a20' }}>≡</span>
+              <h3>CA et chantiers par équipe</h3>
+            </div>
+            <span className="dash-pill">{byEquipe.length} équipe(s)</span>
           </div>
-          <div className="dashboard-table-scroll">
-            <table className="dashboard-table">
+          <div className="dash-table-scroll">
+            <table className="dash-table">
               <thead>
                 <tr>
                   <th>Équipe</th>
@@ -666,7 +684,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
               </thead>
               <tbody>
                 {byEquipe.length === 0 ? (
-                  <tr><td colSpan={4} className="dashboard-table-empty">Aucune équipe active sur cette période.</td></tr>
+                  <tr><td colSpan={4} className="dash-table-empty">Aucune équipe active sur cette période.</td></tr>
                 ) : (
                   byEquipe.map((e) => (
                     <tr key={e.name}>
@@ -682,13 +700,16 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
           </div>
         </div>
 
-        <div className="dashboard-table-card">
-          <div className="dashboard-card-head">
-            <h3>Détail des chantiers</h3>
-            <span className="dashboard-pill">{sortedTable.length} ligne(s)</span>
+        <div className="dash-card">
+          <div className="dash-card-head">
+            <div className="dash-card-title">
+              <span className="dash-card-icon" style={{ background: '#1a2e1a0d', color: '#1a2e1a', borderColor: '#1a2e1a14' }}>☰</span>
+              <h3>Détail des chantiers</h3>
+            </div>
+            <span className="dash-pill">{sortedTable.length} ligne(s)</span>
           </div>
-          <div className="dashboard-table-scroll">
-            <table className="dashboard-table">
+          <div className="dash-table-scroll dash-table-scroll--tall">
+            <table className="dash-table">
               <thead>
                 <tr>
                   <th>N°</th>
@@ -705,7 +726,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
               </thead>
               <tbody>
                 {sortedTable.length === 0 ? (
-                  <tr><td colSpan={10} className="dashboard-table-empty">Aucun chantier actif sur cette période — élargis les dates ou réinitialise les filtres.</td></tr>
+                  <tr><td colSpan={10} className="dash-table-empty">Aucun chantier actif sur cette période — élargis les dates ou réinitialise les filtres.</td></tr>
                 ) : (
                   sortedTable.map((c) => (
                     <tr key={c.id}>
@@ -716,17 +737,17 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
                       <td>{c.client_nom || <span className="muted">-</span>}</td>
                       <td>
                         {vendeurMap.get(c.vendeurId)
-                          ? <span className="tag" style={{ background: `${vendeurColor.get(c.vendeurId) || '#16a34a'}22`, borderColor: vendeurColor.get(c.vendeurId) || '#16a34a', color: vendeurColor.get(c.vendeurId) || '#16a34a' }}>{vendeurMap.get(c.vendeurId)}</span>
+                          ? <span className="dash-tag" style={{ background: `${vendeurColor.get(c.vendeurId) || '#16a34a'}14`, borderColor: `${vendeurColor.get(c.vendeurId) || '#16a34a'}30`, color: vendeurColor.get(c.vendeurId) || '#16a34a' }}>{vendeurMap.get(c.vendeurId)}</span>
                           : <span className="muted">-</span>}
                       </td>
                       <td>
                         {typeMap.get(c.typeChantierId)
-                          ? <span className="tag" style={{ background: `${typeColor.get(c.typeChantierId) || '#eab308'}22`, borderColor: typeColor.get(c.typeChantierId) || '#eab308', color: typeColor.get(c.typeChantierId) || '#eab308' }}>{typeMap.get(c.typeChantierId)}</span>
+                          ? <span className="dash-tag" style={{ background: `${typeColor.get(c.typeChantierId) || '#eab308'}14`, borderColor: `${typeColor.get(c.typeChantierId) || '#eab308'}30`, color: typeColor.get(c.typeChantierId) || '#eab308' }}>{typeMap.get(c.typeChantierId)}</span>
                           : <span className="muted">-</span>}
                       </td>
                       <td>
                         {conducteurMap.get(c.conducteurId)
-                          ? <span className="tag" style={{ background: `${conducteurColor.get(c.conducteurId) || '#2563eb'}22`, borderColor: conducteurColor.get(c.conducteurId) || '#2563eb', color: conducteurColor.get(c.conducteurId) || '#2563eb' }}>{conducteurMap.get(c.conducteurId)}</span>
+                          ? <span className="dash-tag" style={{ background: `${conducteurColor.get(c.conducteurId) || '#2563eb'}14`, borderColor: `${conducteurColor.get(c.conducteurId) || '#2563eb'}30`, color: conducteurColor.get(c.conducteurId) || '#2563eb' }}>{conducteurMap.get(c.conducteurId)}</span>
                           : <span className="muted">-</span>}
                       </td>
                       <td>{equipeMap.get(Number(c.equipe)) ?? equipeMap.get(c.equipe) ?? <span className="muted">-</span>}</td>
@@ -737,7 +758,7 @@ export default function Dashboard({ chantiers, vendeurs, conducteurs, typesChant
               </tbody>
             </table>
           </div>
-          <div className="dashboard-footnote">Montants contractuels par chantier — les totaux du haut sont proratisés aux jours ouvrés sur la période.</div>
+          <div className="dash-footnote">Montants contractuels par chantier — les totaux du haut sont proratisés aux jours ouvrés sur la période.</div>
         </div>
       </div>
     </div>
