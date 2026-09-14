@@ -1735,20 +1735,9 @@ export default function App() {
   const deferredConges = useDeferredValue(conges);
   const deferredVisibleDays = useDeferredValue(visibleDays);
 
-  const filteredChantiers = useMemo(() => {
-    const hasConducteurFilter = filterConducteurIds.length > 0;
-    const hasColorFilter = filterColors.length > 0;
-    if (!hasConducteurFilter && !hasColorFilter) return deferredChantiers;
-    return deferredChantiers.filter(c => {
-      const matchConducteur = hasConducteurFilter && filterConducteurIds.includes(c.conducteurId);
-      const matchColor = hasColorFilter && filterColors.includes(c.color);
-      return matchConducteur || matchColor;
-    });
-  }, [deferredChantiers, filterConducteurIds, filterColors]);
-
-  const chantierMatches = useMemo(() => {
+  const chantierSearchMatches = useMemo(() => {
     const q = chantierSearch.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (!q) return [];
+    if (!q) return null;
     const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const prefix = [], contains = [];
     for (const c of chantiers) {
@@ -1757,8 +1746,24 @@ export default function App() {
       if (n.startsWith(q)) prefix.push(c);
       else if (n.includes(q)) contains.push(c);
     }
-    return [...prefix, ...contains].slice(0, 8);
+    return [...prefix, ...contains];
   }, [chantiers, chantierSearch]);
+
+  const filteredChantiers = useMemo(() => {
+    const hasConducteurFilter = filterConducteurIds.length > 0;
+    const hasColorFilter = filterColors.length > 0;
+    const search = chantierSearchMatches;
+    if (!hasConducteurFilter && !hasColorFilter && !search) return deferredChantiers;
+    const base = search
+      ? deferredChantiers.filter((c) => search.some((s) => s.id === c.id))
+      : deferredChantiers;
+    if (!hasConducteurFilter && !hasColorFilter) return base;
+    return base.filter(c => {
+      const matchConducteur = hasConducteurFilter && filterConducteurIds.includes(c.conducteurId);
+      const matchColor = hasColorFilter && filterColors.includes(c.color);
+      return matchConducteur || matchColor;
+    });
+  }, [deferredChantiers, filterConducteurIds, filterColors, chantierSearchMatches]);
 
   const congeSegmentsCacheRef = useRef(null);
   const congeSegmentsMap = useMemo(() => {
@@ -1978,6 +1983,26 @@ export default function App() {
         {activePage === 'planning' && (
           <div className="date-nav">
             <button className="today-btn" onClick={goToday}>Aujourd'hui</button>
+            <div className="chantier-search-wrap">
+              <svg className="chantier-search-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="21" y1="21" x2="16.2" y2="16.2" />
+              </svg>
+              <input
+                className="chantier-search-input"
+                value={chantierSearch}
+                onChange={(e) => setChantierSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && chantierSearchMatches && chantierSearchMatches.length) {
+                    jumpToDate(chantierSearchMatches[0].start);
+                  }
+                }}
+                placeholder="Rechercher un chantier…"
+              />
+              {chantierSearch && (
+                <button className="chantier-search-clear" onClick={() => setChantierSearch('')} title="Effacer la recherche">×</button>
+              )}
+            </div>
             <div>
               <button
                 ref={filterBtnRef}
@@ -1985,7 +2010,7 @@ export default function App() {
                 onClick={() => {
                   const rect = filterBtnRef.current?.getBoundingClientRect();
                   if (rect) setFilterPos({ top: rect.bottom + 4, left: rect.left });
-                  setFilterOpen((v) => { if (!v) setChantierSearch(''); return !v; });
+                  setFilterOpen((v) => !v);
                 }}
               >
                 {filterConducteurIds.length > 0 || filterColors.length > 0
@@ -2227,53 +2252,6 @@ export default function App() {
       <footer className="app-footer">Créé par Tom Corlay • v6.2-vitesse+</footer>
       {filterOpen && createPortal(
         <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
-          <div style={{ padding: '6px 10px' }}>
-            <input
-              className="chantier-search-input"
-              value={chantierSearch}
-              onChange={(e) => setChantierSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && chantierMatches.length > 0) {
-                  const c = chantierMatches[0];
-                  jumpToDate(c.start);
-                  openEditChantier(c);
-                  setFilterOpen(false);
-                  setChantierSearch('');
-                }
-              }}
-              placeholder="Rechercher un chantier…"
-              autoFocus
-            />
-          </div>
-          {chantierMatches.length > 0 && (
-            <>
-              <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
-              <div style={{ padding: '4px 14px 2px', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>CHANTIERS</div>
-              {chantierMatches.map((c) => (
-                <div
-                  key={c.id}
-                  className="conducteur-filter-item"
-                  onClick={() => {
-                    jumpToDate(c.start);
-                    openEditChantier(c);
-                    setFilterOpen(false);
-                    setChantierSearch('');
-                  }}
-                  style={{ alignItems: 'center' }}
-                >
-                  <span className="filter-check" style={{ color: 'var(--muted)' }}>›</span>
-                  <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <span style={{ fontWeight: 600 }}>{c.nom}</span>
-                    <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                      {c.start} • {teamById.get(c.equipe)?.nom || `Équipe #${c.equipe}`}
-                      {c.client_nom ? ` • ${c.client_nom}` : ''}
-                    </span>
-                  </span>
-                </div>
-              ))}
-              <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
-            </>
-          )}
           <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setChantierSearch(''); setFilterOpen(false); }}>
             <span className={!filterConducteurIds.length && !filterColors.length ? 'active' : ''}>●</span>
             Tout afficher

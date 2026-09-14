@@ -656,19 +656,55 @@ button:active {
   font-weight: 700;
 }
 
+.chantier-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.chantier-search-ico {
+  position: absolute;
+  left: 8px;
+  color: var(--muted);
+  pointer-events: none;
+}
 .chantier-search-input {
-  width: 100%;
+  width: 190px;
   box-sizing: border-box;
-  padding: 6px 10px;
+  padding: 6px 24px 6px 26px;
   font-size: 13px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
   color: var(--text);
   outline: none;
+  transition: border-color 0.15s;
+}
+.chantier-search-input::placeholder {
+  color: var(--muted);
 }
 .chantier-search-input:focus {
   border-color: var(--green);
+}
+.chantier-search-clear {
+  position: absolute;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.chantier-search-clear:hover {
+  background: rgba(128,128,128,0.15);
+  color: var(--text);
 }
 
 /* ═══════════════════════════════════════════════
