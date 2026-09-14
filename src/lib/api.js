@@ -4,6 +4,30 @@ import { supabase } from './supabase.js';
 
 const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
 
+// Snapshot des nouveaux champs (client_*, vendeurId, typeChantierId, montant_devis)
+// au dernier chargement/save réussi. Permet de n'écrire que ce qui a réellement
+// changé (y compris un champ vidé → '' ou 0) sans écritures no-op à chaque autosave.
+let lastNewFieldsByChantier = new Map();
+
+function pickNewFields(c) {
+  return {
+    client_nom: c.client_nom ?? '',
+    client_adresse: c.client_adresse ?? '',
+    client_telephone: c.client_telephone ?? '',
+    numero_chantier: c.numero_chantier ?? '',
+    vendeurId: Number(c.vendeurId) || 0,
+    typeChantierId: Number(c.typeChantierId) || 0,
+    montant_devis: Number(c.montant_devis) || 0,
+  };
+}
+
+function refreshChantierFieldSnapshot(chantiers) {
+  for (const c of chantiers || []) {
+    if (!Number.isInteger(c.id) || c.id <= 0) continue;
+    lastNewFieldsByChantier.set(c.id, pickNewFields(c));
+  }
+}
+
 export async function login(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
@@ -55,9 +79,21 @@ export async function logout() {
 // ─── COMPANY DATA LOADING ──────────────────────────────
 
 export async function loadPlanningData() {
-  const { data, error } = await supabase.rpc('get_planning_data');
+  let { data, error } = await supabase.rpc('get_planning_data');
+  // Le RPC en prod ne renvoie pas encore vendeurs/types_chantier : on complète en direct.
+  if (!error && data && ((!data.vendeurs || data.vendeurs.length === 0) || (!data.types_chantier && !data.typesChantier))) {
+    try {
+      const [vRes, tRes] = await Promise.all([
+        supabase.from('vendeurs').select('*'),
+        supabase.from('types_chantier').select('*'),
+      ]);
+      console.debug('[load] vendeurs:', vRes.data?.length ?? null, 'types:', tRes.data?.length ?? null);
+      if (!vRes.error && vRes.data) data.vendeurs = vRes.data;
+      if (!tRes.error && tRes.data) data.types_chantier = tRes.data;
+    } catch (e) { console.error('[DIAG load] exception', e?.message); }
+  }
   if (error) throw error;
-  if (!data) return { companies: [], equipes: [], conducteurs: [], chantiers: [], conges: [], customFeries: [] };
+  if (!data) return { companies: [], equipes: [], conducteurs: [], vendeurs: [], typesChantier: [], chantiers: [], conges: [], customFeries: [] };
 
   const seenChantier = new Set();
   const dedupedChantiers = (data.chantiers || [])
@@ -68,6 +104,7 @@ export async function loadPlanningData() {
       return true;
     })
     .map(normalizeChantier);
+  refreshChantierFieldSnapshot(dedupedChantiers);
 
   const seenConge = new Set();
   const dedupedConges = (data.conges || []).filter((c) => {
@@ -81,6 +118,8 @@ export async function loadPlanningData() {
     companies: data.companies || [],
     equipes: (data.equipes || []).map((e) => ({ id: e.id, nom: e.nom, companyId: e.company_id, ordre: e.ordre })),
     conducteurs: (data.conducteurs || []).map((c) => ({ id: c.id, nom: c.nom, color: c.color })),
+    vendeurs: (data.vendeurs || []).map((v) => ({ id: v.id, nom: v.nom, color: v.color })),
+    typesChantier: (data.types_chantier || data.typesChantier || []).map((t) => ({ id: t.id, nom: t.nom, color: t.color })),
     chantiers: dedupedChantiers,
     conges: dedupedConges,
     customFeries: (data.custom_feries || []).map((f) => ({ ...f, companyId: f.company_id })),
@@ -112,6 +151,13 @@ function normalizeChantier(c) {
     linked: !!c.linked,
     detail: c.detail || '',
     force_aout: !!c.force_aout,
+    client_nom: c.client_nom || '',
+    client_adresse: c.client_adresse || '',
+    client_telephone: c.client_telephone || '',
+    numero_chantier: c.numero_chantier || '',
+    vendeurId: c.vendeurId ?? c.vendeur_id ?? 0,
+    typeChantierId: c.typeChantierId ?? c.type_chantier_id ?? 0,
+    montant_devis: Number(c.montant_devis) || 0,
   };
 }
 
@@ -298,15 +344,7 @@ export async function updateUserProfile(userId, updates) {
 }
 
 export async function saveAllPlanningData(data) {
-  const { chantiers, conges, equipes, conducteurs, customFeries, chantierColors, conducteurColors } = data;
-  const mapRows = (items, companyId) => items.map(c => ({ ...c, company_id: companyId }));
-  const chantierRows = chantiers.map(c => ({
-    id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
-    company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
-    nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
-    note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,
-    detail: c.detail || '', force_aout: c.force_aout ? 1 : 0,
-  }));
+  const { chantiers, conges, equipes, conducteurs, vendeurs = [], typesChantier = [], customFeries, chantierColors, conducteurColors } = data;
   const congeRows = conges.map(c => ({
     id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
     company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
@@ -320,21 +358,133 @@ export async function saveAllPlanningData(data) {
     id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
     nom: c.nom, color: c.color,
   }));
+  const vendeurRows = vendeurs.map(v => ({
+    id: Number.isInteger(v.id) && v.id >= -2147483648 && v.id <= 2147483647 ? v.id : undefined,
+    nom: v.nom, color: v.color,
+  }));
+  const typeRows = typesChantier.map(t => ({
+    id: Number.isInteger(t.id) && t.id >= -2147483648 && t.id <= 2147483647 ? t.id : undefined,
+    nom: t.nom, color: t.color,
+  }));
   const ferieRows = customFeries.map(f => ({
     company_id: f.companyId, nom: f.nom, date: f.date,
   }));
 
-  const { data: result, error } = await supabase.rpc('save_all_planning_data', {
-    p_chantiers: chantierRows,
+  // Le RPC en base ne connaît que la signature 7 params (sans vendeurs/types_chantier).
+  // On appelle directement cette signature pour éviter un 404 réseau inutile,
+  // puis on pousse les nouveaux champs + vendeurs/types en écritures directes.
+  const baseRows = chantiers.map(c => ({
+    id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
+    company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
+    nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
+    note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,
+    detail: c.detail || '', force_aout: c.force_aout ? 1 : 0,
+  }));
+  const payload = {
+    p_chantiers: baseRows,
     p_conges: congeRows,
     p_equipes: equipeRows,
     p_conducteurs: conducteurRows,
     p_custom_feries: ferieRows,
     p_chantier_colors: chantierColors,
     p_conducteur_colors: conducteurColors,
-  });
+  };
+
+  const { data: result, error } = await supabase.rpc('save_all_planning_data', payload);
   if (error) { console.error('save_all_planning_data RPC failed', error.message || error, error.details, error.hint); throw error; }
+
+  // Best effort : pousse vendeurs/types + champs client/montant en direct.
+  // Les ids temporaires (<=0) sont remappés vers les vrais ids retournés par le RPC.
+  try {
+    const realByKey = new Map();
+    for (const r of (result?.chantiers || [])) {
+      realByKey.set(`${r.company_id}|${r.equipe}|${r.start}|${r.nom}|${r.duree}`, r.id);
+    }
+    const withRealIds = chantiers.map(c => {
+      if (c.id > 0) return c;
+      const realId = realByKey.get(`${c.company_id}|${c.equipe}|${c.start}|${c.nom}|${c.duree}`);
+      return realId ? { ...c, id: realId } : c;
+    });
+    await pushNewFieldsDirect(withRealIds, vendeurs, typesChantier);
+  } catch (e) {
+    console.error('[save] push direct exception', e?.message || e);
+  }
+
   return result;
+}
+
+// Pousse les nouveaux champs + listes vendeurs/types en écritures directes.
+// Utilisé par le fallback quand le RPC save_all 9 params n'existe pas encore en base.
+// Upsert par nom (nom UNIQUE), sans suppression : ne peut rien effacer.
+async function upsertLookupDirect(table, rows) {
+  for (const r of rows) {
+    if (!r.nom) continue;
+    const { data: existing, error: selErr } = await supabase.from(table).select('id,color').eq('nom', r.nom).maybeSingle();
+    if (selErr) continue;
+    if (existing) {
+      if (r.color && existing.color !== r.color) {
+        await supabase.from(table).update({ color: r.color }).eq('id', existing.id);
+      }
+    } else {
+      await supabase.from(table).insert({ nom: r.nom, color: r.color || '#2563eb' });
+    }
+  }
+}
+
+async function pushNewFieldsDirect(chantiers, vendeurs, typesChantier) {
+  if ((vendeurs || []).length) await upsertLookupDirect('vendeurs', vendeurs);
+  if ((typesChantier || []).length) await upsertLookupDirect('types_chantier', typesChantier);
+  let ok = 0, fail = 0, skipped = 0;
+  let firstErr = null;
+  for (const c of (chantiers || [])) {
+    if (!c.id || c.id <= 0) { skipped++; continue; }
+    const fields = pickNewFields(c);
+    const prev = lastNewFieldsByChantier.get(c.id) || pickNewFields({});
+    const patch = {};
+    for (const k of Object.keys(fields)) {
+      if (fields[k] !== prev[k]) patch[k] = fields[k];
+    }
+    if (Object.keys(patch).length) {
+      const { error } = await supabase.from('chantiers').update(patch).eq('id', c.id);
+      if (error && error.code === 'PGRST204') { skipped++; continue; }
+      if (error) { fail++; if (!firstErr) firstErr = `${error.code} ${error.message}`; }
+      else { ok++; lastNewFieldsByChantier.set(c.id, fields); }
+    }
+  }
+  if (fail > 0) console.error(`[save] push direct: ${ok} ok, ${fail} echec, ${skipped} ignorés${firstErr ? ' | 1ere erreur: ' + firstErr : ''}`);
+  if (ok > 0) console.debug(`[save] push direct: ${ok} chantier(s) mis à jour`);
+}
+
+export async function upsertVendeurs(vendeurs) {
+  const rows = vendeurs.map(v => {
+    const row = { nom: v.nom, color: v.color };
+    if (Number.isInteger(v.id) && v.id >= -2147483648 && v.id <= 2147483647) row.id = v.id;
+    return row;
+  });
+  if (rows.length === 0) {
+    const { error } = await supabase.from('vendeurs').delete().neq('id', 0);
+    if (error) { console.error('delete vendeurs', error); throw error; }
+    return [];
+  }
+  const { data, error } = await supabase.rpc('upsert_vendeurs', { p_vendeurs: rows });
+  if (error) { console.error('upsert_vendeurs', error); throw error; }
+  return data;
+}
+
+export async function upsertTypesChantier(types) {
+  const rows = types.map(t => {
+    const row = { nom: t.nom, color: t.color };
+    if (Number.isInteger(t.id) && t.id >= -2147483648 && t.id <= 2147483647) row.id = t.id;
+    return row;
+  });
+  if (rows.length === 0) {
+    const { error } = await supabase.from('types_chantier').delete().neq('id', 0);
+    if (error) { console.error('delete types_chantier', error); throw error; }
+    return [];
+  }
+  const { data, error } = await supabase.rpc('upsert_types_chantier', { p_types_chantier: rows });
+  if (error) { console.error('upsert_types_chantier', error); throw error; }
+  return data;
 }
 
 export async function createUser(email, password, nom, role, companyIds) {
