@@ -922,6 +922,19 @@ button:active {
   cursor: ew-resize;
 }
 
+.bloc:hover .resize-handle {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.bloc:hover .resize-handle.left {
+  border-radius: 8px 0 0 8px;
+}
+
+.bloc:hover .resize-handle.right {
+  border-radius: 0 8px 8px 0;
+}
+
 .note-icon {
   position: absolute;
   top: -3px;
