@@ -115,6 +115,7 @@ const CellContent = React.memo(function CellContent({
             </div>
             {chantier.detail && <div className="chantier-detail">{chantier.detail}</div>}
             <div className="conducteur-bar" style={{ background: conducteur?.color || '#64748b' }} />
+            {isFirstSegment && <div className="resize-handle left" data-rs="left" />}
             {isLastSegment && <div className="resize-handle right" data-rs="right" />}
           </div>
         );
