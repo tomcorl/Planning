@@ -908,7 +908,7 @@ button:active {
   top: 0;
   width: 10px;
   height: 100%;
-  z-index: 40;
+  z-index: 30;
   opacity: 0;
 }
 
