@@ -163,6 +163,10 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('filterColors')) || []; }
     catch { return []; }
   });
+  const [filterSansCA, setFilterSansCA] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('filterSansCA')) || false; }
+    catch { return false; }
+  });
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterPos, setFilterPos] = useState({ top: 0, left: 0 });
   const [chantierSearch, setChantierSearch] = useState('');
@@ -192,6 +196,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('filterColors', JSON.stringify(filterColors));
   }, [filterColors]);
+
+  useEffect(() => {
+    localStorage.setItem('filterSansCA', JSON.stringify(filterSansCA));
+  }, [filterSansCA]);
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -1753,17 +1761,18 @@ export default function App() {
     const hasConducteurFilter = filterConducteurIds.length > 0;
     const hasColorFilter = filterColors.length > 0;
     const search = chantierSearchMatches;
-    if (!hasConducteurFilter && !hasColorFilter && !search) return deferredChantiers;
-    const base = search
+    if (!hasConducteurFilter && !hasColorFilter && !search && !filterSansCA) return deferredChantiers;
+    let base = search
       ? deferredChantiers.filter((c) => search.some((s) => s.id === c.id))
       : deferredChantiers;
+    if (filterSansCA) base = base.filter((c) => !(Number(c.montant_devis) > 0));
     if (!hasConducteurFilter && !hasColorFilter) return base;
     return base.filter(c => {
       const matchConducteur = hasConducteurFilter && filterConducteurIds.includes(c.conducteurId);
       const matchColor = hasColorFilter && filterColors.includes(c.color);
       return matchConducteur || matchColor;
     });
-  }, [deferredChantiers, filterConducteurIds, filterColors, chantierSearchMatches]);
+  }, [deferredChantiers, filterConducteurIds, filterColors, chantierSearchMatches, filterSansCA]);
 
   const congeSegmentsCacheRef = useRef(null);
   const congeSegmentsMap = useMemo(() => {
@@ -2013,8 +2022,8 @@ export default function App() {
                   setFilterOpen((v) => !v);
                 }}
               >
-                {filterConducteurIds.length > 0 || filterColors.length > 0
-                  ? `Filtrer (${filterConducteurIds.length + filterColors.length})`
+                {filterConducteurIds.length > 0 || filterColors.length > 0 || filterSansCA
+                  ? `Filtrer (${filterConducteurIds.length + filterColors.length + (filterSansCA ? 1 : 0)})`
                   : 'Filtrer'}
               </button>
             </div>
@@ -2252,9 +2261,18 @@ export default function App() {
       <footer className="app-footer">Créé par Tom Corlay • v6.2-vitesse+</footer>
       {filterOpen && createPortal(
         <div className="conducteur-filter-dropdown" style={{ position: 'fixed', top: filterPos.top, left: filterPos.left, zIndex: 99999 }}>
-          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setChantierSearch(''); setFilterOpen(false); }}>
-            <span className={!filterConducteurIds.length && !filterColors.length ? 'active' : ''}>●</span>
+          <div className="conducteur-filter-item" onClick={() => { setFilterConducteurIds([]); setFilterColors([]); setFilterSansCA(false); setChantierSearch(''); setFilterOpen(false); }}>
+            <span className={!filterConducteurIds.length && !filterColors.length && !filterSansCA ? 'active' : ''}>●</span>
             Tout afficher
+          </div>
+          <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
+          <div style={{ padding: '4px 14px 2px', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>COMPLÉTUDE</div>
+          <div
+            className={`conducteur-filter-item ${filterSansCA ? 'active' : ''}`}
+            onClick={() => setFilterSansCA((v) => !v)}
+          >
+            <span className="filter-check">{filterSansCA ? '✓' : ''}</span>
+            💰 Sans CA renseigné
           </div>
           <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
           <div style={{ padding: '4px 14px 2px', fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>CONDUCTEUR</div>
