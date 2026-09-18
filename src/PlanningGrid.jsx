@@ -484,7 +484,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           .map(r => r.type === 'pending' ? r.equipeIndex : r.teamId);
         for (const eq of allEquipes) {
           for (const day of visibleDays) {
-            endDateCacheRef.current.set(`${eq}|${day.date}`, cb.addWorkingDays(day.date, duree - 1, eq, { force_aout }));
+            endDateCacheRef.current.set(`${eq}|${day.date}`, cb.addWorkingDays(day.date, duree - 1, eq, { force_aout: forceAout }));
           }
         }
       }
