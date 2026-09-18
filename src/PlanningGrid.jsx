@@ -198,6 +198,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   resize,
   today,
   ferieSet,
+  congeBlockedSet,
   callbacksRef,
   scrollRef,
 }) {
@@ -412,10 +413,38 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const dco = e.target.closest('[data-co]');
       if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
       else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
-      // SAFE: cache lazy — calcul à la volée au premier survol, puis O(1)
-      const dragStartT0 = performance.now();
+      // SAFE: precompute all end dates at dragstart — zero computation during drag
       endDateCacheRef.current = new Map();
-      if (cellMapRef.current.size > 0) console.log(`[dragStart] cells=${cellMapRef.current.size} days=${visibleDays.length} rows=${gridRows.length} t=${(performance.now()-dragStartT0).toFixed(1)}ms`);
+      if (draggedItemRef.current) {
+        const dur = draggedItemRef.current.duree - 1;
+        const fAout = draggedItemRef.current.force_aout;
+        const allEq = [];
+        gridRows.forEach(r => {
+          if (r.type === 'team') allEq.push(r.teamId);
+          else if (r.type === 'pending') allEq.push(r.equipeIndex);
+        });
+        const t0 = performance.now();
+        for (const eq of allEq) {
+          for (const day of visibleDays) {
+            let y = (day.date.charCodeAt(0)-48)*1000+(day.date.charCodeAt(1)-48)*100+(day.date.charCodeAt(2)-48)*10+(day.date.charCodeAt(3)-48);
+            let mo = (day.date.charCodeAt(5)-48)*10+(day.date.charCodeAt(6)-48);
+            let dy = (day.date.charCodeAt(8)-48)*10+(day.date.charCodeAt(9)-48);
+            let cnt = 0;
+            const eqS = ''+eq;
+            for (let i = 0; i < dur*3+1; i++) {
+              const mm = mo<3?mo+12:mo, yy = mo<3?y-1:y;
+              const dow = (dy+yy+(yy>>2)-(yy/100|0)+(yy/400|0)+((31*mm)/7|0))%7;
+              const ds = y+'-'+(mo<10?'0':'')+mo+'-'+(dy<10?'0':'')+dy;
+              const blk = dow===0||dow===6||ferieSet.has(ds)||congeBlockedSet.has(eqS+'-'+ds);
+              const aug = !fAout&&mo===8&&dy>=1&&dy<=21;
+              if (!blk&&!aug) { cnt++; if (cnt>=dur) { endDateCacheRef.current.set(eq+'|'+day.date, ds); break; } }
+              dy++;
+              if(dy>31||(dy>30&&(mo===4||mo===6||mo===9||mo===11))||(dy>29&&mo===2)||(dy>28&&mo===2&&!((y%4===0&&y%100!==0)||y%400===0))){dy=1;mo++;if(mo>12){mo=1;y++;}}
+            }
+          }
+        }
+        console.log(`[dragStart] precomputed ${allEq.length}eq×${visibleDays.length}d = ${endDateCacheRef.current.size} entries in ${(performance.now()-t0).toFixed(0)}ms`);
+      }
       const dragSrc = dch || dco;
       if (dragSrc) dragSrc.classList.add('dragging-source');
       gridRef.current?.classList.add('dragging-active');
@@ -544,11 +573,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
           if (draggedItemRef.current) {
             const cacheKey = `${eq}|${d}`;
-            let endDate = endDateCacheRef.current?.get(cacheKey);
-            if (!endDate) {
-              endDate = cb.addWorkingDays(d, draggedItemRef.current.duree - 1, eq, { force_aout: draggedItemRef.current.force_aout });
-              endDateCacheRef.current?.set(cacheKey, endDate);
-            }
+            const endDate = endDateCacheRef.current?.get(cacheKey);
             if (endDate) {
               const endIdx = dayIdxMemo.get(endDate);
               if (endIdx != null && endIdx >= 0) {
