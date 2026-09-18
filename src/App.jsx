@@ -1204,11 +1204,35 @@ export default function App() {
 
     commit(() => {
       if (modal.type === 'chantier') {
+        let equipe = Number(form.equipe);
+        let companyId = form.company_id || teamById.get(equipe)?.companyId || companies[0]?.id;
+
+        if (!teamById.has(equipe)) {
+          const companyTeams = teams.filter((t) => t.companyId === companyId);
+          const newTeamId = nextLocalId();
+          const newTeam = {
+            id: newTeamId,
+            nom: `Équipe ${companyTeams.length + 1}`,
+            companyId,
+            ordre: companyTeams.reduce((max, t) => Math.max(max, t.ordre ?? 0), -1) + 1,
+          };
+          setTeams((prev) => {
+            let idx = prev.length;
+            for (let i = prev.length - 1; i >= 0; i--) {
+              if (prev[i].companyId === companyId) { idx = i + 1; break; }
+            }
+            const next = [...prev];
+            next.splice(idx, 0, newTeam);
+            return next;
+          });
+          equipe = newTeamId;
+        }
+
         const item = {
           id: form.id || nextLocalId(),
-          company_id: form.company_id || teamById.get(Number(form.equipe))?.companyId || companies[0]?.id,
-          equipe: Number(form.equipe),
-          start: nextWorkingDay(form.start, Number(form.equipe)),
+          company_id: companyId,
+          equipe,
+          start: nextWorkingDay(form.start, equipe),
           duree: Number(form.duree),
           nom: form.nom,
           conducteurId: Number(form.conducteurId),
