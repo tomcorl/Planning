@@ -331,7 +331,8 @@ export default function App() {
 
   const gridRows = useMemo(() => {
     const rows = [];
-    let pendingGlobal = 0;
+    const maxTeamId = teams.reduce((max, t) => Math.max(max, t.id), 0);
+    let pendingOffset = 0;
     for (let c = 0; c < companies.length; c++) {
       const comp = companies[c];
       rows.push({ type: 'company-header', name: comp.nom, id: `ch-${comp.id}` });
@@ -341,10 +342,11 @@ export default function App() {
       });
       const isNoree = comp.nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('noree');
       const pendingCount = isNoree ? 5 : 3;
+      const base = maxTeamId + 1 + pendingOffset;
       for (let p = 0; p < pendingCount; p++) {
-        pendingGlobal++;
-        rows.push({ type: 'pending', id: `p-${c}-${p}`, equipeIndex: -(pendingGlobal) });
+        rows.push({ type: 'pending', id: `p-${c}-${p}`, equipeIndex: base + p });
       }
+      pendingOffset += pendingCount;
       rows.push({ type: 'separator', id: `s-${c}` });
     }
     return rows;
@@ -1642,17 +1644,11 @@ export default function App() {
   }
 
   function quickAdd() {
-    const lastEq = lastCellRef.current?.equipe;
-    const equipe = lastEq ?? teams[0]?.id ?? 0;
-    const teamCompanyId = teamById.get(equipe)?.companyId || companies[0]?.id;
-    const startDate = lastCellRef.current?.date
-      ? nextWorkingDay(lastCellRef.current.date, equipe)
-      : nextWorkingDay(today, equipe);
+    const firstTeamId = teams[0]?.id ?? 0;
     setForm({
       id: null,
-      company_id: teamCompanyId,
-      equipe,
-      start: startDate,
+      equipe: firstTeamId,
+      start: nextWorkingDay(today, firstTeamId),
       duree: 3,
       nom: '',
       conducteurId: conducteurs[0]?.id || null,
