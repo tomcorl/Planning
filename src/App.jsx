@@ -338,9 +338,13 @@ export default function App() {
       companyTeams.forEach((t, idx) => {
         rows.push({ type: 'team', teamId: t.id, name: t.nom, numInCompany: idx + 1 });
       });
-      const pendingCount = comp.nom === 'Noree' ? 5 : 3;
+      const isNoree = comp.nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('noree');
+      const pendingCount = isNoree ? 5 : 3;
       const offset = teams.reduce((max, t) => Math.max(max, t.id), 0) + 1
-        + companies.slice(0, c).reduce((sum, prev) => sum + (prev.nom === 'Noree' ? 5 : 3), 0);
+        + companies.slice(0, c).reduce((sum, prev) => {
+            const prevNoree = prev.nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('noree');
+            return sum + (prevNoree ? 5 : 3);
+          }, 0);
       for (let p = 0; p < pendingCount; p++) {
         rows.push({ type: 'pending', id: `p-${c}-${p}`, equipeIndex: offset + p });
       }
