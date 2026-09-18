@@ -198,7 +198,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   resize,
   today,
   ferieSet,
-  congeBlockedSet,
   callbacksRef,
   scrollRef,
 }) {
@@ -224,33 +223,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const autoScrollRaf = React.useRef(null);
   const dragClientPos = React.useRef({ x: 0, y: 0 });
   const totalDays = visibleDays.length;
-
-  function fastAddWorkingDays(start, workingDays, equipe, forceAout) {
-    let y = (start.charCodeAt(0) - 48) * 1000 + (start.charCodeAt(1) - 48) * 100 + (start.charCodeAt(2) - 48) * 10 + (start.charCodeAt(3) - 48);
-    let mo = (start.charCodeAt(5) - 48) * 10 + (start.charCodeAt(6) - 48);
-    let dy = (start.charCodeAt(8) - 48) * 10 + (start.charCodeAt(9) - 48);
-    let count = 0;
-    const limit = workingDays * 3;
-    const eqStr = String(equipe);
-    for (let i = 0; i < limit; i++) {
-      const mm = mo < 3 ? mo + 12 : mo;
-      const yy = mo < 3 ? y - 1 : y;
-      const dow = (dy + yy + (yy >> 2) - Math.floor(yy / 100) + Math.floor(yy / 400) + Math.floor((31 * mm) / 7)) % 7;
-      const blocked = dow === 0 || dow === 6 || ferieSet.has(start) || congeBlockedSet.has(eqStr + '-' + start);
-      const augBlocked = !forceAout && mo === 8 && dy >= 1 && dy <= 21;
-      if (!blocked && !augBlocked) {
-        count++;
-        if (count >= workingDays) return start;
-      }
-      dy++;
-      if (dy > 31 || (dy > 30 && (mo === 4 || mo === 6 || mo === 9 || mo === 11)) || (dy > 29 && mo === 2) || (dy > 28 && mo === 2 && !((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0))) {
-        dy = 1; mo++;
-        if (mo > 12) { mo = 1; y++; }
-      }
-      start = y + '-' + (mo < 10 ? '0' : '') + mo + '-' + (dy < 10 ? '0' : '') + dy;
-    }
-    return start;
-  }
 
   React.useEffect(() => {
     if (initialScrolled.current) return;
@@ -574,7 +546,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
             const cacheKey = `${eq}|${d}`;
             let endDate = endDateCacheRef.current?.get(cacheKey);
             if (!endDate) {
-              endDate = fastAddWorkingDays(d, draggedItemRef.current.duree - 1, eq, draggedItemRef.current.force_aout);
+              endDate = cb.addWorkingDays(d, draggedItemRef.current.duree - 1, eq, { force_aout: draggedItemRef.current.force_aout });
               endDateCacheRef.current?.set(cacheKey, endDate);
             }
             if (endDate) {

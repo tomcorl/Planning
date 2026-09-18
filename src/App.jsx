@@ -2219,7 +2219,6 @@ export default function App() {
         companies={companies}
         teams={teams}
         ferieSet={ferieSet}
-        congeBlockedSet={congeBlockedSet}
         callbacksRef={gridCallbacksRef}
         scrollRef={scrollRef}
       />
