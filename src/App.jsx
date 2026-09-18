@@ -331,6 +331,7 @@ export default function App() {
 
   const gridRows = useMemo(() => {
     const rows = [];
+    let pendingGlobal = 0;
     for (let c = 0; c < companies.length; c++) {
       const comp = companies[c];
       rows.push({ type: 'company-header', name: comp.nom, id: `ch-${comp.id}` });
@@ -340,13 +341,9 @@ export default function App() {
       });
       const isNoree = comp.nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('noree');
       const pendingCount = isNoree ? 5 : 3;
-      const offset = teams.reduce((max, t) => Math.max(max, t.id), 0) + 1
-        + companies.slice(0, c).reduce((sum, prev) => {
-            const prevNoree = prev.nom.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('noree');
-            return sum + (prevNoree ? 5 : 3);
-          }, 0);
       for (let p = 0; p < pendingCount; p++) {
-        rows.push({ type: 'pending', id: `p-${c}-${p}`, equipeIndex: offset + p });
+        pendingGlobal++;
+        rows.push({ type: 'pending', id: `p-${c}-${p}`, equipeIndex: -(pendingGlobal) });
       }
       rows.push({ type: 'separator', id: `s-${c}` });
     }
@@ -1204,29 +1201,8 @@ export default function App() {
 
     commit(() => {
       if (modal.type === 'chantier') {
-        let equipe = Number(form.equipe);
-        let companyId = form.company_id || teamById.get(equipe)?.companyId || companies[0]?.id;
-
-        if (!teamById.has(equipe)) {
-          const companyTeams = teams.filter((t) => t.companyId === companyId);
-          const newTeamId = nextLocalId();
-          const newTeam = {
-            id: newTeamId,
-            nom: `Équipe ${companyTeams.length + 1}`,
-            companyId,
-            ordre: companyTeams.reduce((max, t) => Math.max(max, t.ordre ?? 0), -1) + 1,
-          };
-          setTeams((prev) => {
-            let idx = prev.length;
-            for (let i = prev.length - 1; i >= 0; i--) {
-              if (prev[i].companyId === companyId) { idx = i + 1; break; }
-            }
-            const next = [...prev];
-            next.splice(idx, 0, newTeam);
-            return next;
-          });
-          equipe = newTeamId;
-        }
+        const equipe = Number(form.equipe);
+        const companyId = form.company_id || teamById.get(equipe)?.companyId || companies[0]?.id;
 
         const item = {
           id: form.id || nextLocalId(),
