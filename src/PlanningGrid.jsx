@@ -473,22 +473,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const dco = e.target.closest('[data-co]');
       if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
       else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
-      // SAFE: cache lazy pour éviter freeze au dragStart (15k addWorkingDays sync)
+      // SAFE: cache lazy — calcul à la volée au premier survol, puis O(1)
       const dragStartT0 = performance.now();
       endDateCacheRef.current = new Map();
-      if (draggedItemRef.current) {
-        const duree = draggedItemRef.current.duree;
-        const forceAout = draggedItemRef.current.force_aout;
-        const allEquipes = gridRows
-          .filter(r => r.type === 'team' || r.type === 'pending')
-          .map(r => r.type === 'pending' ? r.equipeIndex : r.teamId);
-        for (const eq of allEquipes) {
-          for (const day of visibleDays) {
-            endDateCacheRef.current.set(`${eq}|${day.date}`, cb.addWorkingDays(day.date, duree - 1, eq, { force_aout: forceAout }));
-          }
-        }
-      }
-      if (cellMapRef.current.size > 0) console.log(`[dragStart] cells=${cellMapRef.current.size} days=${visibleDays.length} rows=${gridRows.length} cache=${endDateCacheRef.current.size} t=${(performance.now()-dragStartT0).toFixed(1)}ms`);
+      if (cellMapRef.current.size > 0) console.log(`[dragStart] cells=${cellMapRef.current.size} days=${visibleDays.length} rows=${gridRows.length} cache=lazy t=${(performance.now()-dragStartT0).toFixed(1)}ms`);
       const dragSrc = dch || dco;
       if (dragSrc) dragSrc.classList.add('dragging-source');
       gridRef.current?.classList.add('dragging-active');
