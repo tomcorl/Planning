@@ -1630,32 +1630,30 @@ button:active {
 
 .drag-overlay {
   position: absolute;
+  top: 0;
+  left: 0;
   pointer-events: none;
   border: 2px solid var(--green);
   background: rgba(22, 163, 74, 0.12);
   border-radius: 8px;
   z-index: 10000;
-  display: none;
   box-sizing: border-box;
-}
-
-.drag-overlay.visible {
-  display: block;
+  transform: translate(-9999px, 0);
+  will-change: transform;
 }
 
 .drag-end-overlay {
   position: absolute;
+  top: 0;
+  left: 0;
   pointer-events: none;
   border: 2px solid #dc2626;
   background: rgba(220, 38, 38, 0.12);
   border-radius: 8px;
   box-sizing: border-box;
   z-index: 10000;
-  display: none;
-}
-
-.drag-end-overlay.visible {
-  display: block;
+  transform: translate(-9999px, 0);
+  will-change: transform;
 }
 
 .main-grid.dragging-active .bloc:not(.dragging-source) {

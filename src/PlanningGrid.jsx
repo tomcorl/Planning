@@ -562,15 +562,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
         if (di != null && ri >= 0) {
           const startLeft = 260 + di * cellWidth;
           if (dragOverlayRef.current) {
-            dragOverlayRef.current.style.left = startLeft + 'px';
-            dragOverlayRef.current.style.top = t + 'px';
             dragOverlayRef.current.style.width = cellWidth + 'px';
             dragOverlayRef.current.style.height = rh + 'px';
-            dragOverlayRef.current.classList.add('visible');
+            dragOverlayRef.current.style.transform = `translate(${startLeft}px,${t}px)`;
           }
           highlightTargetDate(d);
           // overlay rouge = case de fin
-          if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
           if (draggedItemRef.current) {
             const cacheKey = `${eq}|${d}`;
             const endDate = endDateCacheRef.current?.get(cacheKey);
@@ -579,16 +576,18 @@ const PlanningGrid = React.memo(function PlanningGrid({
               if (endIdx != null && endIdx >= 0) {
                 const endLeft = 260 + endIdx * cellWidth;
                 if (dragEndOverlayRef.current) {
-                  dragEndOverlayRef.current.style.left = endLeft + 'px';
-                  dragEndOverlayRef.current.style.top = t + 'px';
                   dragEndOverlayRef.current.style.width = cellWidth + 'px';
                   dragEndOverlayRef.current.style.height = rh + 'px';
-                  dragEndOverlayRef.current.classList.add('visible');
+                  dragEndOverlayRef.current.style.transform = `translate(${endLeft}px,${t}px)`;
                 }
+              } else if (dragEndOverlayRef.current) {
+                dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
               }
+            } else if (dragEndOverlayRef.current) {
+              dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
             }
           }
-          }
+        }
         const dt = performance.now() - t0;
         if (dt > 8) console.log(`[drag] ${dt.toFixed(1)}ms key=${k} cells=${cellMapRef.current.size} di=${di} ri=${ri}`);
       });
@@ -601,8 +600,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
       stopAutoScroll();
       if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; }
       pendingDragRef.current = null;
-      if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible');
-      if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
+      if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)';
+      if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
       if (prevDragCellRef.current) {
         prevDragCellRef.current.classList.remove('drag-preview');
         prevDragCellRef.current = null;
@@ -706,7 +705,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; stopAutoScroll(); if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible'); if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible'); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; stopAutoScroll(); if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
