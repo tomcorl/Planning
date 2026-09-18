@@ -198,6 +198,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   resize,
   today,
   ferieSet,
+  congeBlockedSet,
   callbacksRef,
   scrollRef,
 }) {
@@ -222,7 +223,35 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const dragEndOverlayRef = React.useRef(null);
   const autoScrollRaf = React.useRef(null);
   const dragClientPos = React.useRef({ x: 0, y: 0 });
+  const blockedDatesByEquipeRef = React.useRef(null);
   const totalDays = visibleDays.length;
+
+  function fastAddWorkingDays(start, workingDays, equipe, forceAout) {
+    const blockedDates = blockedDatesByEquipeRef.current?.get(equipe);
+    const startDate = new Date(start + 'T12:00:00');
+    let ms = startDate.getTime();
+    let count = 0;
+    const DAY = 86400000;
+    const safety = workingDays * 3;
+    for (let i = 0; i < safety; i++) {
+      const d = new Date(ms);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${day}`;
+      let blocked = d.getDay() === 0 || d.getDay() === 6 || ferieSet.has(dateStr);
+      if (!blocked && blockedDates) blocked = blockedDates.has(dateStr);
+      if (!blocked && !forceAout) {
+        if (d.getMonth() === 7 && d.getDate() >= 1 && d.getDate() <= 21) blocked = true;
+      }
+      if (!blocked) count += 1;
+      if (count >= workingDays) {
+        return dateStr;
+      }
+      ms += DAY;
+    }
+    return start;
+  }
 
   React.useEffect(() => {
     if (initialScrolled.current) return;
@@ -386,7 +415,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                       const cacheKey = `${peq}|${pd}`;
                       let endDate = endDateCacheRef.current?.get(cacheKey);
                       if (!endDate) {
-                        endDate = cb.addWorkingDays(pd, draggedItemRef.current.duree - 1, peq, { force_aout: draggedItemRef.current.force_aout });
+                        endDate = fastAddWorkingDays(pd, draggedItemRef.current.duree - 1, peq, draggedItemRef.current.force_aout);
                         endDateCacheRef.current?.set(cacheKey, endDate);
                       }
                       if (endDate) {
@@ -476,7 +505,31 @@ const PlanningGrid = React.memo(function PlanningGrid({
       // SAFE: cache lazy — calcul à la volée au premier survol, puis O(1)
       const dragStartT0 = performance.now();
       endDateCacheRef.current = new Map();
-      if (cellMapRef.current.size > 0) console.log(`[dragStart] cells=${cellMapRef.current.size} days=${visibleDays.length} rows=${gridRows.length} cache=lazy t=${(performance.now()-dragStartT0).toFixed(1)}ms`);
+      // Pre-compute blocked dates per equipe for fast addWorkingDays
+      const allEquipes = new Set();
+      gridRows.forEach(r => {
+        if (r.type === 'team') allEquipes.add(r.teamId);
+        else if (r.type === 'pending') allEquipes.add(r.equipeIndex);
+      });
+      const blockedByEquipe = new Map();
+      for (const eq of allEquipes) {
+        const blocked = new Set();
+        for (const c of conges) {
+          if (c.equipe === eq || c.allEquipes) {
+            let d = new Date(c.start + 'T12:00:00');
+            for (let i = 0; i < (c.duree || 1); i++) {
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, '0');
+              const day = String(d.getDate()).padStart(2, '0');
+              blocked.add(`${y}-${m}-${day}`);
+              d.setDate(d.getDate() + 1);
+            }
+          }
+        }
+        blockedByEquipe.set(eq, blocked);
+      }
+      blockedDatesByEquipeRef.current = blockedByEquipe;
+      if (cellMapRef.current.size > 0) console.log(`[dragStart] cells=${cellMapRef.current.size} days=${visibleDays.length} rows=${gridRows.length} equipes=${allEquipes.size} t=${(performance.now()-dragStartT0).toFixed(1)}ms`);
       const dragSrc = dch || dco;
       if (dragSrc) dragSrc.classList.add('dragging-source');
       gridRef.current?.classList.add('dragging-active');
@@ -607,7 +660,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
             const cacheKey = `${eq}|${d}`;
             let endDate = endDateCacheRef.current?.get(cacheKey);
             if (!endDate) {
-              endDate = cb.addWorkingDays(d, draggedItemRef.current.duree - 1, eq, { force_aout: draggedItemRef.current.force_aout });
+              endDate = fastAddWorkingDays(d, draggedItemRef.current.duree - 1, eq, draggedItemRef.current.force_aout);
               endDateCacheRef.current?.set(cacheKey, endDate);
             }
             if (endDate) {
