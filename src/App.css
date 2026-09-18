@@ -1635,15 +1635,12 @@ button:active {
   background: rgba(22, 163, 74, 0.12);
   border-radius: 8px;
   z-index: 10000;
-  visibility: hidden;
-  opacity: 0;
-  will-change: left, top, opacity;
+  display: none;
   box-sizing: border-box;
 }
 
 .drag-overlay.visible {
-  visibility: visible;
-  opacity: 1;
+  display: block;
 }
 
 .drag-end-overlay {
@@ -1654,14 +1651,11 @@ button:active {
   border-radius: 8px;
   box-sizing: border-box;
   z-index: 10000;
-  visibility: hidden;
-  opacity: 0;
-  will-change: left, top, opacity;
+  display: none;
 }
 
 .drag-end-overlay.visible {
-  visibility: visible;
-  opacity: 1;
+  display: block;
 }
 
 .main-grid.dragging-active .bloc:not(.dragging-source) {

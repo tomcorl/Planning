@@ -226,35 +226,28 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const totalDays = visibleDays.length;
 
   function fastAddWorkingDays(start, workingDays, equipe, forceAout) {
-    let y = +start.slice(0, 4);
-    let m = +start.slice(5, 7);
-    let d = +start.slice(8, 10);
-    const daysInMonth = [0,31,28,31,30,31,30,31,31,30,31,30,31];
-    function isLeap(yr) { return (yr % 4 === 0 && yr % 100 !== 0) || yr % 400 === 0; }
-    function dim(yr, mo) { return mo === 2 && isLeap(yr) ? 29 : daysInMonth[mo]; }
-    function advance() {
-      d++;
-      if (d > dim(y, m)) { d = 1; m++; if (m > 12) { m = 1; y++; } }
-    }
-    function dateStr() {
-      return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    }
-    function dayOfWeek() {
-      const a = Math.floor((14 - m) / 12);
-      const yy = y - a;
-      const mm = m + 12 * a - 2;
-      return (d + yy + Math.floor(yy/4) - Math.floor(yy/100) + Math.floor(yy/400) + Math.floor((31*mm)/7)) % 7;
-    }
+    let y = (start.charCodeAt(0) - 48) * 1000 + (start.charCodeAt(1) - 48) * 100 + (start.charCodeAt(2) - 48) * 10 + (start.charCodeAt(3) - 48);
+    let mo = (start.charCodeAt(5) - 48) * 10 + (start.charCodeAt(6) - 48);
+    let dy = (start.charCodeAt(8) - 48) * 10 + (start.charCodeAt(9) - 48);
     let count = 0;
-    const safety = workingDays * 3;
-    for (let i = 0; i < safety; i++) {
-      const dow = dayOfWeek();
-      const ds = dateStr();
-      let blocked = dow === 0 || dow === 6 || ferieSet.has(ds) || congeBlockedSet.has(`${equipe}-${ds}`);
-      if (!blocked && !forceAout && m === 8 && d >= 1 && d <= 21) blocked = true;
-      if (!blocked) count += 1;
-      if (count >= workingDays) return ds;
-      advance();
+    const limit = workingDays * 3;
+    const eqStr = String(equipe);
+    for (let i = 0; i < limit; i++) {
+      const mm = mo < 3 ? mo + 12 : mo;
+      const yy = mo < 3 ? y - 1 : y;
+      const dow = (dy + yy + (yy >> 2) - Math.floor(yy / 100) + Math.floor(yy / 400) + Math.floor((31 * mm) / 7)) % 7;
+      const blocked = dow === 0 || dow === 6 || ferieSet.has(start) || congeBlockedSet.has(eqStr + '-' + start);
+      const augBlocked = !forceAout && mo === 8 && dy >= 1 && dy <= 21;
+      if (!blocked && !augBlocked) {
+        count++;
+        if (count >= workingDays) return start;
+      }
+      dy++;
+      if (dy > 31 || (dy > 30 && (mo === 4 || mo === 6 || mo === 9 || mo === 11)) || (dy > 29 && mo === 2) || (dy > 28 && mo === 2 && !((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0))) {
+        dy = 1; mo++;
+        if (mo > 12) { mo = 1; y++; }
+      }
+      start = y + '-' + (mo < 10 ? '0' : '') + mo + '-' + (dy < 10 ? '0' : '') + dy;
     }
     return start;
   }
@@ -384,67 +377,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (dx !== 0 || dy !== 0) {
       el.scrollLeft += dx;
       el.scrollTop += dy;
-      const { x, y } = dragClientPos.current;
-      const elemUnder = document.elementFromPoint(x, y);
-      if (elemUnder) {
-        const cell = elemUnder.closest('[data-eq]');
-        if (cell) {
-          const eq = Number(cell.dataset.eq);
-          const da = cell.dataset.da;
-          const newKey = `${eq}-${da}`;
-          if (lastDragKeyRef.current !== newKey) {
-            const dayIdx = dayIdxMemo.get(da);
-            const rowInfo = rowPositionMap.get(eq);
-            if (dayIdx != null && rowInfo) {
-              pendingDragRef.current = { pEquipe: eq, pDate: da, dayIdx, rowIdx: rowInfo.rowIdx, top: rowInfo.top, rowH: rowInfo.rowH, key: newKey };
-              if (!rafDragRef.current) {
-                rafDragRef.current = requestAnimationFrame(() => {
-                  rafDragRef.current = null;
-                  const pending = pendingDragRef.current;
-                  pendingDragRef.current = null;
-                  if (!pending) return;
-                  const { pEquipe: peq, pDate: pd, dayIdx: pdi, top: pt, rowH: prh, key: pk } = pending;
-                  if (lastDragKeyRef.current === pk) return;
-                  lastDragKeyRef.current = pk;
-                  if (pdi != null) {
-                    const startLeft = 260 + pdi * cellWidth;
-                    if (dragOverlayRef.current) {
-                      dragOverlayRef.current.style.left = startLeft + 'px';
-                      dragOverlayRef.current.style.top = pt + 'px';
-                      dragOverlayRef.current.style.width = cellWidth + 'px';
-                      dragOverlayRef.current.style.height = prh + 'px';
-                      dragOverlayRef.current.classList.add('visible');
-                    }
-                    highlightTargetDate(pd);
-                    if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
-                    if (draggedItemRef.current) {
-                      const cacheKey = `${peq}|${pd}`;
-                      let endDate = endDateCacheRef.current?.get(cacheKey);
-                      if (!endDate) {
-                        endDate = fastAddWorkingDays(pd, draggedItemRef.current.duree - 1, peq, draggedItemRef.current.force_aout);
-                        endDateCacheRef.current?.set(cacheKey, endDate);
-                      }
-                      if (endDate) {
-                        const endIdx = dayIdxMemo.get(endDate);
-                        if (endIdx != null && endIdx >= 0) {
-                          const endLeft = 260 + endIdx * cellWidth;
-                          if (dragEndOverlayRef.current) {
-                            dragEndOverlayRef.current.style.left = endLeft + 'px';
-                            dragEndOverlayRef.current.style.top = pt + 'px';
-                            dragEndOverlayRef.current.style.width = cellWidth + 'px';
-                            dragEndOverlayRef.current.style.height = prh + 'px';
-                            dragEndOverlayRef.current.classList.add('visible');
-                          }
-                        }
-                      }
-                    }
-                  }
-                });
-              }
-            }
-          }
-        }
-      }
     }
     if (dx !== 0 || dy !== 0) {
       autoScrollRaf.current = requestAnimationFrame(tickAutoScroll);
