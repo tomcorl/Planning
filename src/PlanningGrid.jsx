@@ -226,25 +226,35 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const totalDays = visibleDays.length;
 
   function fastAddWorkingDays(start, workingDays, equipe, forceAout) {
-    const startDate = new Date(start + 'T12:00:00');
-    let ms = startDate.getTime();
+    let y = +start.slice(0, 4);
+    let m = +start.slice(5, 7);
+    let d = +start.slice(8, 10);
+    const daysInMonth = [0,31,28,31,30,31,30,31,31,30,31,30,31];
+    function isLeap(yr) { return (yr % 4 === 0 && yr % 100 !== 0) || yr % 400 === 0; }
+    function dim(yr, mo) { return mo === 2 && isLeap(yr) ? 29 : daysInMonth[mo]; }
+    function advance() {
+      d++;
+      if (d > dim(y, m)) { d = 1; m++; if (m > 12) { m = 1; y++; } }
+    }
+    function dateStr() {
+      return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+    function dayOfWeek() {
+      const a = Math.floor((14 - m) / 12);
+      const yy = y - a;
+      const mm = m + 12 * a - 2;
+      return (d + yy + Math.floor(yy/4) - Math.floor(yy/100) + Math.floor(yy/400) + Math.floor((31*mm)/7)) % 7;
+    }
     let count = 0;
-    const DAY = 86400000;
     const safety = workingDays * 3;
     for (let i = 0; i < safety; i++) {
-      const d = new Date(ms);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${day}`;
-      const dow = d.getDay();
-      let blocked = dow === 0 || dow === 6 || ferieSet.has(dateStr) || congeBlockedSet.has(`${equipe}-${dateStr}`);
-      if (!blocked && !forceAout) {
-        if (d.getMonth() === 7 && d.getDate() >= 1 && d.getDate() <= 21) blocked = true;
-      }
+      const dow = dayOfWeek();
+      const ds = dateStr();
+      let blocked = dow === 0 || dow === 6 || ferieSet.has(ds) || congeBlockedSet.has(`${equipe}-${ds}`);
+      if (!blocked && !forceAout && m === 8 && d >= 1 && d <= 21) blocked = true;
       if (!blocked) count += 1;
-      if (count >= workingDays) return dateStr;
-      ms += DAY;
+      if (count >= workingDays) return ds;
+      advance();
     }
     return start;
   }
