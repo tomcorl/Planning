@@ -271,6 +271,21 @@ const PlanningGrid = React.memo(function PlanningGrid({
     return s;
   }, [weekGroups, visibleDays]);
 
+  const rowPositionMap = React.useMemo(() => {
+    const map = new Map();
+    let acc = 0;
+    for (let i = 0; i < gridRows.length; i++) {
+      const r = gridRows[i];
+      let h = rowHeight;
+      if (r.type === 'company-header') h = 34;
+      else if (r.type === 'separator') h = 8;
+      const id = r.type === 'pending' ? r.equipeIndex : r.teamId;
+      if (id != null) map.set(id, { top: acc, rowH: h, rowIdx: i });
+      acc += h;
+    }
+    return map;
+  }, [gridRows, rowHeight]);
+
   function highlightTargetDate(date) {
     if (prevTargetDateRef.current?.date === date) return;
     // v3: no classList on date-cell to avoid Rendering 4.5s - only move indicator
@@ -334,8 +349,67 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (dx !== 0 || dy !== 0) {
       el.scrollLeft += dx;
       el.scrollTop += dy;
-      // resync overlay : le dragover ne fire pas quand souris immobile mais contenu bouge
-      // on ne déclenche pas de setState, juste on laisse le prochain dragover mettre à jour
+      const { x, y } = dragClientPos.current;
+      const elemUnder = document.elementFromPoint(x, y);
+      if (elemUnder) {
+        const cell = elemUnder.closest('[data-eq]');
+        if (cell) {
+          const eq = Number(cell.dataset.eq);
+          const da = cell.dataset.da;
+          const newKey = `${eq}-${da}`;
+          if (lastDragKeyRef.current !== newKey) {
+            const dayIdx = dayIdxMemo.get(da);
+            const rowInfo = rowPositionMap.get(eq);
+            if (dayIdx != null && rowInfo) {
+              pendingDragRef.current = { pEquipe: eq, pDate: da, dayIdx, rowIdx: rowInfo.rowIdx, top: rowInfo.top, rowH: rowInfo.rowH, key: newKey };
+              if (!rafDragRef.current) {
+                rafDragRef.current = requestAnimationFrame(() => {
+                  rafDragRef.current = null;
+                  const pending = pendingDragRef.current;
+                  pendingDragRef.current = null;
+                  if (!pending) return;
+                  const { pEquipe: peq, pDate: pd, dayIdx: pdi, top: pt, rowH: prh, key: pk } = pending;
+                  if (lastDragKeyRef.current === pk) return;
+                  lastDragKeyRef.current = pk;
+                  if (pdi != null) {
+                    const startLeft = 260 + pdi * cellWidth;
+                    if (dragOverlayRef.current) {
+                      dragOverlayRef.current.style.left = startLeft + 'px';
+                      dragOverlayRef.current.style.top = pt + 'px';
+                      dragOverlayRef.current.style.width = cellWidth + 'px';
+                      dragOverlayRef.current.style.height = prh + 'px';
+                      dragOverlayRef.current.classList.add('visible');
+                    }
+                    highlightTargetDate(pd);
+                    if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
+                    if (draggedItemRef.current) {
+                      const cacheKey = `${peq}|${pd}`;
+                      let endDate = endDateCacheRef.current?.get(cacheKey);
+                      if (!endDate) {
+                        endDate = cb.addWorkingDays(pd, draggedItemRef.current.duree - 1, peq, { force_aout: draggedItemRef.current.force_aout });
+                        endDateCacheRef.current?.set(cacheKey, endDate);
+                      }
+                      if (endDate) {
+                        const endIdx = dayIdxMemo.get(endDate);
+                        if (endIdx != null && endIdx >= 0) {
+                          const endLeft = 260 + endIdx * cellWidth;
+                          if (dragEndOverlayRef.current) {
+                            dragEndOverlayRef.current.style.left = endLeft + 'px';
+                            dragEndOverlayRef.current.style.top = pt + 'px';
+                            dragEndOverlayRef.current.style.width = cellWidth + 'px';
+                            dragEndOverlayRef.current.style.height = prh + 'px';
+                            dragEndOverlayRef.current.classList.add('visible');
+                          }
+                        }
+                      }
+                    }
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
     }
     if (dx !== 0 || dy !== 0) {
       autoScrollRaf.current = requestAnimationFrame(tickAutoScroll);
@@ -402,8 +476,19 @@ const PlanningGrid = React.memo(function PlanningGrid({
       // SAFE: cache lazy pour éviter freeze au dragStart (15k addWorkingDays sync)
       const dragStartT0 = performance.now();
       endDateCacheRef.current = new Map();
-      // log total cells for diagnosis
-      if (cellMapRef.current.size > 0) console.log(`[dragStart] cells=${cellMapRef.current.size} days=${visibleDays.length} rows=${gridRows.length} t=${(performance.now()-dragStartT0).toFixed(1)}ms`);
+      if (draggedItemRef.current) {
+        const duree = draggedItemRef.current.duree;
+        const forceAout = draggedItemRef.current.force_aout;
+        const allEquipes = gridRows
+          .filter(r => r.type === 'team' || r.type === 'pending')
+          .map(r => r.type === 'pending' ? r.equipeIndex : r.teamId);
+        for (const eq of allEquipes) {
+          for (const day of visibleDays) {
+            endDateCacheRef.current.set(`${eq}|${day.date}`, cb.addWorkingDays(day.date, duree - 1, eq, { force_aout }));
+          }
+        }
+      }
+      if (cellMapRef.current.size > 0) console.log(`[dragStart] cells=${cellMapRef.current.size} days=${visibleDays.length} rows=${gridRows.length} cache=${endDateCacheRef.current.size} t=${(performance.now()-dragStartT0).toFixed(1)}ms`);
       const dragSrc = dch || dco;
       if (dragSrc) dragSrc.classList.add('dragging-source');
       gridRef.current?.classList.add('dragging-active');
@@ -503,27 +588,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const key = `${equipe}-${date}`;
       if (lastDragKeyRef.current === key && !rafDragRef.current) return;
       const dayIdx = dayIdxMemo.get(date);
-      // trouver rowIdx et top en tenant compte des hauteurs variables
-      let rowIdx = -1;
-      let top = 0;
-      let rowH = rowHeight;
-      let acc = 0;
-      for (let i = 0; i < gridRows.length; i++) {
-        const r = gridRows[i];
-        let h = rowHeight;
-        if (r.type === 'company-header') h = 34;
-        else if (r.type === 'separator') h = 8;
-        const id = r.type === 'pending' ? r.equipeIndex : r.teamId;
-        if (id === equipe) {
-          rowIdx = i;
-          top = acc;
-          rowH = h;
-          break;
-        }
-        acc += h;
-      }
-      if (rowIdx === -1) return;
-      pendingDragRef.current = { pEquipe: equipe, pDate: date, dayIdx, rowIdx, top, rowH, key };
+      const rowInfo = rowPositionMap.get(equipe);
+      if (!rowInfo) return;
+      const { top: t, rowH: rh, rowIdx: ri } = rowInfo;
+      pendingDragRef.current = { pEquipe: equipe, pDate: date, dayIdx, rowIdx: ri, top: t, rowH: rh, key };
       if (rafDragRef.current) return;
       rafDragRef.current = requestAnimationFrame(() => {
         const t0 = performance.now();
