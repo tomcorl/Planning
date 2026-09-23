@@ -2180,50 +2180,30 @@ export default function App() {
 
       {activePage === 'planning' && (
         <>
-      {isMobile ? (
-        <MobilePlanning
-          chantiers={chantiers}
+        <PlanningGrid
+          gridRows={gridRows}
+          visibleDays={visibleDays}
+          weekGroups={weekGroups}
+          monthGroups={monthGroups}
+          chantiersParCellule={chantiersParCellule}
           conges={conges}
-          teams={teams}
+          congeSegments={congeSegmentsMap}
           conducteurs={conducteurs}
-          companies={companies}
+          vendeurs={vendeurs}
+          typesChantier={typesChantier}
+          selectedItem={selectedItem}
+          selection={selection}
+          cellWidth={cellWidth}
           canEdit={canEdit}
-          session={session}
-          onEditChantier={openEditChantier}
-          onEditConge={openEditConge}
-          onAddChantier={quickAdd}
-          onDeleteChantier={(id) => { setSelectedItem({ type: 'chantier', id }); deleteSelectedItem(); }}
-          onDeleteConge={(id) => { setSelectedItem({ type: 'conge', id }); deleteSelectedItem(); }}
-          getEndDateForChantier={getEndDateForChantier}
-          getConducteur={getConducteur}
-          addWorkingDays={addWorkingDays}
+          resize={resize}
+          today={today}
+          companies={companies}
+          teams={teams}
+          ferieSet={ferieSet}
+          congeBlockedSet={congeBlockedSet}
+          callbacksRef={gridCallbacksRef}
+          scrollRef={scrollRef}
         />
-      ) : (
-      <PlanningGrid
-        gridRows={gridRows}
-        visibleDays={visibleDays}
-        weekGroups={weekGroups}
-        monthGroups={monthGroups}
-        chantiersParCellule={chantiersParCellule}
-        conges={conges}
-        congeSegments={congeSegmentsMap}
-        conducteurs={conducteurs}
-        vendeurs={vendeurs}
-        typesChantier={typesChantier}
-        selectedItem={selectedItem}
-        selection={selection}
-        cellWidth={cellWidth}
-        canEdit={canEdit}
-        resize={resize}
-        today={today}
-        companies={companies}
-        teams={teams}
-        ferieSet={ferieSet}
-        congeBlockedSet={congeBlockedSet}
-        callbacksRef={gridCallbacksRef}
-        scrollRef={scrollRef}
-      />
-      )}
 
         <Modals
           modal={modal} setModal={setModal}
