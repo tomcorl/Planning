@@ -387,9 +387,12 @@ const PlanningGrid = React.memo(function PlanningGrid({
   function activatePointerDrag(e) {
     const c = dragCandidateRef.current;
     if (!c) return;
-    dragCandidateRef.current = null;
-    isDraggingRef.current = true;
-    draggedItemRef.current = { id: c.id, type: c.itemType, duree: c.duree, force_aout: c.force_aout };
+      dragCandidateRef.current = null;
+      isDraggingRef.current = true;
+      // Anti-sélection texte : UNIQUEMENT quand le vrai drag démarre (seuil dépassé),
+      // jamais sur simple pointerdown/clic. Retiré dans finishPointerDrag (tous les chemins).
+      if (typeof document !== 'undefined') document.documentElement.classList.add('is-pointer-dragging');
+      draggedItemRef.current = { id: c.id, type: c.itemType, duree: c.duree, force_aout: c.force_aout };
     lastDragKeyRef.current = null;
     try {
       gridRef.current?.setPointerCapture(e.pointerId);
@@ -423,6 +426,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     const pid = dragPointerIdRef.current;
     isDraggingRef.current = false;
+    // Nettoyage systématique de l'anti-sélection (pointerup, pointercancel,
+    // perte de capture, annulation : tous les chemins passent par finishPointerDrag).
+    if (typeof document !== 'undefined') document.documentElement.classList.remove('is-pointer-dragging');
     lastDragKeyRef.current = null;
     dragPointerIdRef.current = null;
     dragCandidateRef.current = null;
