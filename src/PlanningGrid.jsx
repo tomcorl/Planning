@@ -289,6 +289,38 @@ const PlanningGrid = React.memo(function PlanningGrid({
     return map;
   }, [gridRows, rowHeight]);
 
+  // Bandes verticales des lignes équipe (triées par top) pour le ciblage drag par coordonnées.
+  const rowTopsArray = React.useMemo(() => {
+    const arr = [];
+    for (const [equipe, info] of rowPositionMap) {
+      arr.push({ equipe: Number(equipe), top: info.top, rowH: info.rowH, rowIdx: info.rowIdx });
+    }
+    arr.sort((a, b) => a.top - b.top);
+    return arr;
+  }, [rowPositionMap]);
+
+  // Ciblage de la cellule de drop UNIQUEMENT par coordonnées pointeur.
+  // Indépendant de e.target : identique au-dessus d'une cellule vide,
+  // d'un chantier, d'un congé, d'un texte ou d'un overlay.
+  // Ne parcourt que les ~N lignes équipe (pas les cellules), aucun setState.
+  function getDragTargetFromPointer(clientX, clientY) {
+    const grid = gridRef.current;
+    if (!grid) return null;
+    const rect = grid.getBoundingClientRect();
+    const dayIdx = Math.floor((clientX - rect.left - teamColW) / cellWidth);
+    if (dayIdx < 0 || dayIdx >= visibleDays.length) return null;
+    const y = clientY - rect.top;
+    let hit = null;
+    for (let i = 0; i < rowTopsArray.length; i++) {
+      const r = rowTopsArray[i];
+      if (y >= r.top && y < r.top + r.rowH) { hit = r; break; }
+    }
+    if (!hit) return null;
+    const date = visibleDays[dayIdx] ? visibleDays[dayIdx].date : null;
+    if (!date) return null;
+    return { equipe: hit.equipe, date, dayIdx, rowIdx: hit.rowIdx, top: hit.top, rowH: hit.rowH };
+  }
+
   function highlightTargetDate(date) {
     if (prevTargetDateRef.current?.date === date) return;
     // v3: no classList on date-cell to avoid Rendering 4.5s - only move indicator
@@ -424,7 +456,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
   function handleGridEvent(e) {
     const type = e.type;
-    const cell = e.target.closest('[data-eq]');
+    // Pendant le dragover : AUCUNE requête DOM (closest) — ciblage par coordonnées uniquement.
+    const cell = type === 'dragover' ? null : e.target.closest('[data-eq]');
     let chantierBloc, congeBloc, resizeHandle, noteIcon, addBtn, deleteBtn, teamInput;
     if (type !== 'dragover' && type !== 'drop' && type !== 'dragstart') {
       chantierBloc = e.target.closest('[data-ch]');
@@ -551,19 +584,13 @@ const PlanningGrid = React.memo(function PlanningGrid({
       e.preventDefault();
       dragClientPos.current = { x: e.clientX, y: e.clientY };
       startAutoScrollIfNeeded();
-      // v4.4: overlay + closest (revert maths qui buguait après scroll) + top correct
-      const cell = e.target.closest('[data-eq]');
-      if (!cell) return;
-      const equipe = Number(cell.dataset.eq);
-      const date = cell.dataset.da;
-      if (!equipe || !date) return;
-      const key = `${equipe}-${date}`;
+      // Ciblage par coordonnées pointeur — indépendant de l'élément survolé
+      // (cellule vide, chantier, congé, texte, overlay : aucune différence).
+      const t = getDragTargetFromPointer(e.clientX, e.clientY);
+      if (!t) return;
+      const key = `${t.equipe}-${t.date}`;
       if (lastDragKeyRef.current === key && !rafDragRef.current) return;
-      const dayIdx = dayIdxMemo.get(date);
-      const rowInfo = rowPositionMap.get(equipe);
-      if (!rowInfo) return;
-      const { top: t, rowH: rh, rowIdx: ri } = rowInfo;
-      pendingDragRef.current = { pEquipe: equipe, pDate: date, dayIdx, rowIdx: ri, top: t, rowH: rh, key };
+      pendingDragRef.current = { pEquipe: t.equipe, pDate: t.date, dayIdx: t.dayIdx, rowIdx: t.rowIdx, top: t.top, rowH: t.rowH, key };
       if (rafDragRef.current) return;
       rafDragRef.current = requestAnimationFrame(() => {
         rafDragRef.current = null;

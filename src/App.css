@@ -1679,7 +1679,8 @@ button:active {
 }
 
 .main-grid.dragging-active [data-ch]:not(.dragging-source),
-.main-grid.dragging-active [data-co]:not(.dragging-source) {
+.main-grid.dragging-active [data-co]:not(.dragging-source),
+.main-grid.dragging-active .note-icon {
   pointer-events: none;
 }
 
