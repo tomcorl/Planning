@@ -362,6 +362,9 @@ export default function App() {
   const reloadTimerRef = useRef(null);
   const reloadInFlightRef = useRef(false);
   const pendingReloadRef = useRef(false);
+  const saveChainRef = useRef(Promise.resolve());
+  const saveDrainingRef = useRef(false);
+  const pendingSavePayloadRef = useRef(null);
 
   // ── Supabase Auth + Data Loading ──
   const loadedRef = useRef(false);
@@ -386,95 +389,116 @@ export default function App() {
   useEffect(() => {
     if (!loadedRef.current || !session || !companies.length) return;
     if (suppressAutoSaveRef.current) return;
-    const timer = setTimeout(async () => {
-      saveTimerRef.current = null;
-      try {
-        const result = await api.saveAllPlanningData({
-          chantiers,
-          conges: conges.map(c => ({ ...c, company_id: c.companyId || (teamById.get(c.equipe)?.companyId) })),
-          equipes: teams,
-          conducteurs,
-          vendeurs,
-          typesChantier,
-          customFeries,
-          chantierColors,
-          conducteurColors,
-        });
-        // Update conducteur/vendeur/type IDs from DB response (new rows get real IDs)
-        if (result?.conducteurs) {
-          const nomToId = new Map(result.conducteurs.map(r => [r.nom, r.id]));
-          setConducteurs(prev => {
-            let changed = false;
-            const updated = prev.map(c => {
-              const dbId = nomToId.get(c.nom);
-              if (dbId && c.id !== dbId) {
-                changed = true;
-                return { ...c, id: dbId };
-              }
-              return c;
-            });
-            return changed ? updated : prev;
-          });
-        }
-        if (result?.vendeurs) {
-          const nomToId = new Map(result.vendeurs.map(r => [r.nom, r.id]));
-          setVendeurs(prev => {
-            let changed = false;
-            const updated = prev.map(v => {
-              const dbId = nomToId.get(v.nom);
-              if (dbId && v.id !== dbId) {
-                changed = true;
-                return { ...v, id: dbId };
-              }
-              return v;
-            });
-            return changed ? updated : prev;
-          });
-        }
-        if (result?.types_chantier || result?.typesChantier) {
-          const arr = result.types_chantier || result.typesChantier;
-          const nomToId = new Map(arr.map(r => [r.nom, r.id]));
-          setTypesChantier(prev => {
-            let changed = false;
-            const updated = prev.map(t => {
-              const dbId = nomToId.get(t.nom);
-              if (dbId && t.id !== dbId) {
-                changed = true;
-                return { ...t, id: dbId };
-              }
-              return t;
-            });
-            return changed ? updated : prev;
-          });
-        }
-        // Update equipe IDs from DB response (new rows get real IDs)
-        if (result?.equipes) {
-          const eqNomCompanyIdToId = new Map(result.equipes.map(r => [`${r.nom}-${r.company_id}`, r.id]));
-          const idMap = new Map();
-          teams.forEach(t => {
-            const dbId = eqNomCompanyIdToId.get(`${t.nom}-${t.companyId}`);
-            if (dbId && t.id !== dbId) idMap.set(t.id, dbId);
-          });
-          if (idMap.size > 0) {
-            setTeams(prev => prev.map(t => idMap.has(t.id) ? { ...t, id: idMap.get(t.id) } : t));
-            setChantiers(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
-            setConges(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
+    pendingSavePayloadRef.current = {
+      chantiers,
+      conges: conges.map(c => ({ ...c, company_id: c.companyId || (teamById.get(c.equipe)?.companyId) })),
+      equipes: teams,
+      conducteurs,
+      vendeurs,
+      typesChantier,
+      customFeries,
+      chantierColors,
+      conducteurColors,
+    };
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(scheduleSaveDrain, 800);
+    return () => { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; };
+  }, [chantiers, conges, teams, conducteurs, vendeurs, typesChantier, customFeries, chantierColors, conducteurColors, session, companies]);
+
+  function scheduleSaveDrain() {
+    saveTimerRef.current = null;
+    if (saveDrainingRef.current) return;
+    saveDrainingRef.current = true;
+    saveChainRef.current
+      .catch(() => {})
+      .then(async () => {
+        while (pendingSavePayloadRef.current) {
+          const payload = pendingSavePayloadRef.current;
+          pendingSavePayloadRef.current = null;
+          try {
+            await runPlanningSave(payload);
+          } catch (e) {
+            console.error('saveAllPlanningData failed', e);
+            if (!pendingSavePayloadRef.current) pendingSavePayloadRef.current = payload;
           }
         }
+      })
+      .finally(() => {
+        saveDrainingRef.current = false;
+      });
+  }
 
-        api.notifyPlanningSaved();
-
-        if (pendingReloadRef.current) {
-          pendingReloadRef.current = false;
-          performReload();
-        }
-      } catch (e) {
-        console.error('saveAllPlanningData failed', e);
+  async function runPlanningSave(payload) {
+    const result = await api.saveAllPlanningData(payload);
+    // Update conducteur/vendeur/type IDs from DB response (new rows get real IDs)
+    if (result?.conducteurs) {
+      const nomToId = new Map(result.conducteurs.map(r => [r.nom, r.id]));
+      setConducteurs(prev => {
+        let changed = false;
+        const updated = prev.map(c => {
+          const dbId = nomToId.get(c.nom);
+          if (dbId && c.id !== dbId) {
+            changed = true;
+            return { ...c, id: dbId };
+          }
+          return c;
+        });
+        return changed ? updated : prev;
+      });
+    }
+    if (result?.vendeurs) {
+      const nomToId = new Map(result.vendeurs.map(r => [r.nom, r.id]));
+      setVendeurs(prev => {
+        let changed = false;
+        const updated = prev.map(v => {
+          const dbId = nomToId.get(v.nom);
+          if (dbId && v.id !== dbId) {
+            changed = true;
+            return { ...v, id: dbId };
+          }
+          return v;
+        });
+        return changed ? updated : prev;
+      });
+    }
+    if (result?.types_chantier || result?.typesChantier) {
+      const arr = result.types_chantier || result.typesChantier;
+      const nomToId = new Map(arr.map(r => [r.nom, r.id]));
+      setTypesChantier(prev => {
+        let changed = false;
+        const updated = prev.map(t => {
+          const dbId = nomToId.get(t.nom);
+          if (dbId && t.id !== dbId) {
+            changed = true;
+            return { ...t, id: dbId };
+          }
+          return t;
+        });
+        return changed ? updated : prev;
+      });
+    }
+    // Update equipe IDs from DB response (new rows get real IDs)
+    if (result?.equipes) {
+      const eqNomCompanyIdToId = new Map(result.equipes.map(r => [`${r.nom}-${r.company_id}`, r.id]));
+      const idMap = new Map();
+      payload.equipes.forEach(t => {
+        const dbId = eqNomCompanyIdToId.get(`${t.nom}-${t.companyId}`);
+        if (dbId && t.id !== dbId) idMap.set(t.id, dbId);
+      });
+      if (idMap.size > 0) {
+        setTeams(prev => prev.map(t => idMap.has(t.id) ? { ...t, id: idMap.get(t.id) } : t));
+        setChantiers(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
+        setConges(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
       }
-    }, 800);
-    saveTimerRef.current = timer;
-    return () => { clearTimeout(timer); saveTimerRef.current = null; };
-  }, [chantiers, conges, teams, conducteurs, vendeurs, typesChantier, customFeries, chantierColors, conducteurColors, session, companies]);
+    }
+
+    api.notifyPlanningSaved();
+
+    if (pendingReloadRef.current) {
+      pendingReloadRef.current = false;
+      performReload();
+    }
+  }
 
   // ── Realtime subscription ──
   useEffect(() => {
@@ -851,7 +875,15 @@ export default function App() {
     vendeursRef.current = vendeurs;
     typesChantierRef.current = typesChantier;
     customFeriesRef.current = customFeries;
-    keyRef.current = { selectedItem, modalOpen: modal.open, clipboard, canEdit };
+    keyRef.current = {
+      selectedItem,
+      modalOpen: modal.open,
+      clipboard,
+      canEdit,
+      paste: (equipe, date) => pasteClipboard(equipe, date),
+      undo: () => undo(),
+      redo: () => redo(),
+    };
   });
 
   function snapshot() {
@@ -897,37 +929,38 @@ export default function App() {
     });
   }
 
-  const keyRef = useRef({ selectedItem: null, modalOpen: false, clipboard: null, canEdit: false });
+  const keyRef = useRef({ selectedItem: null, modalOpen: false, clipboard: null, canEdit: false, paste: null, undo: null, redo: null });
 
   useEffect(() => {
     function onKeyDown(e) {
       const key = e.key || '';
       const z = key.toLowerCase() === 'z';
       const y = key.toLowerCase() === 'y';
+      const ref = keyRef.current;
 
       if ((e.ctrlKey || e.metaKey) && z && !e.shiftKey) {
         e.preventDefault();
-        undo();
+        ref.undo?.();
       }
 
       if ((e.ctrlKey || e.metaKey) && (y || (z && e.shiftKey))) {
         e.preventDefault();
-        redo();
+        ref.redo?.();
       }
 
-      const { selectedItem: sel, modalOpen, clipboard: clip, canEdit: ce } = keyRef.current;
+      const { selectedItem: sel, modalOpen, clipboard: clip, canEdit: ce } = ref;
 
       if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'c' && sel && !modalOpen) {
         e.preventDefault();
         const item = sel.type === 'chantier'
-          ? chantiers.find((c) => c.id === sel.id)
-          : conges.find((c) => c.id === sel.id);
+          ? chantiersRef.current.find((c) => c.id === sel.id)
+          : congesRef.current.find((c) => c.id === sel.id);
         if (item) setClipboard({ ...item, sourceType: sel.type });
       }
 
       if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'v' && clip && !modalOpen && ce) {
         e.preventDefault();
-        pasteClipboard();
+        ref.paste?.();
       }
     }
 
@@ -1724,6 +1757,7 @@ export default function App() {
         const newItem = {
           ...clip,
           id: nextLocalId(),
+          equipe,
           start: date || today,
         };
         setConges((prev) => [...prev, newItem]);
