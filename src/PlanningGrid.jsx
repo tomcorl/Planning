@@ -517,8 +517,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
     dragLoopRafRef.current = requestAnimationFrame(tickDragLoop);
   }
   function applyDragPreview(t) {
-    // overlay vert = case de début
-    const startLeft = 260 + t.dayIdx * cellWidth;
+    // overlay vert = case de début : même origine que les cellules et que
+    // l'indicateur de date (teamColW lu du CSS, pas de valeur en dur : la
+    // colonne vaut 260/200/160/145px selon la largeur d'écran).
+    const startLeft = teamColW + t.dayIdx * cellWidth;
     if (dragOverlayRef.current) {
       dragOverlayRef.current.style.width = cellWidth + 'px';
       dragOverlayRef.current.style.height = t.rowH + 'px';
