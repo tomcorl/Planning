@@ -365,6 +365,8 @@ export default function App() {
   const saveChainRef = useRef(Promise.resolve());
   const saveDrainingRef = useRef(false);
   const pendingSavePayloadRef = useRef(null);
+  const saveRetryCountRef = useRef(0);
+  const lastReloadAtRef = useRef(0);
 
   // ── Supabase Auth + Data Loading ──
   const loadedRef = useRef(false);
@@ -417,9 +419,18 @@ export default function App() {
           pendingSavePayloadRef.current = null;
           try {
             await runPlanningSave(payload);
+            saveRetryCountRef.current = 0;
           } catch (e) {
             console.error('saveAllPlanningData failed', e);
+            saveRetryCountRef.current += 1;
+            if (saveRetryCountRef.current > 5) {
+              console.error('[save] abandon après 5 échecs consécutifs, payload ignoré');
+              pendingSavePayloadRef.current = null;
+              saveRetryCountRef.current = 0;
+              break;
+            }
             if (!pendingSavePayloadRef.current) pendingSavePayloadRef.current = payload;
+            await new Promise((r) => setTimeout(r, 2500));
           }
         }
       })
@@ -505,10 +516,16 @@ export default function App() {
     if (!session?.id) return;
     const cleanup = api.subscribePlanningUpdates(session.id, () => {
       if (!loadedRef.current) return;
-      if (saveTimerRef.current) {
+      if (saveTimerRef.current || saveDrainingRef.current || pendingSavePayloadRef.current) {
         pendingReloadRef.current = true;
         return;
       }
+      const now = Date.now();
+      if (now - lastReloadAtRef.current < 1500) {
+        pendingReloadRef.current = true;
+        return;
+      }
+      lastReloadAtRef.current = now;
       scheduleReload();
     });
     return cleanup;
@@ -537,10 +554,11 @@ export default function App() {
       pendingReloadRef.current = true;
       return;
     }
-    if (saveTimerRef.current) {
+    if (saveTimerRef.current || saveDrainingRef.current || pendingSavePayloadRef.current) {
       pendingReloadRef.current = true;
       return;
     }
+    lastReloadAtRef.current = Date.now();
     reloadInFlightRef.current = true;
     reloadTimerRef.current = null;
     suppressAutoSaveRef.current = true;
