@@ -220,6 +220,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const pendingDragRef = React.useRef(null);
   const rafDragRef = React.useRef(null);
   const dragRectRef = React.useRef(null);
+  // Boucle auto-scroll UNIQUE : le timeout de réveil est tracké (jamais 2 boucles).
+  const scrollTimerRef = React.useRef(null);
+  // Rect grille caché au dragstart + scroll de départ → zéro layout-read par event.
+  const gridRectRef = React.useRef(null);
+  const scrollStartRef = React.useRef(null);
   const dragOverlayRef = React.useRef(null);
   const dragEndOverlayRef = React.useRef(null);
   const autoScrollRaf = React.useRef(null);
@@ -302,14 +307,28 @@ const PlanningGrid = React.memo(function PlanningGrid({
   // Ciblage de la cellule de drop UNIQUEMENT par coordonnées pointeur.
   // Indépendant de e.target : identique au-dessus d'une cellule vide,
   // d'un chantier, d'un congé, d'un texte ou d'un overlay.
+  // ZÉRO lecture de layout : rect grille caché au dragstart + delta de scroll
+  // (lectures scrollLeft/scrollTop seules, sans reflow). ~microsecondes.
   // Ne parcourt que les ~N lignes équipe (pas les cellules), aucun setState.
   function getDragTargetFromPointer(clientX, clientY) {
     const grid = gridRef.current;
     if (!grid) return null;
-    const rect = grid.getBoundingClientRect();
-    const dayIdx = Math.floor((clientX - rect.left - teamColW) / cellWidth);
+    let dayIdx;
+    let y;
+    const cached = gridRectRef.current;
+    const sc = scrollRef.current;
+    const start = scrollStartRef.current;
+    if (cached && sc && start) {
+      const sl = sc.scrollLeft - start.left;
+      const st = sc.scrollTop - start.top;
+      dayIdx = Math.floor((clientX - cached.left + sl - teamColW) / cellWidth);
+      y = clientY - cached.top + st;
+    } else {
+      const rect = grid.getBoundingClientRect();
+      dayIdx = Math.floor((clientX - rect.left - teamColW) / cellWidth);
+      y = clientY - rect.top;
+    }
     if (dayIdx < 0 || dayIdx >= visibleDays.length) return null;
-    const y = clientY - rect.top;
     let hit = null;
     for (let i = 0; i < rowTopsArray.length; i++) {
       const r = rowTopsArray[i];
@@ -352,16 +371,21 @@ const PlanningGrid = React.memo(function PlanningGrid({
       cancelAnimationFrame(autoScrollRaf.current);
       autoScrollRaf.current = null;
     }
+    if (scrollTimerRef.current) {
+      clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = null;
+    }
     if (scrollRef.current) scrollRef.current.removeAttribute('data-dragging');
   }
   function startAutoScrollIfNeeded() {
-    if (autoScrollRaf.current) return;
+    if (autoScrollRaf.current) return; // rAF déjà en attente → pas de doublon
+    if (scrollTimerRef.current) return; // réveil déjà programmé → pas de doublon
     if (!isDraggingRef.current) return;
     if (scrollRef.current && !scrollRef.current.hasAttribute('data-dragging')) scrollRef.current.setAttribute('data-dragging', '1');
     autoScrollRaf.current = requestAnimationFrame(tickAutoScroll);
   }
   function tickAutoScroll() {
-    autoScrollRaf.current = null;
+    autoScrollRaf.current = null; // pattern single-RAF : reset dès l'exécution
     if (!isDraggingRef.current) {
       if (scrollRef.current) scrollRef.current.removeAttribute('data-dragging');
       return;
@@ -389,9 +413,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (dx !== 0 || dy !== 0) {
       autoScrollRaf.current = requestAnimationFrame(tickAutoScroll);
-    } else {
-      // polling léger si curseur reste en zone
-      setTimeout(() => {
+    } else if (!scrollTimerRef.current) {
+      // polling léger si curseur reste en zone — UN SEUL réveil programmé à la fois
+      scrollTimerRef.current = setTimeout(() => {
+        scrollTimerRef.current = null;
         if (isDraggingRef.current) startAutoScrollIfNeeded();
       }, 50);
     }
@@ -493,6 +518,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
       // Cache le rect du conteneur de scroll : il ne bouge pas pendant son
       // propre scroll → évite un getBoundingClientRect (layout forcé) par frame.
       if (scrollRef.current) dragRectRef.current = scrollRef.current.getBoundingClientRect();
+      // Cache rect grille + position de scroll de départ pour le ciblage sans layout-read.
+      if (gridRef.current) gridRectRef.current = gridRef.current.getBoundingClientRect();
+      if (scrollRef.current) scrollStartRef.current = { left: scrollRef.current.scrollLeft, top: scrollRef.current.scrollTop };
       cb.setDragActive?.(true);
       const dragSrc = dch || dco;
       if (dragSrc) dragSrc.classList.add('dragging-source');
@@ -593,7 +621,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
       pendingDragRef.current = { pEquipe: t.equipe, pDate: t.date, dayIdx: t.dayIdx, rowIdx: t.rowIdx, top: t.top, rowH: t.rowH, key };
       if (rafDragRef.current) return;
       rafDragRef.current = requestAnimationFrame(() => {
-        rafDragRef.current = null;
+        rafDragRef.current = null; // pattern single-RAF : reset dès l'exécution
         const pending = pendingDragRef.current;
         pendingDragRef.current = null;
         if (!pending) return;
@@ -680,6 +708,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
       draggedItemRef.current = null;
       endDateCacheRef.current = null;
       dragRectRef.current = null;
+      gridRectRef.current = null;
+      scrollStartRef.current = null;
       gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source');
       gridRef.current?.classList.remove('dragging-active');
       if (dropEquipe && dropDate) cb.onDrop(e, dropEquipe, dropDate);
@@ -746,7 +776,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; stopAutoScroll(); if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; dragRectRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); callbacksRef.current.setDragActive?.(false); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; stopAutoScroll(); if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; dragRectRef.current = null; gridRectRef.current = null; scrollStartRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); callbacksRef.current.setDragActive?.(false); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
