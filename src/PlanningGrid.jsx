@@ -219,6 +219,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const endDateCacheRef = React.useRef(null);
   const pendingDragRef = React.useRef(null);
   const rafDragRef = React.useRef(null);
+  const dragRectRef = React.useRef(null);
   const dragOverlayRef = React.useRef(null);
   const dragEndOverlayRef = React.useRef(null);
   const autoScrollRaf = React.useRef(null);
@@ -324,7 +325,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   function startAutoScrollIfNeeded() {
     if (autoScrollRaf.current) return;
     if (!isDraggingRef.current) return;
-    if (scrollRef.current) scrollRef.current.setAttribute('data-dragging', '1');
+    if (scrollRef.current && !scrollRef.current.hasAttribute('data-dragging')) scrollRef.current.setAttribute('data-dragging', '1');
     autoScrollRaf.current = requestAnimationFrame(tickAutoScroll);
   }
   function tickAutoScroll() {
@@ -335,7 +336,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     const el = scrollRef.current;
     if (!el) return;
-    const rect = el.getBoundingClientRect();
+    // Rect mis en cache au dragstart : le conteneur ne bouge pas pendant son
+    // propre scroll → pas de getBoundingClientRect (layout forcé) par frame.
+    const rect = dragRectRef.current || el.getBoundingClientRect();
     const { x, y } = dragClientPos.current;
     let dx = 0;
     let dy = 0;
@@ -368,6 +371,43 @@ const PlanningGrid = React.memo(function PlanningGrid({
 
   function isFerie(date) {
     return ferieSet.has(date);
+  }
+
+  // Calcul paresseux de la date de fin (jours ouvrés) pour la case rouge.
+  // Même maths que l'ancien pré-calcul dragstart, mais uniquement pour la
+  // cellule survolée + mémoïsé → dragstart instantané, dragover en microsecondes.
+  function endDateFor(eq, startDate) {
+    const cacheKey = eq + '|' + startDate;
+    let cache = endDateCacheRef.current;
+    if (!cache) {
+      cache = new Map();
+      endDateCacheRef.current = cache;
+    }
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+    const info = draggedItemRef.current;
+    let result = null;
+    if (info && startDate) {
+      const dur = (info.duree || 1) - 1;
+      const fAout = info.force_aout;
+      let y = (startDate.charCodeAt(0)-48)*1000+(startDate.charCodeAt(1)-48)*100+(startDate.charCodeAt(2)-48)*10+(startDate.charCodeAt(3)-48);
+      let mo = (startDate.charCodeAt(5)-48)*10+(startDate.charCodeAt(6)-48);
+      let dy = (startDate.charCodeAt(8)-48)*10+(startDate.charCodeAt(9)-48);
+      let cnt = 0;
+      const eqS = '' + eq;
+      const bound = dur * 3 + 1;
+      for (let i = 0; i < bound; i++) {
+        const mm = mo<3?mo+12:mo, yy = mo<3?y-1:y;
+        const dow = (dy+yy+(yy>>2)-(yy/100|0)+(yy/400|0)+((31*mm)/7|0))%7;
+        const ds = y+'-'+(mo<10?'0':'')+mo+'-'+(dy<10?'0':'')+dy;
+        const blk = dow===0||dow===6||ferieSet.has(ds)||congeBlockedSet.has(eqS+'-'+ds);
+        const aug = !fAout&&mo===8&&dy>=1&&dy<=21;
+        if (!blk&&!aug) { cnt++; if (cnt>=dur) { result = ds; break; } }
+        dy++;
+        if(dy>31||(dy>30&&(mo===4||mo===6||mo===9||mo===11))||(dy>29&&mo===2)||(dy>28&&mo===2&&!((y%4===0&&y%100!==0)||y%400===0))){dy=1;mo++;if(mo>12){mo=1;y++;}}
+      }
+    }
+    cache.set(cacheKey, result);
+    return result;
   }
 
   function isSelected(equipe, date) {
@@ -414,38 +454,13 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const dco = e.target.closest('[data-co]');
       if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
       else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
-      // SAFE: precompute all end dates at dragstart — zero computation during drag
+      // v7: plus de pré-calcul bloquant ici (équipes × jours) — la date de fin
+      // est calculée en paresseux par cellule survolée via endDateFor().
       endDateCacheRef.current = new Map();
-      if (draggedItemRef.current) {
-        const dur = draggedItemRef.current.duree - 1;
-        const fAout = draggedItemRef.current.force_aout;
-        const allEq = [];
-        gridRows.forEach(r => {
-          if (r.type === 'team') allEq.push(r.teamId);
-          else if (r.type === 'pending') allEq.push(r.equipeIndex);
-        });
-        const t0 = performance.now();
-        for (const eq of allEq) {
-          for (const day of visibleDays) {
-            let y = (day.date.charCodeAt(0)-48)*1000+(day.date.charCodeAt(1)-48)*100+(day.date.charCodeAt(2)-48)*10+(day.date.charCodeAt(3)-48);
-            let mo = (day.date.charCodeAt(5)-48)*10+(day.date.charCodeAt(6)-48);
-            let dy = (day.date.charCodeAt(8)-48)*10+(day.date.charCodeAt(9)-48);
-            let cnt = 0;
-            const eqS = ''+eq;
-            for (let i = 0; i < dur*3+1; i++) {
-              const mm = mo<3?mo+12:mo, yy = mo<3?y-1:y;
-              const dow = (dy+yy+(yy>>2)-(yy/100|0)+(yy/400|0)+((31*mm)/7|0))%7;
-              const ds = y+'-'+(mo<10?'0':'')+mo+'-'+(dy<10?'0':'')+dy;
-              const blk = dow===0||dow===6||ferieSet.has(ds)||congeBlockedSet.has(eqS+'-'+ds);
-              const aug = !fAout&&mo===8&&dy>=1&&dy<=21;
-              if (!blk&&!aug) { cnt++; if (cnt>=dur) { endDateCacheRef.current.set(eq+'|'+day.date, ds); break; } }
-              dy++;
-              if(dy>31||(dy>30&&(mo===4||mo===6||mo===9||mo===11))||(dy>29&&mo===2)||(dy>28&&mo===2&&!((y%4===0&&y%100!==0)||y%400===0))){dy=1;mo++;if(mo>12){mo=1;y++;}}
-            }
-          }
-        }
-        console.log(`[dragStart] precomputed ${allEq.length}eq×${visibleDays.length}d = ${endDateCacheRef.current.size} entries in ${(performance.now()-t0).toFixed(0)}ms`);
-      }
+      // Cache le rect du conteneur de scroll : il ne bouge pas pendant son
+      // propre scroll → évite un getBoundingClientRect (layout forcé) par frame.
+      if (scrollRef.current) dragRectRef.current = scrollRef.current.getBoundingClientRect();
+      cb.setDragActive?.(true);
       const dragSrc = dch || dco;
       if (dragSrc) dragSrc.classList.add('dragging-source');
       gridRef.current?.classList.add('dragging-active');
@@ -568,10 +583,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
             dragOverlayRef.current.style.transform = `translate(${startLeft}px,${t}px)`;
           }
           highlightTargetDate(d);
-          // overlay rouge = case de fin
+          // overlay rouge = case de fin (calcul paresseux + mémoïsé)
           if (draggedItemRef.current) {
-            const cacheKey = `${eq}|${d}`;
-            const endDate = endDateCacheRef.current?.get(cacheKey);
+            const endDate = endDateFor(eq, d);
             if (endDate) {
               const endIdx = dayIdxMemo.get(endDate);
               if (endIdx != null && endIdx >= 0) {
@@ -641,9 +655,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
       }
       draggedItemRef.current = null;
       endDateCacheRef.current = null;
+      dragRectRef.current = null;
       gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source');
       gridRef.current?.classList.remove('dragging-active');
       if (dropEquipe && dropDate) cb.onDrop(e, dropEquipe, dropDate);
+      cb.setDragActive?.(false);
       return;
     }
   }
@@ -706,7 +722,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; stopAutoScroll(); if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; stopAutoScroll(); if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; dragRectRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); callbacksRef.current.setDragActive?.(false); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >

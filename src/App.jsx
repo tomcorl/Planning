@@ -367,6 +367,17 @@ export default function App() {
   const pendingSavePayloadRef = useRef(null);
   const saveRetryCountRef = useRef(0);
   const lastReloadAtRef = useRef(0);
+  const dragActiveRef = useRef(false);
+
+  // Signalé par la grille pendant un drag natif : aucun reload temps réel ni
+  // expansion du calendrier ne doit re-rendre la grille en plein drag
+  // (casse le drag + fait « revenir au début »).
+  function setDragActive(active) {
+    dragActiveRef.current = active;
+    if (!active && pendingReloadRef.current && !saveTimerRef.current && !saveDrainingRef.current && !pendingSavePayloadRef.current) {
+      scheduleReload();
+    }
+  }
 
   // ── Supabase Auth + Data Loading ──
   const loadedRef = useRef(false);
@@ -516,7 +527,7 @@ export default function App() {
     if (!session?.id) return;
     const cleanup = api.subscribePlanningUpdates(session.id, () => {
       if (!loadedRef.current) return;
-      if (saveTimerRef.current || saveDrainingRef.current || pendingSavePayloadRef.current) {
+      if (saveTimerRef.current || saveDrainingRef.current || pendingSavePayloadRef.current || dragActiveRef.current) {
         pendingReloadRef.current = true;
         return;
       }
@@ -554,7 +565,7 @@ export default function App() {
       pendingReloadRef.current = true;
       return;
     }
-    if (saveTimerRef.current || saveDrainingRef.current || pendingSavePayloadRef.current) {
+    if (saveTimerRef.current || saveDrainingRef.current || pendingSavePayloadRef.current || dragActiveRef.current) {
       pendingReloadRef.current = true;
       return;
     }
@@ -1634,8 +1645,9 @@ export default function App() {
         }, 1000);
       }
 
-      // Right-edge expansion: debounced, cooldown 2s (pendant drag on charge par 30j pour éviter lag)
-      if (el.scrollLeft + el.clientWidth > el.scrollWidth - 600) {
+      // Right-edge expansion: debounced, cooldown 2s (jamais pendant un drag :
+      // un rebuild de la grille en plein drag natif casse le drop)
+      if (!isDragging && !dragActiveRef.current && el.scrollLeft + el.clientWidth > el.scrollWidth - 600) {
         if (!expandRightRef.current && !expandCooldownRef.current) {
           const isDraggingNow = el.dataset.dragging === '1';
           expandRightRef.current = setTimeout(() => {
@@ -1650,7 +1662,8 @@ export default function App() {
       }
 
       // Left-edge expansion: debounced, cooldown 2s after each expansion
-      if (el.scrollLeft < 200) {
+      // (jamais pendant un drag : rebuild en plein drag natif = drop cassé)
+      if (!isDragging && !dragActiveRef.current && el.scrollLeft < 200) {
         if (!expandLeftRef.current && !expandCooldownRef.current) {
           expandLeftRef.current = setTimeout(() => {
             expandLeftRef.current = null;
@@ -2004,6 +2017,7 @@ export default function App() {
     openEditConge,
     addWorkingDays,
     handleScroll,
+    setDragActive,
   };
 
   if (dataLoading && session) {

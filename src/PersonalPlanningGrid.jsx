@@ -138,6 +138,8 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
   const draggedItemRef = React.useRef(null);
   const dragRowRef = React.useRef(null);
   const dropTargetRowRef = React.useRef(null);
+  const pendingDragRef = React.useRef(null);
+  const rafDragRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -315,44 +317,54 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
     if (type === 'dragover') {
       e.preventDefault();
       const key = `${rowId}-${date}`;
-      if (lastDragKeyRef.current === key) return;
-      lastDragKeyRef.current = key;
-      const dayIdx = dayIndex(date);
-      let rowIdx = -1;
-      for (let i = 0; i < gridRows.length; i++) if (gridRows[i].id === rowId) { rowIdx = i; break; }
-      if (dayIdx >= 0 && rowIdx >= 0) {
-        const left = 260 + dayIdx * cellWidth;
-        const top = rowIdx * rowHeight;
-        if (dragOverlayRef.current) {
-          dragOverlayRef.current.style.left = left + 'px';
-          dragOverlayRef.current.style.top = top + 'px';
-          dragOverlayRef.current.style.width = cellWidth + 'px';
-          dragOverlayRef.current.style.height = rowHeight + 'px';
-          dragOverlayRef.current.classList.add('visible');
-        }
-        // case rouge = fin du bloc (même style épuré que planning général)
-        if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
-        if (draggedItemRef.current) {
-          const dur = draggedItemRef.current.duree || 1;
-          // trouver l'index de fin en comptant les jours ouvrés sans fériés
-          let endIdx = dayIdx;
-          let count = 1;
-          // visibleDays contient déjà sans weekend, on saute juste les fériés
-          for (let i = dayIdx + 1; count < dur && i < visibleDays.length; i++) {
-            if (!ferieSet.has(visibleDays[i].date)) count++;
-            endIdx = i;
+      if (lastDragKeyRef.current === key && !rafDragRef.current) return;
+      pendingDragRef.current = { pRowId: rowId, pDate: date, key };
+      if (rafDragRef.current) return;
+      rafDragRef.current = requestAnimationFrame(() => {
+        rafDragRef.current = null;
+        const pending = pendingDragRef.current;
+        pendingDragRef.current = null;
+        if (!pending) return;
+        const { pRowId: rId, pDate: d, key: k } = pending;
+        if (lastDragKeyRef.current === k) return;
+        lastDragKeyRef.current = k;
+        const dayIdx = dayIndex(d);
+        let rowIdx = -1;
+        for (let i = 0; i < gridRows.length; i++) if (gridRows[i].id === rId) { rowIdx = i; break; }
+        if (dayIdx >= 0 && rowIdx >= 0) {
+          const left = 260 + dayIdx * cellWidth;
+          const top = rowIdx * rowHeight;
+          if (dragOverlayRef.current) {
+            dragOverlayRef.current.style.left = left + 'px';
+            dragOverlayRef.current.style.top = top + 'px';
+            dragOverlayRef.current.style.width = cellWidth + 'px';
+            dragOverlayRef.current.style.height = rowHeight + 'px';
+            dragOverlayRef.current.classList.add('visible');
           }
-          if (endIdx >= 0) {
-            const endLeft = 260 + endIdx * cellWidth;
-            dragEndOverlayRef.current.style.left = endLeft + 'px';
-            dragEndOverlayRef.current.style.top = top + 'px';
-            dragEndOverlayRef.current.style.width = cellWidth + 'px';
-            dragEndOverlayRef.current.style.height = rowHeight + 'px';
-            dragEndOverlayRef.current.classList.add('visible');
+          // case rouge = fin du bloc (même style épuré que planning général)
+          if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
+          if (draggedItemRef.current) {
+            const dur = draggedItemRef.current.duree || 1;
+            // trouver l'index de fin en comptant les jours ouvrés sans fériés
+            let endIdx = dayIdx;
+            let count = 1;
+            // visibleDays contient déjà sans weekend, on saute juste les fériés
+            for (let i = dayIdx + 1; count < dur && i < visibleDays.length; i++) {
+              if (!ferieSet.has(visibleDays[i].date)) count++;
+              endIdx = i;
+            }
+            if (endIdx >= 0) {
+              const endLeft = 260 + endIdx * cellWidth;
+              dragEndOverlayRef.current.style.left = endLeft + 'px';
+              dragEndOverlayRef.current.style.top = top + 'px';
+              dragEndOverlayRef.current.style.width = cellWidth + 'px';
+              dragEndOverlayRef.current.style.height = rowHeight + 'px';
+              dragEndOverlayRef.current.classList.add('visible');
+            }
           }
         }
-      }
-      highlightTargetDate(date);
+        highlightTargetDate(d);
+      });
       return;
     }
     if (type === 'drop') {
@@ -360,6 +372,8 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
       isDraggingRef.current = false;
       lastDragKeyRef.current = null;
       draggedItemRef.current = null;
+      if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; }
+      pendingDragRef.current = null;
       if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible');
       if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible');
       if (prevDragCellRef.current) {
@@ -482,7 +496,7 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
           onDragStart={handleGridEvent}
           onDragOver={handleGridEvent}
           onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; draggedItemRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible'); if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible'); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); }}
+          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; draggedItemRef.current = null; if (rafDragRef.current) { cancelAnimationFrame(rafDragRef.current); rafDragRef.current = null; } pendingDragRef.current = null; if (dragOverlayRef.current) dragOverlayRef.current.classList.remove('visible'); if (dragEndOverlayRef.current) dragEndOverlayRef.current.classList.remove('visible'); if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); }}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
