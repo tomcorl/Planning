@@ -368,6 +368,17 @@ export default function App() {
   const saveRetryCountRef = useRef(0);
   const lastReloadAtRef = useRef(0);
   const dragActiveRef = useRef(false);
+  // OCC : dernière version serveur connue (jamais inventée côté frontend).
+  // Chaque payload embarque la version de SON snapshot (baseVersion).
+  const versionRef = useRef(null);
+  // Conflit OCC actif : { serverVersion } — bloque les saves jusqu'au reload
+  // explicite (aucun rejeu automatique du snapshot périmé).
+  const conflictRef = useRef(null);
+  const [saveConflict, setSaveConflict] = useState(null);
+  // Indicateur : 'saving' | 'saved' | 'error' | 'conflict'.
+  // 🟢 uniquement après ACK réel serveur (ok:true + version).
+  const [saveUiState, setSaveUiState] = useState('saved');
+  const [savedAt, setSavedAt] = useState(null);
 
   // Signalé par la grille pendant un drag natif : aucun reload temps réel ni
   // expansion du calendrier ne doit re-rendre la grille en plein drag
@@ -402,6 +413,9 @@ export default function App() {
   useEffect(() => {
     if (!loadedRef.current || !session || !companies.length) return;
     if (suppressAutoSaveRef.current) return;
+    // Conflit OCC actif : on ne re-sauvegarde PAS le snapshot périmé.
+    // L'utilisateur doit recharger explicitement (bouton Recharger).
+    if (conflictRef.current) return;
     pendingSavePayloadRef.current = {
       chantiers,
       conges: conges.map(c => ({ ...c, company_id: c.companyId || (teamById.get(c.equipe)?.companyId) })),
@@ -412,14 +426,19 @@ export default function App() {
       customFeries,
       chantierColors,
       conducteurColors,
+      // Version du snapshot représenté (jamais recalculée après coup).
+      baseVersion: versionRef.current,
     };
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(scheduleSaveDrain, 800);
+    setSaveUiState('saving');
     return () => { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; };
   }, [chantiers, conges, teams, conducteurs, vendeurs, typesChantier, customFeries, chantierColors, conducteurColors, session, companies]);
 
   function scheduleSaveDrain() {
     saveTimerRef.current = null;
+    // Conflit OCC actif : aucun rejeu automatique du snapshot périmé.
+    if (conflictRef.current) return;
     if (saveDrainingRef.current) return;
     saveDrainingRef.current = true;
     saveChainRef.current
@@ -429,7 +448,20 @@ export default function App() {
           const payload = pendingSavePayloadRef.current;
           pendingSavePayloadRef.current = null;
           try {
-            await runPlanningSave(payload);
+            const res = await runPlanningSave(payload);
+            if (res && res.conflict) {
+              // Snapshot périmé REFUSÉ par le serveur : rien n'a été écrit.
+              // Surtout PAS de retry ni de requeue (le même snapshot re-conflicterait).
+              saveRetryCountRef.current = 0;
+              if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+              pendingSavePayloadRef.current = null;
+              conflictRef.current = { serverVersion: res.serverVersion ?? null };
+              setSaveConflict({ serverVersion: res.serverVersion ?? null });
+              setSaveUiState('conflict');
+              // Pas de reload silencieux : l'état local est conservé tel quel,
+              // l'utilisateur recharge explicitement (bouton Recharger).
+              break;
+            }
             saveRetryCountRef.current = 0;
           } catch (e) {
             console.error('saveAllPlanningData failed', e);
@@ -438,6 +470,7 @@ export default function App() {
               console.error('[save] abandon après 5 échecs consécutifs, payload ignoré');
               pendingSavePayloadRef.current = null;
               saveRetryCountRef.current = 0;
+              setSaveUiState('error');
               break;
             }
             if (!pendingSavePayloadRef.current) pendingSavePayloadRef.current = payload;
@@ -452,6 +485,15 @@ export default function App() {
 
   async function runPlanningSave(payload) {
     const result = await api.saveAllPlanningData(payload);
+    // Refus OCC : le serveur n'a RIEN modifié (ni données, ni version).
+    if (result && result.conflict === true) {
+      return { conflict: true, serverVersion: typeof result.version === 'number' ? result.version : null };
+    }
+    // Succès : adopter la version serveur retournée (jamais inventée en local).
+    if (result && typeof result.version === 'number') versionRef.current = result.version;
+    // Le serveur a accepté : on ne peut plus être en conflit avec lui.
+    conflictRef.current = null;
+    setSaveConflict(null);
     // Update conducteur/vendeur/type IDs from DB response (new rows get real IDs)
     if (result?.conducteurs) {
       const nomToId = new Map(result.conducteurs.map(r => [r.nom, r.id]));
@@ -514,19 +556,30 @@ export default function App() {
       }
     }
 
-    api.notifyPlanningSaved();
+    // Broadcast typé avec la version acceptée (les autres onglets ne
+    // rechargent que si cette version est plus récente que la leur).
+    api.notifyPlanningSaved(versionRef.current);
 
     if (pendingReloadRef.current) {
       pendingReloadRef.current = false;
       performReload();
     }
+    // 🟢 uniquement après ACK réel serveur (ok:true + version).
+    setSaveUiState('saved');
+    setSavedAt(new Date());
+    return { conflict: false };
   }
 
   // ── Realtime subscription ──
   useEffect(() => {
     if (!session?.id) return;
-    const cleanup = api.subscribePlanningUpdates(session.id, () => {
+    const cleanup = api.subscribePlanningUpdates(session.id, (msg) => {
       if (!loadedRef.current) return;
+      // OCC : un broadcast ne porte que vers l'avant. S'il annonce une version
+      // inférieure ou égale à la nôtre (doublon, rediffusion), on l'ignore.
+      // Sans version (ancien client / migration non appliquée) : comportement historique.
+      const announced = msg && typeof msg.version === 'number' ? msg.version : null;
+      if (announced != null && versionRef.current != null && announced <= versionRef.current) return;
       if (saveTimerRef.current || saveDrainingRef.current || pendingSavePayloadRef.current || dragActiveRef.current) {
         pendingReloadRef.current = true;
         return;
@@ -561,6 +614,11 @@ export default function App() {
   }
 
   async function performReload() {
+    // Conflit OCC actif : JAMAIS de reload automatique — il détruirait le
+    // travail local non sauvegardé. Seule la résolution explicite de
+    // l'utilisateur (bouton Recharger) appelle performReload après avoir
+    // levé le conflit. Pas de pendingReload ici (pas de rattrapage auto).
+    if (conflictRef.current) return;
     if (reloadInFlightRef.current) {
       pendingReloadRef.current = true;
       return;
@@ -577,6 +635,9 @@ export default function App() {
     try {
       const allData = await api.loadPlanningData();
       if (!allData) return;
+      // OCC : le snapshot chargé porte sa version serveur (jamais nullée
+      // par un chargement sans version — ex. migration non appliquée).
+      if (typeof allData.version === 'number') versionRef.current = allData.version;
       setCompanies(allData.companies);
       setTeams(allData.equipes || []);
       setConducteurs(allData.conducteurs || []);
@@ -604,10 +665,29 @@ export default function App() {
     }
   }
 
+  // Résolution explicite d'un conflit OCC : recharge la version serveur et
+  // ABANDONNE les modifications locales (choix explicite de l'utilisateur —
+  // jamais de fusion automatique, jamais de reload silencieux).
+  async function resolveConflictByReload() {
+    conflictRef.current = null;
+    setSaveConflict(null);
+    setSaveUiState('saving');
+    try {
+      await performReload();
+      setSaveUiState('saved');
+      setSavedAt(new Date());
+    } catch (e) {
+      console.error('reload après conflit', e);
+      setSaveUiState('error');
+    }
+  }
+
   async function loadAllCompanyData() {
     setDataLoading(true);
     try {
       const allData = await api.loadPlanningData();
+      // OCC : amorcer versionRef AVANT tout save éventuel (migration ci-dessous).
+      if (typeof allData.version === 'number') versionRef.current = allData.version;
       setCompanies(allData.companies);
 
       let teams = allData.equipes.length > 0 ? [...allData.equipes] : [];
@@ -653,7 +733,7 @@ export default function App() {
         );
 
         try {
-          await api.saveAllPlanningData({
+          const migRes = await api.saveAllPlanningData({
             chantiers: allData.chantiers,
             conges: allData.conges.map(c => ({ ...c, company_id: c.company_id || c.companyId })),
             equipes: teams,
@@ -663,7 +743,13 @@ export default function App() {
             customFeries: allData.customFeries,
             chantierColors: allData.companies[0]?.chantier_colors || [],
             conducteurColors: allData.companies[0]?.conducteur_colors || [],
+            baseVersion: versionRef.current,
           });
+          // Conflit OCC : la migration n'a RIEN écrit → ne surtout pas marquer migré.
+          if (migRes && migRes.conflict === true) {
+            throw new Error(`conflit de version (serveur v${migRes.version ?? '?'}) : migration equipe_id non appliquée`);
+          }
+          if (migRes && typeof migRes.version === 'number') versionRef.current = migRes.version;
           const { error } = await supabase.rpc('mark_equipes_migrated', { p_company_ids: unmigrated });
           if (error) console.error('mark_equipes_migrated error', error);
         } catch (e) {
@@ -678,6 +764,8 @@ export default function App() {
       setChantiers(allData.chantiers);
       setConges(allData.conges);
       setCustomFeries(allData.customFeries);
+      // OCC : amorcer versionRef avec la version du snapshot chargé.
+      if (typeof allData.version === 'number') versionRef.current = allData.version;
 
       if (allData.companies.length > 0) {
         const first = allData.companies[0];
@@ -2145,6 +2233,44 @@ export default function App() {
               + Chantier
             </button>
           )}
+
+          {/* Indicateur de sauvegarde OCC — 🟢 uniquement après ACK réel serveur */}
+          <div
+            title={
+              saveConflict
+                ? `Le serveur a changé (v${saveConflict.serverVersion ?? '?'}) depuis votre chargement. Rechargez pour voir la version serveur (vos modifications locales seront abandonnées).`
+                : saveUiState === 'error'
+                  ? 'Échec de sauvegarde : vos dernières modifications ne sont pas enregistrées.'
+                  : saveUiState === 'saving'
+                    ? 'Enregistrement en cours…'
+                    : 'Toutes les modifications sont enregistrées sur le serveur.'
+            }
+            style={{ display: 'flex', alignItems: 'center', marginRight: 4 }}
+          >
+            {saveConflict ? (
+              <button
+                onClick={resolveConflictByReload}
+                title="Recharger la version serveur (abandonne vos modifications locales)"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  fontSize: 12, fontWeight: 700, color: '#92400e',
+                  background: '#fef3c7', border: '1px solid #f59e0b',
+                  borderRadius: 999, padding: '4px 10px', cursor: 'pointer',
+                }}
+              >
+                <span>⚠️ Conflit de sauvegarde</span>
+                <span style={{ textDecoration: 'underline' }}>Recharger</span>
+              </button>
+            ) : saveUiState === 'error' ? (
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#dc2626' }}>🔴 Non enregistré</span>
+            ) : saveUiState === 'saving' ? (
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#d97706' }}>🟠 Enregistrement…</span>
+            ) : (
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a' }}>
+                🟢 {savedAt ? `Enregistré · ${savedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}` : 'À jour'}
+              </span>
+            )}
+          </div>
 
           {connectedUsers.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginRight: 2 }}>
