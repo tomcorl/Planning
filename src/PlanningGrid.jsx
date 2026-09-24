@@ -1,4 +1,5 @@
 import React from 'react';
+import { computeDragEndDate } from './lib/dragEndDate.js';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
 if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v6.2-vitesse+';
 
@@ -15,8 +16,9 @@ function sameOrBefore(a, b) {
 }
 
 function isAugustClosure(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00');
-  return d.getMonth() === 7 && d.getDate() >= 1 && d.getDate() <= 21;
+  if (dateStr.charCodeAt(5) !== 48 || dateStr.charCodeAt(6) !== 56) return false;
+  const day = (dateStr.charCodeAt(8) - 48) * 10 + (dateStr.charCodeAt(9) - 48);
+  return day >= 1 && day <= 21;
 }
 
 function getConducteur(conducteurs, id) {
@@ -279,6 +281,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
     return s;
   }, [weekGroups, visibleDays]);
 
+  const dayClassSuffix = React.useMemo(() => visibleDays.map((day) =>
+    `${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}${day.weekend ? ' weekend' : ''}${ferieSet.has(day.date) ? ' ferie' : ''}${isAugustClosure(day.date) ? ' august-closure' : ''}${day.date === today ? ' today' : ''}`
+  ), [visibleDays, weekBoundarySet, ferieSet, today]);
+
   const rowPositionMap = React.useMemo(() => {
     const map = new Map();
     let acc = 0;
@@ -430,43 +436,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
     return ferieSet.has(date);
   }
 
-  // Calcul paresseux de la date de fin (jours ouvrés) pour la case rouge.
-  // Même maths que l'ancien pré-calcul dragstart, mais uniquement pour la
-  // cellule survolée + mémoïsé → dragstart instantané, dragover en microsecondes.
-  function endDateFor(eq, startDate) {
-    const cacheKey = eq + '|' + startDate;
-    let cache = endDateCacheRef.current;
-    if (!cache) {
-      cache = new Map();
-      endDateCacheRef.current = cache;
-    }
-    if (cache.has(cacheKey)) return cache.get(cacheKey);
-    const info = draggedItemRef.current;
-    let result = null;
-    if (info && startDate) {
-      const dur = (info.duree || 1) - 1;
-      const fAout = info.force_aout;
-      let y = (startDate.charCodeAt(0)-48)*1000+(startDate.charCodeAt(1)-48)*100+(startDate.charCodeAt(2)-48)*10+(startDate.charCodeAt(3)-48);
-      let mo = (startDate.charCodeAt(5)-48)*10+(startDate.charCodeAt(6)-48);
-      let dy = (startDate.charCodeAt(8)-48)*10+(startDate.charCodeAt(9)-48);
-      let cnt = 0;
-      const eqS = '' + eq;
-      const bound = dur * 3 + 1;
-      for (let i = 0; i < bound; i++) {
-        const mm = mo<3?mo+12:mo, yy = mo<3?y-1:y;
-        const dow = (dy+yy+(yy>>2)-(yy/100|0)+(yy/400|0)+((31*mm)/7|0))%7;
-        const ds = y+'-'+(mo<10?'0':'')+mo+'-'+(dy<10?'0':'')+dy;
-        const blk = dow===0||dow===6||ferieSet.has(ds)||congeBlockedSet.has(eqS+'-'+ds);
-        const aug = !fAout&&mo===8&&dy>=1&&dy<=21;
-        if (!blk&&!aug) { cnt++; if (cnt>=dur) { result = ds; break; } }
-        dy++;
-        if(dy>31||(dy>30&&(mo===4||mo===6||mo===9||mo===11))||(dy>29&&mo===2)||(dy>28&&mo===2&&!((y%4===0&&y%100!==0)||y%400===0))){dy=1;mo++;if(mo>12){mo=1;y++;}}
-      }
-    }
-    cache.set(cacheKey, result);
-    return result;
-  }
-
   function isSelected(equipe, date) {
     if (!selection) return false;
     if (selection.equipe !== equipe) return false;
@@ -512,8 +481,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
       const dco = e.target.closest('[data-co]');
       if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
       else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
-      // v7: plus de pré-calcul bloquant ici (équipes × jours) — la date de fin
-      // est calculée en paresseux par cellule survolée via endDateFor().
+      // v7: aucun pré-calcul bloquant ici (équipes × jours) — la date de fin
+      // est calculée en paresseux par cellule survolée (computeDragEndDate).
       endDateCacheRef.current = new Map();
       // Cache le rect du conteneur de scroll : il ne bouge pas pendant son
       // propre scroll → évite un getBoundingClientRect (layout forcé) par frame.
@@ -523,8 +492,13 @@ const PlanningGrid = React.memo(function PlanningGrid({
       if (scrollRef.current) scrollStartRef.current = { left: scrollRef.current.scrollLeft, top: scrollRef.current.scrollTop };
       cb.setDragActive?.(true);
       const dragSrc = dch || dco;
-      if (dragSrc) dragSrc.classList.add('dragging-source');
-      gridRef.current?.classList.add('dragging-active');
+      // Différé d'un macrotask : l'ajout synchrone de ces classes déclenche un
+      // recalc de styles global qui bloquait le démarrage du drag.
+      setTimeout(() => {
+        if (!isDraggingRef.current) return;
+        if (dragSrc) dragSrc.classList.add('dragging-source');
+        gridRef.current?.classList.add('dragging-active');
+      }, 0);
       dragClientPos.current = { x: e.clientX, y: e.clientY };
       if (scrollRef.current) scrollRef.current.setAttribute('data-dragging', '1');
       startAutoScrollIfNeeded();
@@ -639,7 +613,13 @@ const PlanningGrid = React.memo(function PlanningGrid({
           highlightTargetDate(d);
           // overlay rouge = case de fin (calcul paresseux + mémoïsé)
           if (draggedItemRef.current) {
-            const endDate = endDateFor(eq, d);
+            const cacheKey = `${eq}|${d}`;
+            const cache = endDateCacheRef.current;
+            let endDate = cache?.get(cacheKey);
+            if (endDate === undefined) {
+              endDate = computeDragEndDate(d, eq, draggedItemRef.current.duree - 1, draggedItemRef.current.force_aout, ferieSet, congeBlockedSet);
+              cache?.set(cacheKey, endDate);
+            }
             if (endDate) {
               const endIdx = dayIdxMemo.get(endDate);
               if (endIdx != null && endIdx >= 0) {
@@ -846,7 +826,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                       const blocH = Math.round(36 + (cellWidth - 26) * (54 - 36) / 26);
                       const blocT = Math.round(8 + (cellWidth - 26) * (11 - 8) / 26);
 
-                      const baseClassName = `cell${equipeIndex % 2 ? ' odd' : ''}${weekBoundarySet.has(day.date) ? ' week-boundary' : ''}${day.weekend ? ' weekend' : ''}${isFerie(day.date) ? ' ferie' : ''}${isAugustClosure(day.date) ? ' august-closure' : ''}${day.date === today ? ' today' : ''}${isPending ? ' pending-cell' : ''}`;
+                      const baseClassName = `cell${equipeIndex % 2 ? ' odd' : ''}${dayClassSuffix[dayIdx]}${isPending ? ' pending-cell' : ''}`;
                       const sel = isSelected(equipeIndex, day.date);
                       const res = resize?.previewStart && resize?.previewEnd && resize?.previewEquipe === equipeIndex && sameOrAfter(day.date, resize.previewStart) && sameOrBefore(day.date, resize.previewEnd);
 
