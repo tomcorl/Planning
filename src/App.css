@@ -17,6 +17,25 @@
   --green: #16a34a;
   --green-light: #22c55e;
   --green-dark: #15803d;
+  --team-col-w: 260px;
+}
+
+@media (max-width: 1024px) {
+  :root {
+    --team-col-w: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --team-col-w: 160px;
+  }
+}
+
+@media (max-width: 360px) {
+  :root {
+    --team-col-w: 145px;
+  }
 }
 
 [data-theme='dark'] {
@@ -62,8 +81,20 @@ textarea {
 
 .app {
   height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  position: relative;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   position: relative;
 }
 
@@ -197,9 +228,12 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .planning-scroll {
-  height: calc(100vh - 100px);
-  overflow: scroll;
-  margin: 0 10px 2px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 10px 4px;
   border-radius: 14px;
   background: var(--surface);
   box-shadow: 0 4px 24px var(--shadow), 0 0 0 1px var(--line-soft);
@@ -209,6 +243,10 @@ button:active {
 }
 
 .planning-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   position: relative;
 }
 
@@ -462,7 +500,8 @@ button:active {
   gap: 8px;
   padding: 0 8px;
   box-shadow: 6px 0 16px var(--shadow);
-  width: 260px;
+  width: var(--team-col-w, 260px);
+  min-width: var(--team-col-w, 260px);
   flex-shrink: 0;
   will-change: transform;
 }
@@ -474,6 +513,27 @@ button:active {
 .pending-team {
   background: var(--surface) !important;
   box-shadow: none !important;
+}
+
+.team-cell.row-dragging {
+  opacity: 0.45;
+  box-shadow: 0 0 0 2px var(--accent, #2563eb);
+}
+
+.team-cell.drop-before {
+  box-shadow: 0 -3px 0 0 var(--accent, #2563eb) inset, 6px 0 16px var(--shadow);
+}
+
+.team-cell.drop-after {
+  box-shadow: 0 3px 0 0 var(--accent, #2563eb) inset, 6px 0 16px var(--shadow);
+}
+
+.team-cell[draggable='true'] {
+  cursor: grab;
+}
+
+.team-cell[draggable='true']:active {
+  cursor: grabbing;
 }
 
 .pending-cell {
@@ -1619,7 +1679,8 @@ button:active {
 }
 
 .main-grid.dragging-active [data-ch]:not(.dragging-source),
-.main-grid.dragging-active [data-co]:not(.dragging-source) {
+.main-grid.dragging-active [data-co]:not(.dragging-source),
+.main-grid.dragging-active .note-icon {
   pointer-events: none;
 }
 

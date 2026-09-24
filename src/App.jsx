@@ -9,7 +9,7 @@ const PasswordChangePage = lazy(() => import('./PasswordChangePage.jsx'));
 const PersonalPlanning = lazy(() => import('./PersonalPlanning.jsx'));
 const Dashboard = lazy(() => import('./Dashboard.jsx'));
 import PlanningGrid from './PlanningGrid.jsx';
-import MobilePlanning from './MobilePlanning.jsx';
+// MobilePlanning.jsx kept in repo but no longer imported
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
@@ -362,6 +362,22 @@ export default function App() {
   const reloadTimerRef = useRef(null);
   const reloadInFlightRef = useRef(false);
   const pendingReloadRef = useRef(false);
+  const saveChainRef = useRef(Promise.resolve());
+  const saveDrainingRef = useRef(false);
+  const pendingSavePayloadRef = useRef(null);
+  const saveRetryCountRef = useRef(0);
+  const lastReloadAtRef = useRef(0);
+  const dragActiveRef = useRef(false);
+
+  // Signalé par la grille pendant un drag natif : aucun reload temps réel ni
+  // expansion du calendrier ne doit re-rendre la grille en plein drag
+  // (casse le drag + fait « revenir au début »).
+  function setDragActive(active) {
+    dragActiveRef.current = active;
+    if (!active && pendingReloadRef.current && !saveTimerRef.current && !saveDrainingRef.current && !pendingSavePayloadRef.current) {
+      scheduleReload();
+    }
+  }
 
   // ── Supabase Auth + Data Loading ──
   const loadedRef = useRef(false);
@@ -386,105 +402,141 @@ export default function App() {
   useEffect(() => {
     if (!loadedRef.current || !session || !companies.length) return;
     if (suppressAutoSaveRef.current) return;
-    const timer = setTimeout(async () => {
-      saveTimerRef.current = null;
-      try {
-        const result = await api.saveAllPlanningData({
-          chantiers,
-          conges: conges.map(c => ({ ...c, company_id: c.companyId || (teamById.get(c.equipe)?.companyId) })),
-          equipes: teams,
-          conducteurs,
-          vendeurs,
-          typesChantier,
-          customFeries,
-          chantierColors,
-          conducteurColors,
-        });
-        // Update conducteur/vendeur/type IDs from DB response (new rows get real IDs)
-        if (result?.conducteurs) {
-          const nomToId = new Map(result.conducteurs.map(r => [r.nom, r.id]));
-          setConducteurs(prev => {
-            let changed = false;
-            const updated = prev.map(c => {
-              const dbId = nomToId.get(c.nom);
-              if (dbId && c.id !== dbId) {
-                changed = true;
-                return { ...c, id: dbId };
-              }
-              return c;
-            });
-            return changed ? updated : prev;
-          });
-        }
-        if (result?.vendeurs) {
-          const nomToId = new Map(result.vendeurs.map(r => [r.nom, r.id]));
-          setVendeurs(prev => {
-            let changed = false;
-            const updated = prev.map(v => {
-              const dbId = nomToId.get(v.nom);
-              if (dbId && v.id !== dbId) {
-                changed = true;
-                return { ...v, id: dbId };
-              }
-              return v;
-            });
-            return changed ? updated : prev;
-          });
-        }
-        if (result?.types_chantier || result?.typesChantier) {
-          const arr = result.types_chantier || result.typesChantier;
-          const nomToId = new Map(arr.map(r => [r.nom, r.id]));
-          setTypesChantier(prev => {
-            let changed = false;
-            const updated = prev.map(t => {
-              const dbId = nomToId.get(t.nom);
-              if (dbId && t.id !== dbId) {
-                changed = true;
-                return { ...t, id: dbId };
-              }
-              return t;
-            });
-            return changed ? updated : prev;
-          });
-        }
-        // Update equipe IDs from DB response (new rows get real IDs)
-        if (result?.equipes) {
-          const eqNomCompanyIdToId = new Map(result.equipes.map(r => [`${r.nom}-${r.company_id}`, r.id]));
-          const idMap = new Map();
-          teams.forEach(t => {
-            const dbId = eqNomCompanyIdToId.get(`${t.nom}-${t.companyId}`);
-            if (dbId && t.id !== dbId) idMap.set(t.id, dbId);
-          });
-          if (idMap.size > 0) {
-            setTeams(prev => prev.map(t => idMap.has(t.id) ? { ...t, id: idMap.get(t.id) } : t));
-            setChantiers(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
-            setConges(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
+    pendingSavePayloadRef.current = {
+      chantiers,
+      conges: conges.map(c => ({ ...c, company_id: c.companyId || (teamById.get(c.equipe)?.companyId) })),
+      equipes: teams,
+      conducteurs,
+      vendeurs,
+      typesChantier,
+      customFeries,
+      chantierColors,
+      conducteurColors,
+    };
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(scheduleSaveDrain, 800);
+    return () => { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; };
+  }, [chantiers, conges, teams, conducteurs, vendeurs, typesChantier, customFeries, chantierColors, conducteurColors, session, companies]);
+
+  function scheduleSaveDrain() {
+    saveTimerRef.current = null;
+    if (saveDrainingRef.current) return;
+    saveDrainingRef.current = true;
+    saveChainRef.current
+      .catch(() => {})
+      .then(async () => {
+        while (pendingSavePayloadRef.current) {
+          const payload = pendingSavePayloadRef.current;
+          pendingSavePayloadRef.current = null;
+          try {
+            await runPlanningSave(payload);
+            saveRetryCountRef.current = 0;
+          } catch (e) {
+            console.error('saveAllPlanningData failed', e);
+            saveRetryCountRef.current += 1;
+            if (saveRetryCountRef.current > 5) {
+              console.error('[save] abandon après 5 échecs consécutifs, payload ignoré');
+              pendingSavePayloadRef.current = null;
+              saveRetryCountRef.current = 0;
+              break;
+            }
+            if (!pendingSavePayloadRef.current) pendingSavePayloadRef.current = payload;
+            await new Promise((r) => setTimeout(r, 2500));
           }
         }
+      })
+      .finally(() => {
+        saveDrainingRef.current = false;
+      });
+  }
 
-        api.notifyPlanningSaved();
-
-        if (pendingReloadRef.current) {
-          pendingReloadRef.current = false;
-          performReload();
-        }
-      } catch (e) {
-        console.error('saveAllPlanningData failed', e);
+  async function runPlanningSave(payload) {
+    const result = await api.saveAllPlanningData(payload);
+    // Update conducteur/vendeur/type IDs from DB response (new rows get real IDs)
+    if (result?.conducteurs) {
+      const nomToId = new Map(result.conducteurs.map(r => [r.nom, r.id]));
+      setConducteurs(prev => {
+        let changed = false;
+        const updated = prev.map(c => {
+          const dbId = nomToId.get(c.nom);
+          if (dbId && c.id !== dbId) {
+            changed = true;
+            return { ...c, id: dbId };
+          }
+          return c;
+        });
+        return changed ? updated : prev;
+      });
+    }
+    if (result?.vendeurs) {
+      const nomToId = new Map(result.vendeurs.map(r => [r.nom, r.id]));
+      setVendeurs(prev => {
+        let changed = false;
+        const updated = prev.map(v => {
+          const dbId = nomToId.get(v.nom);
+          if (dbId && v.id !== dbId) {
+            changed = true;
+            return { ...v, id: dbId };
+          }
+          return v;
+        });
+        return changed ? updated : prev;
+      });
+    }
+    if (result?.types_chantier || result?.typesChantier) {
+      const arr = result.types_chantier || result.typesChantier;
+      const nomToId = new Map(arr.map(r => [r.nom, r.id]));
+      setTypesChantier(prev => {
+        let changed = false;
+        const updated = prev.map(t => {
+          const dbId = nomToId.get(t.nom);
+          if (dbId && t.id !== dbId) {
+            changed = true;
+            return { ...t, id: dbId };
+          }
+          return t;
+        });
+        return changed ? updated : prev;
+      });
+    }
+    // Update equipe IDs from DB response (new rows get real IDs)
+    if (result?.equipes) {
+      const eqNomCompanyIdToId = new Map(result.equipes.map(r => [`${r.nom}-${r.company_id}`, r.id]));
+      const idMap = new Map();
+      payload.equipes.forEach(t => {
+        const dbId = eqNomCompanyIdToId.get(`${t.nom}-${t.companyId}`);
+        if (dbId && t.id !== dbId) idMap.set(t.id, dbId);
+      });
+      if (idMap.size > 0) {
+        setTeams(prev => prev.map(t => idMap.has(t.id) ? { ...t, id: idMap.get(t.id) } : t));
+        setChantiers(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
+        setConges(prev => prev.map(c => idMap.has(c.equipe) ? { ...c, equipe: idMap.get(c.equipe) } : c));
       }
-    }, 800);
-    saveTimerRef.current = timer;
-    return () => { clearTimeout(timer); saveTimerRef.current = null; };
-  }, [chantiers, conges, teams, conducteurs, vendeurs, typesChantier, customFeries, chantierColors, conducteurColors, session, companies]);
+    }
+
+    api.notifyPlanningSaved();
+
+    if (pendingReloadRef.current) {
+      pendingReloadRef.current = false;
+      performReload();
+    }
+  }
 
   // ── Realtime subscription ──
   useEffect(() => {
     if (!session?.id) return;
     const cleanup = api.subscribePlanningUpdates(session.id, () => {
       if (!loadedRef.current) return;
-      if (saveTimerRef.current) {
+      if (saveTimerRef.current || saveDrainingRef.current || pendingSavePayloadRef.current || dragActiveRef.current) {
         pendingReloadRef.current = true;
         return;
       }
+      const now = Date.now();
+      if (now - lastReloadAtRef.current < 1500) {
+        pendingReloadRef.current = true;
+        return;
+      }
+      lastReloadAtRef.current = now;
       scheduleReload();
     });
     return cleanup;
@@ -513,10 +565,11 @@ export default function App() {
       pendingReloadRef.current = true;
       return;
     }
-    if (saveTimerRef.current) {
+    if (saveTimerRef.current || saveDrainingRef.current || pendingSavePayloadRef.current || dragActiveRef.current) {
       pendingReloadRef.current = true;
       return;
     }
+    lastReloadAtRef.current = Date.now();
     reloadInFlightRef.current = true;
     reloadTimerRef.current = null;
     suppressAutoSaveRef.current = true;
@@ -851,7 +904,15 @@ export default function App() {
     vendeursRef.current = vendeurs;
     typesChantierRef.current = typesChantier;
     customFeriesRef.current = customFeries;
-    keyRef.current = { selectedItem, modalOpen: modal.open, clipboard, canEdit };
+    keyRef.current = {
+      selectedItem,
+      modalOpen: modal.open,
+      clipboard,
+      canEdit,
+      paste: (equipe, date) => pasteClipboard(equipe, date),
+      undo: () => undo(),
+      redo: () => redo(),
+    };
   });
 
   function snapshot() {
@@ -897,37 +958,38 @@ export default function App() {
     });
   }
 
-  const keyRef = useRef({ selectedItem: null, modalOpen: false, clipboard: null, canEdit: false });
+  const keyRef = useRef({ selectedItem: null, modalOpen: false, clipboard: null, canEdit: false, paste: null, undo: null, redo: null });
 
   useEffect(() => {
     function onKeyDown(e) {
       const key = e.key || '';
       const z = key.toLowerCase() === 'z';
       const y = key.toLowerCase() === 'y';
+      const ref = keyRef.current;
 
       if ((e.ctrlKey || e.metaKey) && z && !e.shiftKey) {
         e.preventDefault();
-        undo();
+        ref.undo?.();
       }
 
       if ((e.ctrlKey || e.metaKey) && (y || (z && e.shiftKey))) {
         e.preventDefault();
-        redo();
+        ref.redo?.();
       }
 
-      const { selectedItem: sel, modalOpen, clipboard: clip, canEdit: ce } = keyRef.current;
+      const { selectedItem: sel, modalOpen, clipboard: clip, canEdit: ce } = ref;
 
       if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'c' && sel && !modalOpen) {
         e.preventDefault();
         const item = sel.type === 'chantier'
-          ? chantiers.find((c) => c.id === sel.id)
-          : conges.find((c) => c.id === sel.id);
+          ? chantiersRef.current.find((c) => c.id === sel.id)
+          : congesRef.current.find((c) => c.id === sel.id);
         if (item) setClipboard({ ...item, sourceType: sel.type });
       }
 
       if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'v' && clip && !modalOpen && ce) {
         e.preventDefault();
-        pasteClipboard();
+        ref.paste?.();
       }
     }
 
@@ -1583,8 +1645,9 @@ export default function App() {
         }, 1000);
       }
 
-      // Right-edge expansion: debounced, cooldown 2s (pendant drag on charge par 30j pour éviter lag)
-      if (el.scrollLeft + el.clientWidth > el.scrollWidth - 600) {
+      // Right-edge expansion: debounced, cooldown 2s (jamais pendant un drag :
+      // un rebuild de la grille en plein drag natif casse le drop)
+      if (!isDragging && !dragActiveRef.current && el.scrollLeft + el.clientWidth > el.scrollWidth - 600) {
         if (!expandRightRef.current && !expandCooldownRef.current) {
           const isDraggingNow = el.dataset.dragging === '1';
           expandRightRef.current = setTimeout(() => {
@@ -1599,7 +1662,8 @@ export default function App() {
       }
 
       // Left-edge expansion: debounced, cooldown 2s after each expansion
-      if (el.scrollLeft < 200) {
+      // (jamais pendant un drag : rebuild en plein drag natif = drop cassé)
+      if (!isDragging && !dragActiveRef.current && el.scrollLeft < 200) {
         if (!expandLeftRef.current && !expandCooldownRef.current) {
           expandLeftRef.current = setTimeout(() => {
             expandLeftRef.current = null;
@@ -1622,7 +1686,9 @@ export default function App() {
     const idx = dayIndex(today);
     const el = scrollRef.current;
     if (el && idx >= 0) {
-      el.scrollLeft = Math.max(0, idx * cellWidth - 500);
+      const tcw = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--team-col-w')) || 260;
+      const visibleGrid = el.clientWidth - tcw;
+      el.scrollLeft = Math.max(0, idx * cellWidth - visibleGrid / 2);
     }
     setJumpDate(today);
   }
@@ -1630,6 +1696,7 @@ export default function App() {
   function jumpToDate(date) {
     const idx = dayIndex(date);
     const el = scrollRef.current;
+    const tcw = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--team-col-w')) || 260;
     if (idx < 0) {
       setCalendarStart(addDays(toDate(date), -30));
       setCalendarLength(120);
@@ -1638,7 +1705,8 @@ export default function App() {
         if (el2) el2.scrollLeft = 30 * cellWidth;
       }, 0);
     } else if (el) {
-      el.scrollLeft = Math.max(0, idx * cellWidth - 500);
+      const visibleGrid = el.clientWidth - tcw;
+      el.scrollLeft = Math.max(0, idx * cellWidth - visibleGrid / 2);
     }
     setJumpDate(date);
   }
@@ -1720,6 +1788,7 @@ export default function App() {
         const newItem = {
           ...clip,
           id: nextLocalId(),
+          equipe,
           start: date || today,
         };
         setConges((prev) => [...prev, newItem]);
@@ -1948,6 +2017,7 @@ export default function App() {
     openEditConge,
     addWorkingDays,
     handleScroll,
+    setDragActive,
   };
 
   if (dataLoading && session) {
@@ -2180,50 +2250,30 @@ export default function App() {
 
       {activePage === 'planning' && (
         <>
-      {isMobile ? (
-        <MobilePlanning
-          chantiers={chantiers}
+        <PlanningGrid
+          gridRows={gridRows}
+          visibleDays={visibleDays}
+          weekGroups={weekGroups}
+          monthGroups={monthGroups}
+          chantiersParCellule={chantiersParCellule}
           conges={conges}
-          teams={teams}
+          congeSegments={congeSegmentsMap}
           conducteurs={conducteurs}
-          companies={companies}
+          vendeurs={vendeurs}
+          typesChantier={typesChantier}
+          selectedItem={selectedItem}
+          selection={selection}
+          cellWidth={cellWidth}
           canEdit={canEdit}
-          session={session}
-          onEditChantier={openEditChantier}
-          onEditConge={openEditConge}
-          onAddChantier={quickAdd}
-          onDeleteChantier={(id) => { setSelectedItem({ type: 'chantier', id }); deleteSelectedItem(); }}
-          onDeleteConge={(id) => { setSelectedItem({ type: 'conge', id }); deleteSelectedItem(); }}
-          getEndDateForChantier={getEndDateForChantier}
-          getConducteur={getConducteur}
-          addWorkingDays={addWorkingDays}
+          resize={resize}
+          today={today}
+          companies={companies}
+          teams={teams}
+          ferieSet={ferieSet}
+          congeBlockedSet={congeBlockedSet}
+          callbacksRef={gridCallbacksRef}
+          scrollRef={scrollRef}
         />
-      ) : (
-      <PlanningGrid
-        gridRows={gridRows}
-        visibleDays={visibleDays}
-        weekGroups={weekGroups}
-        monthGroups={monthGroups}
-        chantiersParCellule={chantiersParCellule}
-        conges={conges}
-        congeSegments={congeSegmentsMap}
-        conducteurs={conducteurs}
-        vendeurs={vendeurs}
-        typesChantier={typesChantier}
-        selectedItem={selectedItem}
-        selection={selection}
-        cellWidth={cellWidth}
-        canEdit={canEdit}
-        resize={resize}
-        today={today}
-        companies={companies}
-        teams={teams}
-        ferieSet={ferieSet}
-        congeBlockedSet={congeBlockedSet}
-        callbacksRef={gridCallbacksRef}
-        scrollRef={scrollRef}
-      />
-      )}
 
         <Modals
           modal={modal} setModal={setModal}

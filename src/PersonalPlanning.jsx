@@ -232,6 +232,10 @@ export default function PersonalPlanning({ user }) {
 
   const [selection, setSelection] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
+  const lastCellRef = useRef(null);
+  const [clipboard, setClipboard] = useState(null);
+  const clipboardRef = useRef(null);
+  const keyActionsRef = useRef(null);
   const [modal, setModal] = useState({ open: false, mode: 'creation' });
   const [form, setForm] = useState(null);
   const [resize, setResize] = useState(null);
@@ -258,6 +262,8 @@ export default function PersonalPlanning({ user }) {
   }, [personalColors]);
 
   const saveTimerRef = useRef(null);
+  const saveQueueRef = useRef(null);
+  const pendingSaveRef = useRef(null);
   const resizeRef = useRef(null);
   const lastXRef = useRef(null);
   const initialScrolled = useRef(false);
@@ -379,6 +385,9 @@ export default function PersonalPlanning({ user }) {
 
   const gridCallbacksRef = useRef({});
 
+  clipboardRef.current = clipboard;
+  keyActionsRef.current = { copy: copyItem, paste: pasteItem, delete: deleteSelectedItem };
+
   gridCallbacksRef.current = {
     startSelection,
     updateSelection,
@@ -390,6 +399,7 @@ export default function PersonalPlanning({ user }) {
     startResize,
     renameRow: handleRenameRow,
     deleteRow: handleDeleteRow,
+    reorderRows,
     handleAddRow,
     handleScroll,
   };
@@ -441,17 +451,71 @@ export default function PersonalPlanning({ user }) {
     }
   }, [dayIdxMap, today]);
 
+  function enqueueSave(planId, snapshot) {
+    saveQueueRef.current = (saveQueueRef.current || Promise.resolve())
+      .catch(() => {})
+      .then(async () => {
+        try {
+          await savePersonalPlan(planId, snapshot.rows, snapshot.items);
+        } catch (e) {
+          console.error('auto-save failed', e);
+          if (activePlanId === planId && !pendingSaveRef.current) {
+            pendingSaveRef.current = snapshot;
+          }
+          if (activePlanId === planId && !saveTimerRef.current) {
+            saveTimerRef.current = setTimeout(flushSave, 1500);
+          }
+        }
+      });
+  }
+
+  function flushSave() {
+    if (!activePlanId) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const snapshot = pendingSaveRef.current;
+    if (!snapshot) return;
+    pendingSaveRef.current = null;
+    enqueueSave(activePlanId, snapshot);
+  }
+
   function doSave(newRows, newItems) {
     if (!activePlanId) return;
+    // stocke la version la plus récente ; ce sera elle qui partira à l'écriture
+    pendingSaveRef.current = { rows: newRows, items: newItems };
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      try {
-        await savePersonalPlan(activePlanId, newRows, newItems);
-      } catch (e) {
-        console.error('auto-save failed', e);
-      }
-    }, 800);
+    saveTimerRef.current = setTimeout(flushSave, 800);
   }
+
+  // sauvegarde immédiate si la page change / navigation pendant le debounce
+  useEffect(() => {
+    function flushOnPageHide() {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      const snapshot = pendingSaveRef.current;
+      if (!snapshot || !activePlanId) return;
+      pendingSaveRef.current = null;
+      enqueueSave(activePlanId, snapshot);
+    }
+    window.addEventListener('pagehide', flushOnPageHide);
+    window.addEventListener('beforeunload', flushOnPageHide);
+    return () => {
+      window.removeEventListener('pagehide', flushOnPageHide);
+      window.removeEventListener('beforeunload', flushOnPageHide);
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      const snapshot = pendingSaveRef.current;
+      if (!snapshot || !activePlanId) return;
+      pendingSaveRef.current = null;
+      enqueueSave(activePlanId, snapshot);
+    };
+  }, [activePlanId]);
 
   async function handleCreatePlan() {
     const name = prompt('Nom du planning :', 'Nouveau planning');
@@ -515,6 +579,23 @@ export default function PersonalPlanning({ user }) {
     const newRows = rows.map((r) => r.id === rowId ? { ...r, nom } : r);
     setRows(newRows);
     doSave(newRows, items);
+  }
+
+  // réordonne les lignes en déplaçant fromId avant/après targetId (drag du team-cell)
+  function reorderRows(fromId, targetId, position) {
+    if (fromId == null || targetId == null || fromId === targetId) return;
+    const fromIdx = rows.findIndex((r) => r.id === fromId);
+    if (fromIdx === -1) return;
+    const moved = rows[fromIdx];
+    const withoutMoved = rows.filter((r) => r.id !== fromId);
+    const targetIdx = withoutMoved.findIndex((r) => r.id === targetId);
+    if (targetIdx === -1) return;
+    const insertAt = position === 'after' ? targetIdx + 1 : targetIdx;
+    const newRows = [...withoutMoved];
+    newRows.splice(insertAt, 0, moved);
+    const withOrdre = newRows.map((r, i) => ({ ...r, ordre: i }));
+    setRows(withOrdre);
+    doSave(withOrdre, items);
   }
 
   function openCreateItem(rowId, startDate, duree) {
@@ -595,10 +676,12 @@ export default function PersonalPlanning({ user }) {
   function startSelection(e, rowId, date) {
     if (e.button !== 0) return;
     if (resize || modal.open) return;
+    lastCellRef.current = { rowId, date };
     setSelection({ rowId, startDate: date, endDate: date });
   }
 
   function updateSelection(rowId, date) {
+    lastCellRef.current = { rowId, date };
     if (selectionThrottle.current) return;
     selectionThrottle.current = requestAnimationFrame(() => {
       setSelection((prev) => {
@@ -636,6 +719,19 @@ export default function PersonalPlanning({ user }) {
     if (!item) return;
     const dayOffset = dayIndex(date) - dayIndex(item.start);
     if (dayOffset === 0 && rowId === item.rowId) return;
+
+    // Même ligne : on décale TOUTE la ligne (tous les éléments ensemble)
+    if (rowId === item.rowId) {
+      const newItems = items.map((it) =>
+        it.rowId === item.rowId
+          ? { ...it, start: addWorkingDays(it.start, dayOffset, ferieSet) }
+          : it
+      );
+      setItems(newItems);
+      doSave(rows, newItems);
+      return;
+    }
+
     const newStart = addWorkingDays(item.start, dayOffset, ferieSet);
     const movedItem = { ...item, rowId, start: newStart };
     if (!ganttMode) {
@@ -727,12 +823,13 @@ export default function PersonalPlanning({ user }) {
             if (!ganttMode) {
               const resized = { id, rowId: originalRowId, start: originalStart, duree: newDuree };
               if (hasOverlap(resized, id)) return;
-              setItems((prev) => prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it));
+              const newItems = items.map((it) => it.id === id ? { ...it, duree: newDuree } : it);
+              setItems(newItems);
+              doSave(rows, newItems);
             } else {
-              setItems((prev) => {
-                const updated = prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it);
-                return cascadeGanttOnModify(prev, updated, id, ferieSet);
-              });
+              const newItems = cascadeGanttOnModify(items, items.map((it) => it.id === id ? { ...it, duree: newDuree } : it), id, ferieSet);
+              setItems(newItems);
+              doSave(rows, newItems);
             }
           }
         } else {
@@ -743,20 +840,20 @@ export default function PersonalPlanning({ user }) {
             if (!ganttMode) {
               const resized = { id, rowId: originalRowId, start: rawNewStart, duree: newDuree };
               if (hasOverlap(resized, id)) return;
-              setItems((prev) => prev.map((it) =>
+              const newItems = items.map((it) =>
                 it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
-              ));
+              );
+              setItems(newItems);
+              doSave(rows, newItems);
             } else {
-              setItems((prev) => {
-                const updated = prev.map((it) =>
-                  it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
-                );
-                return cascadeGanttOnModify(prev, updated, id, ferieSet);
-              });
+              const newItems = cascadeGanttOnModify(items, items.map((it) =>
+                it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
+              ), id, ferieSet);
+              setItems(newItems);
+              doSave(rows, newItems);
             }
           }
         }
-        doSave(rows, items);
       }
 
       setResize(null);
@@ -812,11 +909,53 @@ export default function PersonalPlanning({ user }) {
   function handleContextMenu(e, type, id, rowId, date) {
     if (type === 'item') {
       const item = items.find((it) => it.id === id);
-      if (item) setContextMenu({ x: e.clientX, y: e.clientY, type: 'item', item });
+      if (item) setContextMenu({ x: e.clientX, y: e.clientY, type: 'item', item, date });
     } else if (type === 'cell') {
       const row = rows.find((r) => r.id === rowId);
-      if (row) setContextMenu({ x: e.clientX, y: e.clientY, type: 'row', row });
+      if (row) setContextMenu({ x: e.clientX, y: e.clientY, type: 'row', row, date });
     }
+  }
+
+  function copyItem() {
+    if (!selectedItem || selectedItem.type !== 'item') return;
+    const item = items.find((it) => it.id === selectedItem.id);
+    if (item) {
+      setClipboard(item);
+      setContextMenu(null);
+    }
+  }
+
+  function pasteItem(targetRowId, targetDate) {
+    const clip = clipboardRef.current;
+    if (!clip || !targetRowId) return;
+    const start = targetDate
+      ? nextWorkingDay(targetDate, ferieSet)
+      : nextWorkingDay(today, ferieSet);
+    const newItem = {
+      id: nextLocalId(),
+      rowId: targetRowId,
+      start,
+      duree: Number(clip.duree) || 5,
+      nom: clip.nom || '',
+      color: clip.color || PERSONAL_COLORS[0],
+      note: clip.note || '',
+    };
+    if (!ganttMode) {
+      if (hasOverlap(newItem, newItem.id)) {
+        alert('Impossible : chevauchement avec un bloc existant sur la même ligne.');
+        return;
+      }
+      const newItems = [...items, newItem];
+      setItems(newItems);
+      doSave(rows, newItems);
+    } else {
+      const newItems = [...items, newItem];
+      const cleaned = cascadeGanttOnModify(items, newItems, newItem.id, ferieSet);
+      setItems(cleaned);
+      doSave(rows, cleaned);
+    }
+    setSelectedItem({ type: 'item', id: newItem.id });
+    setContextMenu(null);
   }
 
   useEffect(() => {
@@ -833,6 +972,16 @@ export default function PersonalPlanning({ user }) {
   useEffect(() => {
     function onKeyDown(e) {
       const key = e.key || '';
+      const mod = e.ctrlKey || e.metaKey;
+      if ((mod && key.toLowerCase() === 'c') && selectedItem && !modal.open && !e.target.closest('input, textarea')) {
+        keyActionsRef.current?.copy();
+        return;
+      }
+      if ((mod && key.toLowerCase() === 'v') && clipboardRef.current && !modal.open && !e.target.closest('input, textarea')) {
+        const target = lastCellRef.current;
+        if (target?.rowId) keyActionsRef.current?.paste(target.rowId, target.date);
+        return;
+      }
       if ((key === 'Delete' || key === 'Backspace') && !e.target.closest('input, textarea')) {
         if (selectedItem && !modal.open) {
           deleteSelectedItem();
@@ -972,6 +1121,10 @@ export default function PersonalPlanning({ user }) {
                 setContextMenu(null);
               }}>Renommer</div>
               <div onClick={() => {
+                setClipboard(contextMenu.item);
+                setContextMenu(null);
+              }}>Copier</div>
+              <div onClick={() => {
                 setForm({ ...contextMenu.item });
                 setModal({ open: true, mode: 'modification' });
                 setSelectedItem({ type: 'item', id: contextMenu.item.id });
@@ -988,6 +1141,9 @@ export default function PersonalPlanning({ user }) {
           )}
           {contextMenu.type === 'row' && (
             <>
+              {clipboardRef.current && (
+                <div onClick={() => pasteItem(contextMenu.row.id, contextMenu.date)}>Coller ici</div>
+              )}
               <div onClick={() => {
                 const newNom = prompt('Nom de la tâche:', contextMenu.row.nom);
                 if (newNom) handleRenameRow(contextMenu.row.id, newNom);
