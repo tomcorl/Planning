@@ -515,6 +515,27 @@ button:active {
   box-shadow: none !important;
 }
 
+.team-cell.row-dragging {
+  opacity: 0.45;
+  box-shadow: 0 0 0 2px var(--accent, #2563eb);
+}
+
+.team-cell.drop-before {
+  box-shadow: 0 -3px 0 0 var(--accent, #2563eb) inset, 6px 0 16px var(--shadow);
+}
+
+.team-cell.drop-after {
+  box-shadow: 0 3px 0 0 var(--accent, #2563eb) inset, 6px 0 16px var(--shadow);
+}
+
+.team-cell[draggable='true'] {
+  cursor: grab;
+}
+
+.team-cell[draggable='true']:active {
+  cursor: grabbing;
+}
+
 .pending-cell {
   background: var(--surface) !important;
 }

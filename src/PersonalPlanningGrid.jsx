@@ -136,6 +136,8 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
   const dragOverlayRef = React.useRef(null);
   const dragEndOverlayRef = React.useRef(null);
   const draggedItemRef = React.useRef(null);
+  const dragRowRef = React.useRef(null);
+  const dropTargetRowRef = React.useRef(null);
   const totalDays = visibleDays.length;
 
   React.useEffect(() => {
@@ -370,6 +372,58 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
     }
   }
 
+  function handleRowReorderDragStart(e, rowId) {
+    const target = e.target;
+    if (target.closest('.team-cell input') || target.closest('.delete-team')) {
+      e.preventDefault();
+      return;
+    }
+    dragRowRef.current = rowId;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(rowId));
+    e.currentTarget.classList.add('row-dragging');
+  }
+
+  function handleRowReorderDragOver(e) {
+    if (dragRowRef.current == null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    if (dropTargetRowRef.current) {
+      dropTargetRowRef.current.classList.remove('drop-before', 'drop-after');
+    }
+    dropTargetRowRef.current = e.currentTarget;
+    e.currentTarget.classList.add(position === 'before' ? 'drop-before' : 'drop-after');
+  }
+
+  function handleRowReorderDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const fromId = dragRowRef.current;
+    const targetEl = e.currentTarget;
+    if (dropTargetRowRef.current) {
+      dropTargetRowRef.current.classList.remove('drop-before', 'drop-after');
+      dropTargetRowRef.current = null;
+    }
+    if (fromId == null) return;
+    const rowId = Number(targetEl.dataset.rowId);
+    dragRowRef.current = null;
+    targetEl.classList.remove('row-dragging');
+    const rect = targetEl.getBoundingClientRect();
+    const position = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    cb.reorderRows(Number(fromId), rowId, position);
+  }
+
+  function handleRowReorderDragEnd(e) {
+    dragRowRef.current = null;
+    if (dropTargetRowRef.current) {
+      dropTargetRowRef.current.classList.remove('drop-before', 'drop-after');
+      dropTargetRowRef.current = null;
+    }
+    e.currentTarget.classList.remove('row-dragging');
+  }
+
   return (
     <div className="planning-container">
       <div className="planning-scroll" ref={scrollRef} onScroll={cb.handleScroll}>
@@ -440,8 +494,16 @@ const PersonalPlanningGrid = React.memo(function PersonalPlanningGrid({
 
             return (
               <React.Fragment key={rowId}>
-                <div className="grid-row" style={{ height: rowHeight }}>
-                  <div className={`team-cell${isOdd ? ' odd' : ''}`}>
+                <div className={`grid-row`} style={{ height: rowHeight }}>
+                  <div
+                    className={`team-cell${isOdd ? ' odd' : ''}`}
+                    data-row-id={rowId}
+                    draggable={canEdit}
+                    onDragStart={(e) => handleRowReorderDragStart(e, rowId)}
+                    onDragOver={(e) => handleRowReorderDragOver(e)}
+                    onDrop={handleRowReorderDrop}
+                    onDragEnd={handleRowReorderDragEnd}
+                  >
                     <div className="avatar">{row.ordre + 1}</div>
                     <input
                       key={`name-${row.nom}`}

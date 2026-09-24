@@ -392,6 +392,7 @@ export default function PersonalPlanning({ user }) {
     startResize,
     renameRow: handleRenameRow,
     deleteRow: handleDeleteRow,
+    reorderRows,
     handleAddRow,
     handleScroll,
   };
@@ -548,6 +549,23 @@ export default function PersonalPlanning({ user }) {
     const newRows = rows.map((r) => r.id === rowId ? { ...r, nom } : r);
     setRows(newRows);
     doSave(newRows, items);
+  }
+
+  // réordonne les lignes en déplaçant fromId avant/après targetId (drag du team-cell)
+  function reorderRows(fromId, targetId, position) {
+    if (fromId == null || targetId == null || fromId === targetId) return;
+    const fromIdx = rows.findIndex((r) => r.id === fromId);
+    if (fromIdx === -1) return;
+    const moved = rows[fromIdx];
+    const withoutMoved = rows.filter((r) => r.id !== fromId);
+    const targetIdx = withoutMoved.findIndex((r) => r.id === targetId);
+    if (targetIdx === -1) return;
+    const insertAt = position === 'after' ? targetIdx + 1 : targetIdx;
+    const newRows = [...withoutMoved];
+    newRows.splice(insertAt, 0, moved);
+    const withOrdre = newRows.map((r, i) => ({ ...r, ordre: i }));
+    setRows(withOrdre);
+    doSave(withOrdre, items);
   }
 
   function openCreateItem(rowId, startDate, duree) {
