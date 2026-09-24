@@ -1738,6 +1738,32 @@ button:active {
   pointer-events: none;
 }
 
+/* Source atténuée pendant le drag (temporaire : classe retirée au drop/annulation).
+   Le chantier reste localisable, le fantôme .drag-ghost montre le déplacement. */
+.main-grid.dragging-active .dragging-source {
+  opacity: 0.35;
+}
+
+/* Fantôme du chantier déplacé : clone exact du bloc, suit le curseur.
+   position:fixed (aucun ancêtre transformé) + transform seul → aucun reflow.
+   Jamais interactif : ne doit jamais intercepter le pointeur. */
+.drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: none;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+  z-index: 10001;
+  opacity: 0.95;
+  will-change: transform;
+}
+.drag-ghost,
+.drag-ghost * {
+  pointer-events: none;
+}
+
 .main-grid.dragging-active .bloc {
   box-shadow: none !important;
   transition: none !important;

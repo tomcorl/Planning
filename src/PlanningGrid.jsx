@@ -214,6 +214,11 @@ const PlanningGrid = React.memo(function PlanningGrid({
   // Drag Pointer Events : candidat (avant seuil) + pointeur suivi.
   const dragCandidateRef = React.useRef(null);
   const dragPointerIdRef = React.useRef(null);
+  // Fantôme du chantier déplacé : overlay DOM fixe, contenu figé à l'activation,
+  // seul son transform est mis à jour par frame. Aucun setState, aucun rerender.
+  const dragGhostRef = React.useRef(null);
+  const dragGhostOffsetRef = React.useRef(null);
+  const dragGhostPosRef = React.useRef(null);
   // Boucle rAF UNIQUE du drag (overlays + auto-scroll) : un seul id actif à la fois.
   const dragLoopRafRef = React.useRef(null);
   const dragRectRef = React.useRef(null);
@@ -387,12 +392,37 @@ const PlanningGrid = React.memo(function PlanningGrid({
   function activatePointerDrag(e) {
     const c = dragCandidateRef.current;
     if (!c) return;
-      dragCandidateRef.current = null;
-      isDraggingRef.current = true;
-      // Anti-sélection texte : UNIQUEMENT quand le vrai drag démarre (seuil dépassé),
-      // jamais sur simple pointerdown/clic. Retiré dans finishPointerDrag (tous les chemins).
-      if (typeof document !== 'undefined') document.documentElement.classList.add('is-pointer-dragging');
-      draggedItemRef.current = { id: c.id, type: c.itemType, duree: c.duree, force_aout: c.force_aout };
+    dragCandidateRef.current = null;
+    isDraggingRef.current = true;
+    // Anti-sélection texte : UNIQUEMENT quand le vrai drag démarre (seuil dépassé),
+    // jamais sur simple pointerdown/clic. Retiré dans finishPointerDrag (tous les chemins).
+    if (typeof document !== 'undefined') document.documentElement.classList.add('is-pointer-dragging');
+    // Fantôme : clone exact du bloc source (texte, couleur, largeur), figé une fois.
+    // Seul son transform bougera ensuite (par frame, sans recréation ni React).
+    const ghost = dragGhostRef.current;
+    if (ghost && c.el) {
+      const srcRect = c.el.getBoundingClientRect();
+      dragGhostOffsetRef.current = { x: c.startX - srcRect.left, y: c.startY - srcRect.top };
+      dragGhostPosRef.current = null;
+      ghost.innerHTML = '';
+      const clone = c.el.cloneNode(true);
+      clone.removeAttribute('data-ch');
+      clone.removeAttribute('data-co');
+      clone.removeAttribute('data-start');
+      clone.removeAttribute('data-duree');
+      clone.removeAttribute('data-equipe');
+      clone.removeAttribute('data-force-aout');
+      clone.classList.remove('dragging-source');
+      clone.querySelectorAll('.resize-handle').forEach((n) => n.remove());
+      clone.style.top = '0px';
+      clone.style.left = '0px';
+      ghost.appendChild(clone);
+      ghost.style.display = 'block';
+    } else {
+      dragGhostOffsetRef.current = { x: 0, y: 0 };
+      dragGhostPosRef.current = null;
+    }
+    draggedItemRef.current = { id: c.id, type: c.itemType, duree: c.duree, force_aout: c.force_aout };
     lastDragKeyRef.current = null;
     try {
       gridRef.current?.setPointerCapture(e.pointerId);
@@ -439,6 +469,14 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)';
     if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
+    // Fantôme : masqué + contenu libéré + styles nettoyés (tous les chemins).
+    if (dragGhostRef.current) {
+      dragGhostRef.current.style.display = 'none';
+      dragGhostRef.current.style.transform = 'translate3d(-9999px,0,0)';
+      dragGhostRef.current.innerHTML = '';
+    }
+    dragGhostOffsetRef.current = null;
+    dragGhostPosRef.current = null;
     highlightTargetDate(null);
     draggedItemRef.current = null;
     endDateCacheRef.current = null;
@@ -516,6 +554,19 @@ const PlanningGrid = React.memo(function PlanningGrid({
       lastDragKeyRef.current = key;
       applyDragPreview(t);
     }
+    // 1b. fantôme : suit le curseur à CHAQUE frame (même dans la même cellule).
+    // Seule écriture : transform translate3d. Jamais recréé, jamais React.
+    const ghost = dragGhostRef.current;
+    const off = dragGhostOffsetRef.current;
+    if (ghost && off) {
+      const gx = Math.round(pos.x - off.x);
+      const gy = Math.round(pos.y - off.y);
+      const last = dragGhostPosRef.current;
+      if (!last || last.x !== gx || last.y !== gy) {
+        dragGhostPosRef.current = { x: gx, y: gy };
+        ghost.style.transform = `translate3d(${gx}px,${gy}px,0)`;
+      }
+    }
     // 2. auto-scroll depuis la dernière position (rect scroll caché, pas de layout-read)
     const el = scrollRef.current;
     if (el) {
@@ -584,7 +635,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
       return;
     }
     if (type === 'pointerdown') {
-      if (!canEdit || e.button !== 0 || e.isPrimary === false) return;
+      if (!canEdit || resize || e.button !== 0 || e.isPrimary === false) return;
       if (e.target.closest('[data-rs]')) return; // poignée resize → circuit resize inchangé
       const bch = e.target.closest('[data-ch]');
       const bco = e.target.closest('[data-co]');
@@ -791,6 +842,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
         >
           <div ref={dragOverlayRef} className="drag-overlay" />
           <div ref={dragEndOverlayRef} className="drag-end-overlay" />
+          <div ref={dragGhostRef} className="drag-ghost" />
           {gridRows.map((row) => {
             if (row.type === 'separator') {
               return (
