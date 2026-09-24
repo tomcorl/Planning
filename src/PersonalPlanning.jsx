@@ -258,6 +258,8 @@ export default function PersonalPlanning({ user }) {
   }, [personalColors]);
 
   const saveTimerRef = useRef(null);
+  const saveQueueRef = useRef(null);
+  const pendingSaveRef = useRef(null);
   const resizeRef = useRef(null);
   const lastXRef = useRef(null);
   const initialScrolled = useRef(false);
@@ -441,17 +443,48 @@ export default function PersonalPlanning({ user }) {
     }
   }, [dayIdxMap, today]);
 
+  function flushSave() {
+    if (!activePlanId) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const snapshot = pendingSaveRef.current;
+    if (!snapshot) return;
+    pendingSaveRef.current = null;
+    try {
+      saveQueueRef.current = (saveQueueRef.current || Promise.resolve()).then(() =>
+        savePersonalPlan(activePlanId, snapshot.rows, snapshot.items)
+      );
+    } catch (e) {
+      if (!pendingSaveRef.current) pendingSaveRef.current = snapshot;
+      console.error('auto-save failed', e);
+    }
+  }
+
   function doSave(newRows, newItems) {
     if (!activePlanId) return;
+    // stocke la version la plus récente ; ce sera elle qui partira à l'écriture
+    pendingSaveRef.current = { rows: newRows, items: newItems };
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      try {
-        await savePersonalPlan(activePlanId, newRows, newItems);
-      } catch (e) {
-        console.error('auto-save failed', e);
-      }
-    }, 800);
+    saveTimerRef.current = setTimeout(flushSave, 800);
   }
+
+  // sauvegarde immédiate si la page change / navigation pendant le debounce
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      const snapshot = pendingSaveRef.current;
+      if (!snapshot || !activePlanId) return;
+      pendingSaveRef.current = null;
+      saveQueueRef.current = (saveQueueRef.current || Promise.resolve()).then(() =>
+        savePersonalPlan(activePlanId, snapshot.rows, snapshot.items)
+      );
+    };
+  }, [activePlanId]);
 
   async function handleCreatePlan() {
     const name = prompt('Nom du planning :', 'Nouveau planning');
@@ -636,6 +669,19 @@ export default function PersonalPlanning({ user }) {
     if (!item) return;
     const dayOffset = dayIndex(date) - dayIndex(item.start);
     if (dayOffset === 0 && rowId === item.rowId) return;
+
+    // Même ligne : on décale TOUTE la ligne (tous les éléments ensemble)
+    if (rowId === item.rowId) {
+      const newItems = items.map((it) =>
+        it.rowId === item.rowId
+          ? { ...it, start: addWorkingDays(it.start, dayOffset, ferieSet) }
+          : it
+      );
+      setItems(newItems);
+      doSave(rows, newItems);
+      return;
+    }
+
     const newStart = addWorkingDays(item.start, dayOffset, ferieSet);
     const movedItem = { ...item, rowId, start: newStart };
     if (!ganttMode) {
@@ -727,12 +773,13 @@ export default function PersonalPlanning({ user }) {
             if (!ganttMode) {
               const resized = { id, rowId: originalRowId, start: originalStart, duree: newDuree };
               if (hasOverlap(resized, id)) return;
-              setItems((prev) => prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it));
+              const newItems = items.map((it) => it.id === id ? { ...it, duree: newDuree } : it);
+              setItems(newItems);
+              doSave(rows, newItems);
             } else {
-              setItems((prev) => {
-                const updated = prev.map((it) => it.id === id ? { ...it, duree: newDuree } : it);
-                return cascadeGanttOnModify(prev, updated, id, ferieSet);
-              });
+              const newItems = cascadeGanttOnModify(items, items.map((it) => it.id === id ? { ...it, duree: newDuree } : it), id, ferieSet);
+              setItems(newItems);
+              doSave(rows, newItems);
             }
           }
         } else {
@@ -743,20 +790,20 @@ export default function PersonalPlanning({ user }) {
             if (!ganttMode) {
               const resized = { id, rowId: originalRowId, start: rawNewStart, duree: newDuree };
               if (hasOverlap(resized, id)) return;
-              setItems((prev) => prev.map((it) =>
+              const newItems = items.map((it) =>
                 it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
-              ));
+              );
+              setItems(newItems);
+              doSave(rows, newItems);
             } else {
-              setItems((prev) => {
-                const updated = prev.map((it) =>
-                  it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
-                );
-                return cascadeGanttOnModify(prev, updated, id, ferieSet);
-              });
+              const newItems = cascadeGanttOnModify(items, items.map((it) =>
+                it.id === id ? { ...it, start: rawNewStart, duree: newDuree } : it
+              ), id, ferieSet);
+              setItems(newItems);
+              doSave(rows, newItems);
             }
           }
         }
-        doSave(rows, items);
       }
 
       setResize(null);

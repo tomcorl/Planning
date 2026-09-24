@@ -9,7 +9,7 @@ const PasswordChangePage = lazy(() => import('./PasswordChangePage.jsx'));
 const PersonalPlanning = lazy(() => import('./PersonalPlanning.jsx'));
 const Dashboard = lazy(() => import('./Dashboard.jsx'));
 import PlanningGrid from './PlanningGrid.jsx';
-import MobilePlanning from './MobilePlanning.jsx';
+// MobilePlanning.jsx kept in repo but no longer imported
 import { supabase } from './lib/supabase.js';
 import * as api from './lib/api.js';
 
@@ -1622,7 +1622,9 @@ export default function App() {
     const idx = dayIndex(today);
     const el = scrollRef.current;
     if (el && idx >= 0) {
-      el.scrollLeft = Math.max(0, idx * cellWidth - 500);
+      const tcw = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--team-col-w')) || 260;
+      const visibleGrid = el.clientWidth - tcw;
+      el.scrollLeft = Math.max(0, idx * cellWidth - visibleGrid / 2);
     }
     setJumpDate(today);
   }
@@ -1630,6 +1632,7 @@ export default function App() {
   function jumpToDate(date) {
     const idx = dayIndex(date);
     const el = scrollRef.current;
+    const tcw = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--team-col-w')) || 260;
     if (idx < 0) {
       setCalendarStart(addDays(toDate(date), -30));
       setCalendarLength(120);
@@ -1638,7 +1641,8 @@ export default function App() {
         if (el2) el2.scrollLeft = 30 * cellWidth;
       }, 0);
     } else if (el) {
-      el.scrollLeft = Math.max(0, idx * cellWidth - 500);
+      const visibleGrid = el.clientWidth - tcw;
+      el.scrollLeft = Math.max(0, idx * cellWidth - visibleGrid / 2);
     }
     setJumpDate(date);
   }

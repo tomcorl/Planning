@@ -245,7 +245,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
     cellMapRef.current = map;
   }, [gridRows, visibleDays]);
 
-  const gridTemplateColumns = `260px repeat(${totalDays}, ${cellWidth}px)`;
+    const teamColW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--team-col-w')) || 260;
+  const gridTemplateColumns = `${teamColW}px repeat(${totalDays}, ${cellWidth}px)`;
   const rowHeight = Math.round(56 + (cellWidth - 26) * (78 - 56) / 26);
   const dateGridH = Math.round(28 + (cellWidth - 26) * (44 - 28) / 26);
   const headerHeight = 28 + 30 + dateGridH;
@@ -299,7 +300,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
     prevTargetDateRef.current = { date, el: null };
     const ind = indicatorRef.current;
     if (ind && idx != null) {
-      ind.style.transform = `translateX(${260 + idx * cellWidth + cellWidth / 2}px)`;
+      ind.style.transform = `translateX(${teamColW + idx * cellWidth + cellWidth / 2}px)`;
       ind.style.opacity = '1';
     }
   }

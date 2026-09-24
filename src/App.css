@@ -17,6 +17,25 @@
   --green: #16a34a;
   --green-light: #22c55e;
   --green-dark: #15803d;
+  --team-col-w: 260px;
+}
+
+@media (max-width: 1024px) {
+  :root {
+    --team-col-w: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --team-col-w: 160px;
+  }
+}
+
+@media (max-width: 360px) {
+  :root {
+    --team-col-w: 145px;
+  }
 }
 
 [data-theme='dark'] {
@@ -62,8 +81,20 @@ textarea {
 
 .app {
   height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+  position: relative;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   position: relative;
 }
 
@@ -197,10 +228,12 @@ button:active {
    ═══════════════════════════════════════════════ */
 
 .planning-scroll {
-  height: calc(100vh - 100px);
+  flex: 1;
+  min-height: 0;
+  height: 100%;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  margin: 0 10px 2px;
+  margin: 0 10px 4px;
   border-radius: 14px;
   background: var(--surface);
   box-shadow: 0 4px 24px var(--shadow), 0 0 0 1px var(--line-soft);
@@ -210,6 +243,10 @@ button:active {
 }
 
 .planning-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   position: relative;
 }
 
@@ -463,7 +500,8 @@ button:active {
   gap: 8px;
   padding: 0 8px;
   box-shadow: 6px 0 16px var(--shadow);
-  width: 260px;
+  width: var(--team-col-w, 260px);
+  min-width: var(--team-col-w, 260px);
   flex-shrink: 0;
   will-change: transform;
 }
