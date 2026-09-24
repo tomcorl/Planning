@@ -1,5 +1,4 @@
 import React from 'react';
-import { computeDragEndDate } from './lib/dragEndDate.js';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
 if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v6.2-vitesse+';
 
@@ -195,7 +194,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   resize,
   today,
   ferieSet,
-  congeBlockedSet,
   callbacksRef,
   scrollRef,
 }) {
@@ -219,6 +217,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const dragGhostRef = React.useRef(null);
   const dragGhostOffsetRef = React.useRef(null);
   const dragGhostPosRef = React.useRef(null);
+  // Largeur réelle (border-box) du preview, figée à l'activation : réutilisée
+  // pour placer le bord gauche rouge exactement au bord droit du preview.
+  const dragGhostWidthRef = React.useRef(null);
   // Boucle rAF UNIQUE du drag (overlays + auto-scroll) : un seul id actif à la fois.
   const dragLoopRafRef = React.useRef(null);
   const dragRectRef = React.useRef(null);
@@ -418,6 +419,15 @@ const PlanningGrid = React.memo(function PlanningGrid({
       clone.style.left = '0px';
       ghost.appendChild(clone);
       ghost.style.display = 'block';
+      // Largeur réelle du preview : style inline (.bloc sans padding/border) →
+      // aucune lecture de layout. Fallback = largeur de colonne.
+      dragGhostWidthRef.current = parseFloat(clone.style.width) || cellWidth;
+      // Largeur rouge constante (colonne/jour) et hauteur ligne, posées une fois :
+      // seul son transform bougera ensuite avec le bord droit du preview.
+      if (dragEndOverlayRef.current) {
+        dragEndOverlayRef.current.style.width = cellWidth + 'px';
+        dragEndOverlayRef.current.style.height = rowHeight + 'px';
+      }
     } else {
       dragGhostOffsetRef.current = { x: 0, y: 0 };
       dragGhostPosRef.current = null;
@@ -477,6 +487,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     dragGhostOffsetRef.current = null;
     dragGhostPosRef.current = null;
+    dragGhostWidthRef.current = null;
     highlightTargetDate(null);
     draggedItemRef.current = null;
     endDateCacheRef.current = null;
@@ -514,31 +525,8 @@ const PlanningGrid = React.memo(function PlanningGrid({
       dragOverlayRef.current.style.transform = `translate(${startLeft}px,${t.top}px)`;
     }
     highlightTargetDate(t.date);
-    // overlay rouge = case de fin (calcul paresseux + mémoïsé)
-    if (draggedItemRef.current) {
-      const cacheKey = `${t.equipe}|${t.date}`;
-      const cache = endDateCacheRef.current;
-      let endDate = cache?.get(cacheKey);
-      if (endDate === undefined) {
-        endDate = computeDragEndDate(t.date, t.equipe, draggedItemRef.current.duree - 1, draggedItemRef.current.force_aout, ferieSet, congeBlockedSet);
-        cache?.set(cacheKey, endDate);
-      }
-      if (endDate) {
-        const endIdx = dayIdxMemo.get(endDate);
-        if (endIdx != null && endIdx >= 0) {
-          const endLeft = 260 + endIdx * cellWidth;
-          if (dragEndOverlayRef.current) {
-            dragEndOverlayRef.current.style.width = cellWidth + 'px';
-            dragEndOverlayRef.current.style.height = t.rowH + 'px';
-            dragEndOverlayRef.current.style.transform = `translate(${endLeft}px,${t.top}px)`;
-          }
-        } else if (dragEndOverlayRef.current) {
-          dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
-        }
-      } else if (dragEndOverlayRef.current) {
-        dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
-      }
-    }
+    // overlay rouge : positionné chaque frame au bord droit réel du preview
+    // (voir boucle tickDragLoop) — plus de calcul de date ici.
   }
   function tickDragLoop() {
     dragLoopRafRef.current = null; // pattern single-RAF : reset dès l'exécution
@@ -565,6 +553,17 @@ const PlanningGrid = React.memo(function PlanningGrid({
       if (!last || last.x !== gx || last.y !== gy) {
         dragGhostPosRef.current = { x: gx, y: gy };
         ghost.style.transform = `translate3d(${gx}px,${gy}px,0)`;
+        // Bord gauche rouge = bord droit réel du preview (endX = previewX + previewWidth),
+        // converti en coordonnées grille (viewport - rect caché + delta scrollLeft).
+        // Aucune valeur magique : mêmes coordonnées que le preview, largeur mesurée.
+        const gw = dragGhostWidthRef.current;
+        const grc = gridRectRef.current;
+        const sst = scrollStartRef.current;
+        const scEl = scrollRef.current;
+        if (gw != null && grc && sst && scEl && t && dragEndOverlayRef.current) {
+          const endX = gx + gw - grc.left + (scEl.scrollLeft - sst.left);
+          dragEndOverlayRef.current.style.transform = `translate(${endX}px,${t.top}px)`;
+        }
       }
     }
     // 2. auto-scroll depuis la dernière position (rect scroll caché, pas de layout-read)
