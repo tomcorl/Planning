@@ -566,7 +566,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
       pendingDragRef.current = { pEquipe: equipe, pDate: date, dayIdx, rowIdx: ri, top: t, rowH: rh, key };
       if (rafDragRef.current) return;
       rafDragRef.current = requestAnimationFrame(() => {
-        const t0 = performance.now();
         rafDragRef.current = null;
         const pending = pendingDragRef.current;
         pendingDragRef.current = null;
@@ -603,8 +602,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
             }
           }
         }
-        const dt = performance.now() - t0;
-        if (dt > 8) console.log(`[drag] ${dt.toFixed(1)}ms key=${k} cells=${cellMapRef.current.size} di=${di} ri=${ri}`);
       });
       return;
     }
