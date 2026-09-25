@@ -1,5 +1,4 @@
 import React from 'react';
-import { computeDragEndDate } from './lib/dragEndDate.js';
 // PERF_FIX_V1 rAF throttle + lazy cache - verifiable string
 if (typeof window !== 'undefined') window.__NOREE_PERF_FIX = 'v6.2-vitesse+';
 
@@ -35,8 +34,8 @@ const CellContent = React.memo(function CellContent({
   baseClassName, isSelected, isResizePreview,
   segments, congeItems, dayIdx,
   cellWidth, blocH, blocT,
-  selectedItem, conducteurs, vendeurs, typesChantier, canEdit, resize,
-  cb, dayEq, dayDa, dayIdxMap,
+  selectedItem, conducteurs, vendeurs, typesChantier, resize,
+  dayEq, dayDa, dayIdxMap,
 }) {
   const cellClassName = baseClassName
     + (isSelected ? ' selected' : '')
@@ -72,8 +71,6 @@ const CellContent = React.memo(function CellContent({
             data-duree={chantier.duree}
             data-equipe={chantier.equipe}
             data-force-aout={chantier.force_aout ? 1 : 0}
-            draggable={!resize && canEdit}
-            onDragStart={(e) => cb.onDragStart(e, chantier.id, 'chantier')}
             style={{
               ...(resize?.id === chantier.id && !isFirstSegment ? { display: 'none' } : {}),
               width,
@@ -132,8 +129,6 @@ const CellContent = React.memo(function CellContent({
             key={conge.id}
             className={`bloc conge ${conge.allEquipes ? 'conge-entreprise' : ''} ${selectedItem?.type === 'conge' && selectedItem.id === conge.id ? 'active-item' : ''}`}
             data-co={conge.id}
-            draggable={!resize && canEdit}
-            onDragStart={(e) => cb.onDragStart(e, conge.id, 'conge')}
             style={{
               width: segLen * cellWidth - 8,
               height: cH, top: cT, fontSize: 16,
@@ -167,7 +162,6 @@ const CellContent = React.memo(function CellContent({
   if (prev.isSelected !== next.isSelected || prev.isResizePreview !== next.isResizePreview) return false;
   if (prev.cellWidth !== next.cellWidth || prev.blocH !== next.blocH || prev.blocT !== next.blocT) return false;
   if (prev.dayEq !== next.dayEq || prev.dayDa !== next.dayDa) return false;
-  if (prev.canEdit !== next.canEdit) return false;
   if (prev.segments !== next.segments || prev.congeItems !== next.congeItems) return false;
   if (prev.conducteurs !== next.conducteurs) return false;
   if (prev.vendeurs !== next.vendeurs) return false;
@@ -200,7 +194,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
   resize,
   today,
   ferieSet,
-  congeBlockedSet,
   callbacksRef,
   scrollRef,
 }) {
@@ -208,17 +201,25 @@ const PlanningGrid = React.memo(function PlanningGrid({
   const lastHoverRef = React.useRef(null);
   const resizeDragRef = React.useRef(false);
   const initialScrolled = React.useRef(false);
-  const prevDragCellRef = React.useRef(null);
   const prevTargetDateRef = React.useRef(null);
   const indicatorRef = React.useRef(null);
   const lastDragKeyRef = React.useRef(null);
   const isDraggingRef = React.useRef(false);
   const dateCellRefs = React.useRef([]);
   const gridRef = React.useRef(null);
-  const cellMapRef = React.useRef(new Map());
   const draggedItemRef = React.useRef(null);
-  const prevDragEndCellRef = React.useRef(null);
   const endDateCacheRef = React.useRef(null);
+  // Drag Pointer Events : candidat (avant seuil) + pointeur suivi.
+  const dragCandidateRef = React.useRef(null);
+  const dragPointerIdRef = React.useRef(null);
+  // Fantôme du chantier déplacé : overlay DOM fixe, contenu figé à l'activation,
+  // seul son transform est mis à jour par frame. Aucun setState, aucun rerender.
+  const dragGhostRef = React.useRef(null);
+  const dragGhostOffsetRef = React.useRef(null);
+  const dragGhostPosRef = React.useRef(null);
+  // Largeur réelle (border-box) du preview, figée à l'activation : réutilisée
+  // pour placer le bord gauche rouge exactement au bord droit du preview.
+  const dragGhostWidthRef = React.useRef(null);
   // Boucle rAF UNIQUE du drag (overlays + auto-scroll) : un seul id actif à la fois.
   const dragLoopRafRef = React.useRef(null);
   const dragRectRef = React.useRef(null);
@@ -239,16 +240,6 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (!el) return;
     el.scrollLeft = Math.max(0, idx * cellWidth - 500);
   }, []);
-
-  React.useEffect(() => {
-    const map = new Map();
-    const cells = gridRef.current?.querySelectorAll('[data-eq][data-da]');
-    if (cells) {
-      for (const el of cells)
-        map.set(`${el.dataset.eq}|${el.dataset.da}`, el);
-    }
-    cellMapRef.current = map;
-  }, [gridRows, visibleDays]);
 
     const teamColW = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--team-col-w')) || 260;
   const gridTemplateColumns = `${teamColW}px repeat(${totalDays}, ${cellWidth}px)`;
@@ -379,7 +370,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
   }
 
   // Boucle rAF UNIQUE du drag : overlays + auto-scroll, un seul id actif à la fois.
-  // - dragover ne fait qu'écrire dragClientPos (aucun calcul, aucun timer) ;
+  // - pointermove ne fait qu'écrire dragClientPos (aucun calcul, aucun timer) ;
   // - la boucle consomme la dernière position : cible O(1) + overlays si changée + scroll.
   // - AUCUN setTimeout/setInterval récurrent, AUCUN setState, AUCUN parcours.
   const EDGE_X = 80;
@@ -397,6 +388,128 @@ const PlanningGrid = React.memo(function PlanningGrid({
     }
     if (scrollRef.current) scrollRef.current.removeAttribute('data-dragging');
   }
+  // Activation du drag pointeur (seuil dépassé) : aucun gros calcul,
+  // aucune boucle, aucun setState. La boucle rAF unique prend le relais.
+  function activatePointerDrag(e) {
+    const c = dragCandidateRef.current;
+    if (!c) return;
+    dragCandidateRef.current = null;
+    isDraggingRef.current = true;
+    // Anti-sélection texte : UNIQUEMENT quand le vrai drag démarre (seuil dépassé),
+    // jamais sur simple pointerdown/clic. Retiré dans finishPointerDrag (tous les chemins).
+    if (typeof document !== 'undefined') document.documentElement.classList.add('is-pointer-dragging');
+    // Fantôme : clone exact du bloc source (texte, couleur, largeur), figé une fois.
+    // Seul son transform bougera ensuite (par frame, sans recréation ni React).
+    const ghost = dragGhostRef.current;
+    if (ghost && c.el) {
+      const srcRect = c.el.getBoundingClientRect();
+      dragGhostOffsetRef.current = { x: c.startX - srcRect.left, y: c.startY - srcRect.top };
+      dragGhostPosRef.current = null;
+      ghost.innerHTML = '';
+      const clone = c.el.cloneNode(true);
+      clone.removeAttribute('data-ch');
+      clone.removeAttribute('data-co');
+      clone.removeAttribute('data-start');
+      clone.removeAttribute('data-duree');
+      clone.removeAttribute('data-equipe');
+      clone.removeAttribute('data-force-aout');
+      clone.classList.remove('dragging-source');
+      clone.querySelectorAll('.resize-handle').forEach((n) => n.remove());
+      clone.style.top = '0px';
+      clone.style.left = '0px';
+      ghost.appendChild(clone);
+      ghost.style.display = 'block';
+      // Largeur réelle du preview : style inline (.bloc sans padding/border) →
+      // aucune lecture de layout. Fallback = largeur de colonne.
+      dragGhostWidthRef.current = parseFloat(clone.style.width) || cellWidth;
+      // Largeur rouge constante (colonne/jour) et hauteur ligne, posées une fois :
+      // seul son transform bougera ensuite avec le bord droit du preview.
+      if (dragEndOverlayRef.current) {
+        dragEndOverlayRef.current.style.width = cellWidth + 'px';
+        dragEndOverlayRef.current.style.height = rowHeight + 'px';
+      }
+    } else {
+      dragGhostOffsetRef.current = { x: 0, y: 0 };
+      dragGhostPosRef.current = null;
+    }
+    draggedItemRef.current = { id: c.id, type: c.itemType, duree: c.duree, force_aout: c.force_aout };
+    lastDragKeyRef.current = null;
+    try {
+      gridRef.current?.setPointerCapture(e.pointerId);
+    } catch { /* capture indisponible : le drag reste suivi via pointermove */
+    }
+    endDateCacheRef.current = new Map();
+    // Caches : rect scroll + rect grille + scroll de départ → zéro layout-read ensuite.
+    if (scrollRef.current) dragRectRef.current = scrollRef.current.getBoundingClientRect();
+    if (gridRef.current) gridRectRef.current = gridRef.current.getBoundingClientRect();
+    if (scrollRef.current) scrollStartRef.current = { left: scrollRef.current.scrollLeft, top: scrollRef.current.scrollTop };
+    cb.setDragActive?.(true);
+    const dragSrc = c.el;
+    // Différé d'un macrotask : l'ajout synchrone de ces classes déclenche un
+    // recalc de styles global qui bloquait le démarrage du drag.
+    setTimeout(() => {
+      if (!isDraggingRef.current) return;
+      if (dragSrc) dragSrc.classList.add('dragging-source');
+      gridRef.current?.classList.add('dragging-active');
+    }, 0);
+    dragClientPos.current = { x: e.clientX, y: e.clientY };
+    if (scrollRef.current && !scrollRef.current.hasAttribute('data-dragging')) scrollRef.current.setAttribute('data-dragging', '1');
+    startDragLoop();
+  }
+  // Fin du drag pointeur : commit = onDrop métier exact, cancel = rien ne bouge.
+  function finishPointerDrag(commit, clientX, clientY) {
+    const wasActive = isDraggingRef.current;
+    const info = draggedItemRef.current;
+    let target = null;
+    if (commit && wasActive && info) {
+      target = getDragTargetFromPointer(clientX, clientY);
+    }
+    const pid = dragPointerIdRef.current;
+    isDraggingRef.current = false;
+    // Nettoyage systématique de l'anti-sélection (pointerup, pointercancel,
+    // perte de capture, annulation : tous les chemins passent par finishPointerDrag).
+    if (typeof document !== 'undefined') document.documentElement.classList.remove('is-pointer-dragging');
+    lastDragKeyRef.current = null;
+    dragPointerIdRef.current = null;
+    dragCandidateRef.current = null;
+    stopDragLoop();
+    try {
+      if (gridRef.current && pid != null && gridRef.current.hasPointerCapture(pid)) gridRef.current.releasePointerCapture(pid);
+    } catch { /* pas de capture active */
+    }
+    if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)';
+    if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
+    // Fantôme : masqué + contenu libéré + styles nettoyés (tous les chemins).
+    if (dragGhostRef.current) {
+      dragGhostRef.current.style.display = 'none';
+      dragGhostRef.current.style.transform = 'translate3d(-9999px,0,0)';
+      dragGhostRef.current.innerHTML = '';
+    }
+    dragGhostOffsetRef.current = null;
+    dragGhostPosRef.current = null;
+    dragGhostWidthRef.current = null;
+    highlightTargetDate(null);
+    draggedItemRef.current = null;
+    endDateCacheRef.current = null;
+    dragRectRef.current = null;
+    gridRectRef.current = null;
+    scrollStartRef.current = null;
+    gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source');
+    gridRef.current?.classList.remove('dragging-active');
+    if (target && info) {
+      // Même logique métier que l'ancien drop HTML5 : onDrop reçoit
+      // EXACTEMENT (equipe, date) ; l'event factice ne sert qu'au dataTransfer.
+      const fakeEvent = {
+        preventDefault() {},
+        stopPropagation() {},
+        dataTransfer: {
+          getData: (k) => (k === 'itemId' ? String(info.id) : k === 'itemType' ? info.type : ''),
+        },
+      };
+      cb.onDrop(fakeEvent, target.equipe, target.date);
+    }
+    cb.setDragActive?.(false);
+  }
   function startDragLoop() {
     if (dragLoopRafRef.current) return; // boucle déjà active → pas de doublon
     if (!isDraggingRef.current) return;
@@ -404,39 +517,18 @@ const PlanningGrid = React.memo(function PlanningGrid({
     dragLoopRafRef.current = requestAnimationFrame(tickDragLoop);
   }
   function applyDragPreview(t) {
-    // overlay vert = case de début
-    const startLeft = 260 + t.dayIdx * cellWidth;
+    // overlay vert = case de début : même origine que les cellules et que
+    // l'indicateur de date (teamColW lu du CSS, pas de valeur en dur : la
+    // colonne vaut 260/200/160/145px selon la largeur d'écran).
+    const startLeft = teamColW + t.dayIdx * cellWidth;
     if (dragOverlayRef.current) {
       dragOverlayRef.current.style.width = cellWidth + 'px';
       dragOverlayRef.current.style.height = t.rowH + 'px';
       dragOverlayRef.current.style.transform = `translate(${startLeft}px,${t.top}px)`;
     }
     highlightTargetDate(t.date);
-    // overlay rouge = case de fin (calcul paresseux + mémoïsé)
-    if (draggedItemRef.current) {
-      const cacheKey = `${t.equipe}|${t.date}`;
-      const cache = endDateCacheRef.current;
-      let endDate = cache?.get(cacheKey);
-      if (endDate === undefined) {
-        endDate = computeDragEndDate(t.date, t.equipe, draggedItemRef.current.duree - 1, draggedItemRef.current.force_aout, ferieSet, congeBlockedSet);
-        cache?.set(cacheKey, endDate);
-      }
-      if (endDate) {
-        const endIdx = dayIdxMemo.get(endDate);
-        if (endIdx != null && endIdx >= 0) {
-          const endLeft = 260 + endIdx * cellWidth;
-          if (dragEndOverlayRef.current) {
-            dragEndOverlayRef.current.style.width = cellWidth + 'px';
-            dragEndOverlayRef.current.style.height = t.rowH + 'px';
-            dragEndOverlayRef.current.style.transform = `translate(${endLeft}px,${t.top}px)`;
-          }
-        } else if (dragEndOverlayRef.current) {
-          dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
-        }
-      } else if (dragEndOverlayRef.current) {
-        dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
-      }
-    }
+    // overlay rouge : positionné chaque frame au bord droit réel du preview
+    // (voir boucle tickDragLoop) — plus de calcul de date ici.
   }
   function tickDragLoop() {
     dragLoopRafRef.current = null; // pattern single-RAF : reset dès l'exécution
@@ -451,6 +543,30 @@ const PlanningGrid = React.memo(function PlanningGrid({
     if (key && key !== lastDragKeyRef.current && t.dayIdx != null && t.rowIdx >= 0) {
       lastDragKeyRef.current = key;
       applyDragPreview(t);
+    }
+    // 1b. fantôme : suit le curseur à CHAQUE frame (même dans la même cellule).
+    // Seule écriture : transform translate3d. Jamais recréé, jamais React.
+    const ghost = dragGhostRef.current;
+    const off = dragGhostOffsetRef.current;
+    if (ghost && off) {
+      const gx = Math.round(pos.x - off.x);
+      const gy = Math.round(pos.y - off.y);
+      const last = dragGhostPosRef.current;
+      if (!last || last.x !== gx || last.y !== gy) {
+        dragGhostPosRef.current = { x: gx, y: gy };
+        ghost.style.transform = `translate3d(${gx}px,${gy}px,0)`;
+        // Bord gauche rouge = bord droit réel du preview (endX = previewX + previewWidth),
+        // converti en coordonnées grille (viewport - rect caché + delta scrollLeft).
+        // Aucune valeur magique : mêmes coordonnées que le preview, largeur mesurée.
+        const gw = dragGhostWidthRef.current;
+        const grc = gridRectRef.current;
+        const sst = scrollStartRef.current;
+        const scEl = scrollRef.current;
+        if (gw != null && grc && sst && scEl && t && dragEndOverlayRef.current) {
+          const endX = gx + gw - grc.left + (scEl.scrollLeft - sst.left);
+          dragEndOverlayRef.current.style.transform = `translate(${endX}px,${t.top}px)`;
+        }
+      }
     }
     // 2. auto-scroll depuis la dernière position (rect scroll caché, pas de layout-read)
     const el = scrollRef.current;
@@ -497,61 +613,91 @@ const PlanningGrid = React.memo(function PlanningGrid({
     return idx >= a && idx <= b;
   }
 
+  // Seuil d'activation du drag pointeur (px) : en dessous = simple clic (sélection).
+  const DRAG_THRESHOLD_SQ = 25;
+
   function handleGridEvent(e) {
     const type = e.type;
-    // Pendant le dragover : AUCUNE requête DOM (closest) — ciblage par coordonnées uniquement.
-    const cell = type === 'dragover' ? null : e.target.closest('[data-eq]');
-    let chantierBloc, congeBloc, resizeHandle, noteIcon, addBtn, deleteBtn, teamInput;
-    if (type !== 'dragover' && type !== 'drop' && type !== 'dragstart') {
-      chantierBloc = e.target.closest('[data-ch]');
-      congeBloc = e.target.closest('[data-co]');
-      resizeHandle = e.target.closest('[data-rs]');
-      noteIcon = e.target.closest('.note-icon');
-      addBtn = e.target.closest('.add-team-btn');
-      deleteBtn = e.target.closest('.delete-team');
-      teamInput = e.target.closest('.team-cell input');
+    // Chemin Pointer Events : retours immédiats AVANT toute requête DOM.
+    if (type === 'pointermove') {
+      const pid = dragPointerIdRef.current;
+      if (pid == null || e.pointerId !== pid) return;
+      if (isDraggingRef.current) {
+        // Drag actif : SEULE écriture, la boucle rAF fait tout le reste.
+        dragClientPos.current = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      const c = dragCandidateRef.current;
+      if (!c) return;
+      const dxm = e.clientX - c.startX;
+      const dym = e.clientY - c.startY;
+      if (dxm * dxm + dym * dym < DRAG_THRESHOLD_SQ) return; // sous le seuil = pas encore un drag
+      activatePointerDrag(e);
+      return;
     }
+    if (type === 'pointerdown') {
+      if (!canEdit || resize || e.button !== 0 || e.isPrimary === false) return;
+      if (e.target.closest('[data-rs]')) return; // poignée resize → circuit resize inchangé
+      const bch = e.target.closest('[data-ch]');
+      const bco = e.target.closest('[data-co]');
+      const b = bch || bco;
+      if (!b) return;
+      const isCh = !!bch;
+      // Candidat uniquement : aucun calcul, aucune boucle, aucun timer, aucun setState.
+      // Écrase un éventuel candidat orphelin (pointerup manqué hors grille).
+      dragCandidateRef.current = {
+        id: Number(isCh ? b.dataset.ch : b.dataset.co),
+        itemType: isCh ? 'chantier' : 'conge',
+        duree: isCh ? Number(b.dataset.duree) : (Number(b.dataset.duree) || 1),
+        force_aout: isCh ? b.dataset.forceAout === '1' : false,
+        el: b,
+        startX: e.clientX,
+        startY: e.clientY,
+        pointerId: e.pointerId,
+      };
+      dragPointerIdRef.current = e.pointerId;
+      return;
+    }
+    if (type === 'pointerup') {
+      // preventDefault ICI (drag actif uniquement) supprime les mouseup/click
+      // de compatibilité → pas de endSelection/modal parasite après un drag.
+      // Jamais sur un simple clic : dblclick/sélection préservés.
+      if (isDraggingRef.current && e.pointerId === dragPointerIdRef.current) {
+        e.preventDefault();
+        finishPointerDrag(true, e.clientX, e.clientY);
+        return;
+      }
+      if (dragCandidateRef.current && dragCandidateRef.current.pointerId === e.pointerId) {
+        dragCandidateRef.current = null; // clic sans déplacement : la sélection mousedown a déjà agi
+        dragPointerIdRef.current = null;
+      }
+      return;
+    }
+    if (type === 'pointercancel') {
+      if (e.pointerId === dragPointerIdRef.current) finishPointerDrag(false, 0, 0);
+      return;
+    }
+    if (type === 'lostpointercapture') {
+      if (isDraggingRef.current) finishPointerDrag(false, 0, 0);
+      return;
+    }
+    // Pendant un drag pointeur, le mouseover ne doit faire AUCUNE requête DOM.
+    if (type === 'mouseover' && isDraggingRef.current) return;
+    const cell = e.target.closest('[data-eq]');
+    let chantierBloc, congeBloc, resizeHandle, noteIcon, addBtn, deleteBtn, teamInput;
+    chantierBloc = e.target.closest('[data-ch]');
+    congeBloc = e.target.closest('[data-co]');
+    resizeHandle = e.target.closest('[data-rs]');
+    noteIcon = e.target.closest('.note-icon');
+    addBtn = e.target.closest('.add-team-btn');
+    deleteBtn = e.target.closest('.delete-team');
+    teamInput = e.target.closest('.team-cell input');
 
     if (addBtn) return;
     if (deleteBtn) return;
     if (teamInput) return;
 
-    if (!canEdit && (type === 'dragstart' || type === 'drop' || type === 'dragover' || type === 'dblclick' || type === 'contextmenu' || type === 'mousedown')) return;
-
-    if (type === 'dragstart') {
-      isDraggingRef.current = true;
-      const fromResize = resizeDragRef.current;
-      resizeDragRef.current = false;
-      if (fromResize) {
-        e.preventDefault();
-        return;
-      }
-      const dch = e.target.closest('[data-ch]');
-      const dco = e.target.closest('[data-co]');
-      if (dch) draggedItemRef.current = { duree: Number(dch.dataset.duree), force_aout: dch.dataset.forceAout === '1' };
-      else if (dco) draggedItemRef.current = { duree: Number(dco.dataset.duree) || 1, force_aout: false };
-      // v7: aucun pré-calcul bloquant ici (équipes × jours) — la date de fin
-      // est calculée en paresseux par cellule survolée (computeDragEndDate).
-      endDateCacheRef.current = new Map();
-      // Cache le rect du conteneur de scroll : il ne bouge pas pendant son
-      // propre scroll → évite un getBoundingClientRect (layout forcé) par frame.
-      if (scrollRef.current) dragRectRef.current = scrollRef.current.getBoundingClientRect();
-      // Cache rect grille + position de scroll de départ pour le ciblage sans layout-read.
-      if (gridRef.current) gridRectRef.current = gridRef.current.getBoundingClientRect();
-      if (scrollRef.current) scrollStartRef.current = { left: scrollRef.current.scrollLeft, top: scrollRef.current.scrollTop };
-      cb.setDragActive?.(true);
-      const dragSrc = dch || dco;
-      // Différé d'un macrotask : l'ajout synchrone de ces classes déclenche un
-      // recalc de styles global qui bloquait le démarrage du drag.
-      setTimeout(() => {
-        if (!isDraggingRef.current) return;
-        if (dragSrc) dragSrc.classList.add('dragging-source');
-        gridRef.current?.classList.add('dragging-active');
-      }, 0);
-      dragClientPos.current = { x: e.clientX, y: e.clientY };
-      if (scrollRef.current) scrollRef.current.setAttribute('data-dragging', '1');
-      startDragLoop();
-    }
+    if (!canEdit && (type === 'dblclick' || type === 'contextmenu' || type === 'mousedown')) return;
 
     if (resizeHandle && type === 'mousedown') {
       resizeDragRef.current = true;
@@ -609,9 +755,9 @@ const PlanningGrid = React.memo(function PlanningGrid({
       }
     }
 
-    if (!cell && type !== 'dragover' && type !== 'drop') return;
-    const equipe = cell ? Number(cell.dataset.eq) : null;
-    const date = cell ? cell.dataset.da : null;
+    if (!cell) return;
+    const equipe = Number(cell.dataset.eq);
+    const date = cell.dataset.da;
 
     if (type === 'contextmenu') {
       e.preventDefault();
@@ -624,72 +770,10 @@ const PlanningGrid = React.memo(function PlanningGrid({
       return;
     }
     if (type === 'mouseover') {
-      if (isDraggingRef.current) return;
       const key = `${equipe}-${date}`;
       if (lastHoverRef.current === key) return;
       lastHoverRef.current = key;
       cb.updateSelection(equipe, date);
-      return;
-    }
-    if (type === 'dragover') {
-      e.preventDefault();
-      // SEULE écriture : la dernière position pointeur. Tout le reste
-      // (cible O(1), overlays, auto-scroll) est fait par la boucle rAF unique.
-      dragClientPos.current = { x: e.clientX, y: e.clientY };
-      return;
-    }
-    if (type === 'drop') {
-      e.preventDefault();
-      isDraggingRef.current = false;
-      lastDragKeyRef.current = null;
-      stopDragLoop();
-      if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)';
-      if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)';
-      if (prevDragCellRef.current) {
-        prevDragCellRef.current.classList.remove('drag-preview');
-        prevDragCellRef.current = null;
-      }
-      highlightTargetDate(null);
-      if (prevDragEndCellRef.current) {
-        prevDragEndCellRef.current.classList.remove('drag-end-preview');
-        prevDragEndCellRef.current = null;
-      }
-      let dropEquipe = equipe;
-      let dropDate = date;
-      if ((!dropEquipe || !dropDate) && gridRef.current) {
-        const gridRect = gridRef.current.getBoundingClientRect();
-        const x = e.clientX - gridRect.left - 260;
-        const y = e.clientY - gridRect.top;
-        if (x >= 0 && y >= 0) {
-          const dayIdx = Math.floor(x / cellWidth);
-          if (dayIdx >= 0 && dayIdx < visibleDays.length) {
-            dropDate = visibleDays[dayIdx]?.date;
-            let acc = 0;
-            for (let i = 0; i < gridRows.length; i++) {
-              const r = gridRows[i];
-              let h = rowHeight;
-              if (r.type === 'company-header') h = 34;
-              else if (r.type === 'separator') h = 8;
-              if (y >= acc && y < acc + h) {
-                if (r.type !== 'separator' && r.type !== 'company-header') {
-                  dropEquipe = r.type === 'pending' ? r.equipeIndex : r.teamId;
-                }
-                break;
-              }
-              acc += h;
-            }
-          }
-        }
-      }
-      draggedItemRef.current = null;
-      endDateCacheRef.current = null;
-      dragRectRef.current = null;
-      gridRectRef.current = null;
-      scrollStartRef.current = null;
-      gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source');
-      gridRef.current?.classList.remove('dragging-active');
-      if (dropEquipe && dropDate) cb.onDrop(e, dropEquipe, dropDate);
-      cb.setDragActive?.(false);
       return;
     }
   }
@@ -749,15 +833,17 @@ const PlanningGrid = React.memo(function PlanningGrid({
         <div className="main-grid" ref={gridRef}
           onMouseDown={handleGridEvent}
           onMouseOver={handleGridEvent}
-          onDragStart={handleGridEvent}
-          onDragOver={handleGridEvent}
-          onDrop={handleGridEvent}
-          onDragEnd={() => { isDraggingRef.current = false; lastDragKeyRef.current = null; stopDragLoop(); if (dragOverlayRef.current) dragOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (dragEndOverlayRef.current) dragEndOverlayRef.current.style.transform = 'translate(-9999px,0)'; if (prevDragCellRef.current) { prevDragCellRef.current.classList.remove('drag-preview'); prevDragCellRef.current = null; } highlightTargetDate(null); if (prevDragEndCellRef.current) { prevDragEndCellRef.current.classList.remove('drag-end-preview'); prevDragEndCellRef.current = null; } draggedItemRef.current = null; endDateCacheRef.current = null; dragRectRef.current = null; gridRectRef.current = null; scrollStartRef.current = null; gridRef.current?.querySelector('.dragging-source')?.classList.remove('dragging-source'); gridRef.current?.classList.remove('dragging-active'); callbacksRef.current.setDragActive?.(false); }}
+          onPointerDown={handleGridEvent}
+          onPointerMove={handleGridEvent}
+          onPointerUp={handleGridEvent}
+          onPointerCancel={handleGridEvent}
+          onLostPointerCapture={handleGridEvent}
           onDoubleClick={handleGridEvent}
           onContextMenu={handleGridEvent}
         >
           <div ref={dragOverlayRef} className="drag-overlay" />
           <div ref={dragEndOverlayRef} className="drag-end-overlay" />
+          <div ref={dragGhostRef} className="drag-ghost" />
           {gridRows.map((row) => {
             if (row.type === 'separator') {
               return (
@@ -842,9 +928,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
                           conducteurs={conducteurs}
                           vendeurs={vendeurs}
                           typesChantier={typesChantier}
-                          canEdit={canEdit}
                           resize={resize}
-                          cb={cb}
                           dayEq={equipeIndex}
                           dayDa={day.date}
                           dayIdxMap={dayIdxMemo}

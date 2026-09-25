@@ -1684,6 +1684,23 @@ button:active {
   pointer-events: none;
 }
 
+/* Drag Pointer Events : les gestes démarrant sur un bloc pilotent le déplacement
+   (pas le scroll/zoom natif). Le scroll normal depuis les cellules est inchangé. */
+.main-grid .bloc.chantier,
+.main-grid .bloc.conge {
+  touch-action: none;
+}
+
+/* Anti-sélection de texte UNIQUEMENT pendant un drag actif de chantier.
+   Classe posée/retirée par PlanningGrid (jamais permanente) : hors drag,
+   la sélection de texte reste possible partout. */
+.is-pointer-dragging,
+.is-pointer-dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grabbing;
+}
+
 .drag-preview {
   background: rgba(22, 163, 74, 0.12) !important;
   box-shadow: inset 0 0 0 2px var(--green);
@@ -1718,6 +1735,32 @@ button:active {
 }
 
 .main-grid.dragging-active .bloc:not(.dragging-source) {
+  pointer-events: none;
+}
+
+/* Source atténuée pendant le drag (temporaire : classe retirée au drop/annulation).
+   Le chantier reste localisable, le fantôme .drag-ghost montre le déplacement. */
+.main-grid.dragging-active .dragging-source {
+  opacity: 0.35;
+}
+
+/* Fantôme du chantier déplacé : clone exact du bloc, suit le curseur.
+   position:fixed (aucun ancêtre transformé) + transform seul → aucun reflow.
+   Jamais interactif : ne doit jamais intercepter le pointeur. */
+.drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: none;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+  z-index: 10001;
+  opacity: 0.95;
+  will-change: transform;
+}
+.drag-ghost,
+.drag-ghost * {
   pointer-events: none;
 }
 
