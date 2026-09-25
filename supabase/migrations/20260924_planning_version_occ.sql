@@ -40,11 +40,15 @@ ALTER TABLE public.planning_versions ENABLE ROW LEVEL SECURITY;
 -- ── Version courante (lue au chargement / reload pour amorcer versionRef) ──
 CREATE FUNCTION public.get_planning_version() RETURNS bigint
   LANGUAGE sql SECURITY DEFINER
+  SET search_path = ''
   AS $$ SELECT version FROM public.planning_versions WHERE id = 1 $$;
 
-GRANT ALL ON FUNCTION public.get_planning_version() TO anon;
-GRANT ALL ON FUNCTION public.get_planning_version() TO authenticated;
-GRANT ALL ON FUNCTION public.get_planning_version() TO service_role;
+-- EXECUTE réservé aux rôles authentifiés : l'application est authentifiée,
+-- anon n'est jamais nécessaire. REVOKE explicite (défense en profondeur,
+-- même si aucun droit n'a été accordé avant).
+REVOKE EXECUTE ON FUNCTION public.get_planning_version() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_planning_version() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_planning_version() TO service_role;
 
 -- ── ÉTAPE 3 : save_all_planning_data_v2 (OCC) ───────────────────────────────
 -- Reprend EXACTEMENT le corps métier de la surcharge 7 params actuelle
@@ -73,6 +77,7 @@ CREATE FUNCTION public.save_all_planning_data_v2(
   p_base_version bigint DEFAULT NULL
 ) RETURNS jsonb
   LANGUAGE plpgsql SECURITY DEFINER
+  SET search_path = ''
   AS $_$
 DECLARE
   comp_id TEXT;
@@ -88,7 +93,7 @@ DECLARE
   v_map_co JSONB := '{}'::jsonb;
   v_map_eq JSONB := '{}'::jsonb;
 BEGIN
-  IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
+  IF EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'lecture') THEN
     RAISE EXCEPTION 'Accès refusé : rôle lecture';
   END IF;
 
@@ -104,16 +109,16 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'conflict', true, 'version', v_current);
   END IF;
 
-  FOR comp_id IN SELECT id FROM companies LOOP
-    DELETE FROM chantiers WHERE company_id = comp_id AND id NOT IN (
+  FOR comp_id IN SELECT id FROM public.companies LOOP
+    DELETE FROM public.chantiers WHERE company_id = comp_id AND id NOT IN (
       SELECT (x->>'id')::INT FROM jsonb_array_elements(p_chantiers) AS x
       WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'company_id') = comp_id
     );
     -- Lignes réelles uniquement (id entier > 0) : upsert set-based identique v1.
     -- Les lignes temporaires (id absent/invalide/<=0) sont insérées plus bas
     -- en boucle avec RETURNING pour un mapping tmp→réel déterministe.
-    INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
-    SELECT COALESCE((x->>'id')::INT, nextval('chantiers_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT,
+    INSERT INTO public.chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
+    SELECT COALESCE((x->>'id')::INT, nextval('public.chantiers_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT,
            (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT, (x->>'conducteurId')::INT, (x->>'color')::TEXT,
            (x->>'note')::TEXT, (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT, COALESCE((x->>'force_aout')::INT,0)::BOOLEAN
     FROM jsonb_array_elements(p_chantiers) AS x WHERE (x->>'company_id') = comp_id
@@ -122,32 +127,32 @@ BEGIN
       duree=EXCLUDED.duree, nom=EXCLUDED.nom, "conducteurId"=EXCLUDED."conducteurId", color=EXCLUDED.color,
       note=EXCLUDED.note, termine=EXCLUDED.termine, linked=EXCLUDED.linked, detail=EXCLUDED.detail, force_aout=EXCLUDED.force_aout;
 
-    DELETE FROM conges WHERE company_id = comp_id AND id NOT IN (
+    DELETE FROM public.conges WHERE company_id = comp_id AND id NOT IN (
       SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conges) AS x
       WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'company_id') = comp_id
     );
-    INSERT INTO conges (id, company_id, equipe, start, duree, nom, all_equipes)
-    SELECT COALESCE((x->>'id')::INT, nextval('conges_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT,
+    INSERT INTO public.conges (id, company_id, equipe, start, duree, nom, all_equipes)
+    SELECT COALESCE((x->>'id')::INT, nextval('public.conges_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT,
            (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT, COALESCE((x->>'all_equipes')::INT,0)
     FROM jsonb_array_elements(p_conges) AS x WHERE (x->>'company_id') = comp_id
       AND (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'id')::INT > 0
     ON CONFLICT (id) DO UPDATE SET company_id=EXCLUDED.company_id, equipe=EXCLUDED.equipe, start=EXCLUDED.start,
       duree=EXCLUDED.duree, nom=EXCLUDED.nom, all_equipes=EXCLUDED.all_equipes;
 
-    DELETE FROM equipes WHERE company_id = comp_id AND id NOT IN (
+    DELETE FROM public.equipes WHERE company_id = comp_id AND id NOT IN (
       SELECT (x->>'id')::INT FROM jsonb_array_elements(p_equipes) AS x
       WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'company_id') = comp_id
       AND NULLIF((x->>'id')::INT,0) IS NOT NULL AND NULLIF((x->>'id')::INT,-2147483648) IS NOT NULL
     );
-    INSERT INTO equipes (id, company_id, nom, ordre)
-    SELECT COALESCE(NULLIF((x->>'id')::INT,0), NULLIF((x->>'id')::INT,-2147483648), nextval('equipes_id_seq'::regclass)),
+    INSERT INTO public.equipes (id, company_id, nom, ordre)
+    SELECT COALESCE(NULLIF((x->>'id')::INT,0), NULLIF((x->>'id')::INT,-2147483648), nextval('public.equipes_id_seq'::regclass)),
       (x->>'company_id')::TEXT, (x->>'nom')::TEXT, COALESCE((x->>'ordre')::INT,1)
     FROM jsonb_array_elements(p_equipes) AS x WHERE (x->>'company_id') = comp_id
       AND (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'id')::INT > 0
     ON CONFLICT (id) DO UPDATE SET company_id=EXCLUDED.company_id, nom=EXCLUDED.nom, ordre=EXCLUDED.ordre;
 
-    DELETE FROM custom_feries WHERE company_id = comp_id;
-    INSERT INTO custom_feries (company_id, nom, date)
+    DELETE FROM public.custom_feries WHERE company_id = comp_id;
+    INSERT INTO public.custom_feries (company_id, nom, date)
     SELECT (x->>'company_id')::TEXT, (x->>'nom')::TEXT, (x->>'date')::TEXT
     FROM jsonb_array_elements(p_custom_feries) AS x WHERE (x->>'company_id') = comp_id;
   END LOOP;
@@ -159,7 +164,7 @@ BEGIN
     IF (r.elem->>'id') IS NOT NULL AND (r.elem->>'id') ~ '^-?[0-9]+$' AND (r.elem->>'id')::INT > 0 THEN
       CONTINUE;
     END IF;
-    INSERT INTO chantiers (company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
+    INSERT INTO public.chantiers (company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
     VALUES ((r.elem->>'company_id')::TEXT, (r.elem->>'equipe')::INT,
       (r.elem->>'start')::TEXT, (r.elem->>'duree')::INT, (r.elem->>'nom')::TEXT, (r.elem->>'conducteurId')::INT, (r.elem->>'color')::TEXT,
       (r.elem->>'note')::TEXT, (r.elem->>'termine')::INT, (r.elem->>'linked')::INT, (r.elem->>'detail')::TEXT, COALESCE((r.elem->>'force_aout')::INT,0)::BOOLEAN)
@@ -167,6 +172,13 @@ BEGIN
     v_tmp := r.elem->>'tmp';
     IF v_tmp IS NOT NULL THEN
       v_map_ch := v_map_ch || jsonb_build_object(v_tmp, v_real);
+      -- L'ancienne ligne temporaire mappée est supprimée : elle vient d'être
+      -- remplacée par l'ID positif (aucune ligne négative restante).
+      -- Garde regex : cast sûr uniquement. Si la ligne n'existe pas (temp
+      -- jamais persistée, ou déjà supprimée par le DELETE NOT IN), no-op.
+      IF v_tmp ~ '^-?[0-9]+$' THEN
+        DELETE FROM public.chantiers WHERE id = v_tmp::INT;
+      END IF;
     END IF;
   END LOOP;
 
@@ -174,13 +186,17 @@ BEGIN
     IF (r.elem->>'id') IS NOT NULL AND (r.elem->>'id') ~ '^-?[0-9]+$' AND (r.elem->>'id')::INT > 0 THEN
       CONTINUE;
     END IF;
-    INSERT INTO conges (company_id, equipe, start, duree, nom, all_equipes)
+    INSERT INTO public.conges (company_id, equipe, start, duree, nom, all_equipes)
     VALUES ((r.elem->>'company_id')::TEXT, (r.elem->>'equipe')::INT,
       (r.elem->>'start')::TEXT, (r.elem->>'duree')::INT, (r.elem->>'nom')::TEXT, COALESCE((r.elem->>'all_equipes')::INT,0))
     RETURNING id INTO v_real;
     v_tmp := r.elem->>'tmp';
     IF v_tmp IS NOT NULL THEN
       v_map_co := v_map_co || jsonb_build_object(v_tmp, v_real);
+      -- Idem chantiers : suppression de l'ancienne ligne temporaire mappée.
+      IF v_tmp ~ '^-?[0-9]+$' THEN
+        DELETE FROM public.conges WHERE id = v_tmp::INT;
+      END IF;
     END IF;
   END LOOP;
 
@@ -188,35 +204,44 @@ BEGIN
     IF (r.elem->>'id') IS NOT NULL AND (r.elem->>'id') ~ '^-?[0-9]+$' AND (r.elem->>'id')::INT > 0 THEN
       CONTINUE;
     END IF;
-    INSERT INTO equipes (company_id, nom, ordre)
+    INSERT INTO public.equipes (company_id, nom, ordre)
     VALUES ((r.elem->>'company_id')::TEXT, (r.elem->>'nom')::TEXT, COALESCE((r.elem->>'ordre')::INT,1))
     RETURNING id INTO v_real;
     v_tmp := r.elem->>'tmp';
     IF v_tmp IS NOT NULL THEN
       v_map_eq := v_map_eq || jsonb_build_object(v_tmp, v_real);
+      IF v_tmp ~ '^-?[0-9]+$' THEN
+        -- Remap des références AVANT suppression (même transaction) : les
+        -- lignes chantiers/conges pointant vers l'ancienne équipe temporaire
+        -- (y compris celles écrites plus haut dans ce save) basculent sur
+        -- le nouvel ID positif. Puis suppression de l'ancienne équipe mappée.
+        UPDATE public.chantiers SET equipe = v_real WHERE equipe = v_tmp::INT;
+        UPDATE public.conges SET equipe = v_real WHERE equipe = v_tmp::INT;
+        DELETE FROM public.equipes WHERE id = v_tmp::INT;
+      END IF;
     END IF;
   END LOOP;
 
-  DELETE FROM conducteurs WHERE id NOT IN (
+  DELETE FROM public.conducteurs WHERE id NOT IN (
     SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conducteurs) AS x
     WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
   );
-  INSERT INTO conducteurs (nom, color) SELECT r->>'nom', r->>'color'
+  INSERT INTO public.conducteurs (nom, color) SELECT r->>'nom', r->>'color'
   FROM jsonb_array_elements(p_conducteurs) AS r ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
 
-  UPDATE companies SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors
-  WHERE id IN (SELECT id FROM companies);
+  UPDATE public.companies SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors
+  WHERE id IN (SELECT id FROM public.companies);
 
   -- Vendeurs / types (upsert par nom ; mêmes contraintes UNIQUE que le frontend
   -- utilisait en direct : conducteurs_nom_key, vendeurs_nom_key,
   -- types_chantier_nom_key — toutes vérifiées existantes).
-  INSERT INTO vendeurs (nom, color)
+  INSERT INTO public.vendeurs (nom, color)
   SELECT r->>'nom', COALESCE(r->>'color', '#2563eb')
   FROM jsonb_array_elements(p_vendeurs) AS r
   WHERE (r->>'nom') IS NOT NULL AND (r->>'nom') <> ''
   ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
 
-  INSERT INTO types_chantier (nom, color)
+  INSERT INTO public.types_chantier (nom, color)
   SELECT r->>'nom', COALESCE(r->>'color', '#2563eb')
   FROM jsonb_array_elements(p_types_chantier) AS r
   WHERE (r->>'nom') IS NOT NULL AND (r->>'nom') <> ''
@@ -237,7 +262,7 @@ BEGIN
       -- Mapping déterministe issu de l'INSERT RETURNING ci-dessus.
       v_target := (v_map_ch->>(r.elem->>'tmp'))::INT;
     ELSE
-      SELECT ch.id INTO v_target FROM chantiers ch
+      SELECT ch.id INTO v_target FROM public.chantiers ch
       WHERE ch.company_id = (r.elem->>'company_id')::TEXT
         AND ch.equipe = NULLIF(r.elem->>'equipe','')::INT
         AND ch.start = (r.elem->>'start')::TEXT
@@ -246,7 +271,7 @@ BEGIN
       ORDER BY ch.id DESC LIMIT 1;
     END IF;
     IF v_target IS NOT NULL THEN
-      UPDATE chantiers SET
+      UPDATE public.chantiers SET
         client_nom = COALESCE((r.elem->>'client_nom'), client_nom),
         client_adresse = COALESCE((r.elem->>'client_adresse'), client_adresse),
         client_telephone = COALESCE((r.elem->>'client_telephone'), client_telephone),
@@ -270,22 +295,23 @@ BEGIN
   SELECT jsonb_build_object(
     'ok', true, 'conflict', false, 'version', v_current + 1,
     'chantier_id_map', v_map_ch, 'conge_id_map', v_map_co, 'equipe_id_map', v_map_eq,
-    'chantiers',(SELECT jsonb_agg(to_jsonb(ch) ORDER BY ch.id) FROM chantiers ch),
-    'conges',(SELECT jsonb_agg(to_jsonb(co) ORDER BY co.id) FROM conges co),
-    'equipes',(SELECT jsonb_agg(jsonb_build_object('id',e.id,'nom',e.nom,'company_id',e.company_id,'ordre',e.ordre) ORDER BY e.ordre) FROM equipes e),
-    'conducteurs',(SELECT jsonb_agg(jsonb_build_object('id',cd.id,'nom',cd.nom,'color',cd.color) ORDER BY cd.id) FROM conducteurs cd),
-    'vendeurs',(SELECT jsonb_agg(jsonb_build_object('id',v.id,'nom',v.nom,'color',v.color) ORDER BY v.id) FROM vendeurs v),
-    'types_chantier',(SELECT jsonb_agg(jsonb_build_object('id',t.id,'nom',t.nom,'color',t.color) ORDER BY t.id) FROM types_chantier t),
-    'custom_feries',(SELECT jsonb_agg(to_jsonb(cf) ORDER BY cf.id) FROM custom_feries cf)) INTO result;
+    'chantiers',(SELECT jsonb_agg(to_jsonb(ch) ORDER BY ch.id) FROM public.chantiers ch),
+    'conges',(SELECT jsonb_agg(to_jsonb(co) ORDER BY co.id) FROM public.conges co),
+    'equipes',(SELECT jsonb_agg(jsonb_build_object('id',e.id,'nom',e.nom,'company_id',e.company_id,'ordre',e.ordre) ORDER BY e.ordre) FROM public.equipes e),
+    'conducteurs',(SELECT jsonb_agg(jsonb_build_object('id',cd.id,'nom',cd.nom,'color',cd.color) ORDER BY cd.id) FROM public.conducteurs cd),
+    'vendeurs',(SELECT jsonb_agg(jsonb_build_object('id',v.id,'nom',v.nom,'color',v.color) ORDER BY v.id) FROM public.vendeurs v),
+    'types_chantier',(SELECT jsonb_agg(jsonb_build_object('id',t.id,'nom',t.nom,'color',t.color) ORDER BY t.id) FROM public.types_chantier t),
+    'custom_feries',(SELECT jsonb_agg(to_jsonb(cf) ORDER BY cf.id) FROM public.custom_feries cf)) INTO result;
   RETURN result;
 END;
 $_$;
 
 ALTER FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint) OWNER TO postgres;
 
-GRANT ALL ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint) TO anon;
-GRANT ALL ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint) TO authenticated;
-GRANT ALL ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint) TO service_role;
+-- EXECUTE réservé aux rôles authentifiés (même principe que ci-dessus).
+REVOKE EXECUTE ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint) TO service_role;
 
 -- ============================================================================
 -- VÉRIFICATION MANUELLE après application (lecture seule d'abord) :
@@ -294,10 +320,19 @@ GRANT ALL ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, json
 --                                                          -- attendu : true (RLS active)
 --   SELECT * FROM pg_policies WHERE tablename = 'planning_versions';
 --                                                          -- attendu : 0 ligne (aucune policy = refus total direct)
---   SELECT count(*) FROM (
---     SELECT proname, oidvectortypes(proargtypes) FROM pg_proc
---     WHERE proname = 'save_all_planning_data') f;          -- attendu : 3 lignes
---     -- (5 params historique, 7 params prod actuelle, v2 OCC)
+--   SELECT
+--     proname,
+--     oidvectortypes(proargtypes)
+--   FROM pg_proc
+--   WHERE proname IN (
+--     'save_all_planning_data',
+--     'save_all_planning_data_v2'
+--   )
+--   ORDER BY proname, oidvectortypes(proargtypes);
+--   -- attendu : 3 lignes =
+--   --   save_all_planning_data 5 params (historique, non utilisée),
+--   --   save_all_planning_data 7 params (prod actuelle),
+--   --   save_all_planning_data_v2 10 params (nouvelle OCC).
 --   SELECT proname FROM pg_proc WHERE proname = 'get_planning_version';
 --   SELECT public.get_planning_version();                    -- attendu : 1
 --   -- Comparaison avant/après : counts métier strictement identiques :
