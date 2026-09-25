@@ -412,6 +412,7 @@ export default function App() {
   // Debounced persistence to Supabase (runs 800ms after data settles)
   useEffect(() => {
     if (!loadedRef.current || !session || !companies.length) return;
+    if (!canEdit) return;
     if (suppressAutoSaveRef.current) return;
     // Conflit OCC actif : on ne re-sauvegarde PAS le snapshot périmé.
     // L'utilisateur doit recharger explicitement (bouton Recharger).
@@ -746,13 +747,18 @@ export default function App() {
           }
         }
         setTeams(teams);
-        for (const comp of allData.companies) {
-          const names = teams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
-          const result = await api.upsertEquipes(names, comp.id);
-          if (result) {
-            for (const row of result) {
-              const t = teams.find(t => t.nom === row.nom && t.companyId === row.company_id);
-              if (t) t.id = row.id;
+        // Bootstrap réservé aux éditeurs : un utilisateur lecture ne doit
+        // jamais créer d'équipes (ni aucune autre écriture) automatiquement.
+        // Le chargement lecture seule continue normalement en dessous.
+        if (canEdit) {
+          for (const comp of allData.companies) {
+            const names = teams.filter((t) => t.companyId === comp.id).map((t) => t.nom);
+            const result = await api.upsertEquipes(names, comp.id);
+            if (result) {
+              for (const row of result) {
+                const t = teams.find(t => t.nom === row.nom && t.companyId === row.company_id);
+                if (t) t.id = row.id;
+              }
             }
           }
         }
@@ -764,7 +770,7 @@ export default function App() {
         .filter(([, v]) => !v)
         .map(([k]) => k);
 
-      if (unmigrated.length > 0) {
+      if (unmigrated.length > 0 && canEdit) {
         const idxToId = {};
         teams.forEach((t, i) => { idxToId[i] = t.id; });
 
