@@ -86,6 +86,7 @@ DECLARE
   v_target INT;
   v_real INT;
   v_tmp TEXT;
+  r RECORD;
   -- Mappings déterministes tmp→réel (clé = identifiant temporaire unique par
   -- session frontend, jamais une clé composite ambiguë). Retournés au frontend
   -- pour remapper son état local après ACK (plus de recréation en boucle).
@@ -226,8 +227,8 @@ BEGIN
     SELECT (x->>'id')::INT FROM jsonb_array_elements(p_conducteurs) AS x
     WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$'
   );
-  INSERT INTO public.conducteurs (nom, color) SELECT r->>'nom', r->>'color'
-  FROM jsonb_array_elements(p_conducteurs) AS r ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
+  INSERT INTO public.conducteurs (nom, color) SELECT cd_row->>'nom', cd_row->>'color'
+  FROM jsonb_array_elements(p_conducteurs) AS cd_row ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
 
   UPDATE public.companies SET chantier_colors = p_chantier_colors, conducteur_colors = p_conducteur_colors
   WHERE id IN (SELECT id FROM public.companies);
@@ -236,15 +237,15 @@ BEGIN
   -- utilisait en direct : conducteurs_nom_key, vendeurs_nom_key,
   -- types_chantier_nom_key — toutes vérifiées existantes).
   INSERT INTO public.vendeurs (nom, color)
-  SELECT r->>'nom', COALESCE(r->>'color', '#2563eb')
-  FROM jsonb_array_elements(p_vendeurs) AS r
-  WHERE (r->>'nom') IS NOT NULL AND (r->>'nom') <> ''
+  SELECT vendeur_row->>'nom', COALESCE(vendeur_row->>'color', '#2563eb')
+  FROM jsonb_array_elements(p_vendeurs) AS vendeur_row
+  WHERE (vendeur_row->>'nom') IS NOT NULL AND (vendeur_row->>'nom') <> ''
   ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
 
   INSERT INTO public.types_chantier (nom, color)
-  SELECT r->>'nom', COALESCE(r->>'color', '#2563eb')
-  FROM jsonb_array_elements(p_types_chantier) AS r
-  WHERE (r->>'nom') IS NOT NULL AND (r->>'nom') <> ''
+  SELECT type_row->>'nom', COALESCE(type_row->>'color', '#2563eb')
+  FROM jsonb_array_elements(p_types_chantier) AS type_row
+  WHERE (type_row->>'nom') IS NOT NULL AND (type_row->>'nom') <> ''
   ON CONFLICT (nom) DO UPDATE SET color = EXCLUDED.color;
 
   -- Patch nouveaux champs chantiers (remplace pushNewFieldsDirect frontend).

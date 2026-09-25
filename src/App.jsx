@@ -365,7 +365,6 @@ export default function App() {
   const saveChainRef = useRef(Promise.resolve());
   const saveDrainingRef = useRef(false);
   const pendingSavePayloadRef = useRef(null);
-  const saveRetryCountRef = useRef(0);
   const lastReloadAtRef = useRef(0);
   const dragActiveRef = useRef(false);
   // OCC : dernière version serveur connue (jamais inventée côté frontend).
@@ -445,42 +444,41 @@ export default function App() {
     saveChainRef.current
       .catch(() => {})
       .then(async () => {
-        while (pendingSavePayloadRef.current) {
-          const payload = pendingSavePayloadRef.current;
-          pendingSavePayloadRef.current = null;
-          try {
-            const res = await runPlanningSave(payload);
-            if (res && res.conflict) {
-              // Snapshot périmé REFUSÉ par le serveur : rien n'a été écrit.
-              // Surtout PAS de retry ni de requeue (le même snapshot re-conflicterait).
-              saveRetryCountRef.current = 0;
-              if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
-              pendingSavePayloadRef.current = null;
-              conflictRef.current = { serverVersion: res.serverVersion ?? null };
-              setSaveConflict({ serverVersion: res.serverVersion ?? null });
-              setSaveUiState('conflict');
-              // Pas de reload silencieux : l'état local est conservé tel quel,
-              // l'utilisateur recharge explicitement (bouton Recharger).
-              break;
-            }
-            saveRetryCountRef.current = 0;
-          } catch (e) {
-            console.error('saveAllPlanningData failed', e);
-            saveRetryCountRef.current += 1;
-            if (saveRetryCountRef.current > 5) {
-              console.error('[save] abandon après 5 échecs consécutifs, payload ignoré');
-              pendingSavePayloadRef.current = null;
-              saveRetryCountRef.current = 0;
-              setSaveUiState('error');
-              break;
-            }
-            if (!pendingSavePayloadRef.current) pendingSavePayloadRef.current = payload;
-            await new Promise((r) => setTimeout(r, 2500));
+        // UN seul payload, UN seul appel RPC : jamais de retry, jamais de requeue.
+        // (Le debounce en amont regroupe déjà les modifications.)
+        const payload = pendingSavePayloadRef.current;
+        pendingSavePayloadRef.current = null;
+        if (!payload) return;
+        try {
+          const res = await runPlanningSave(payload);
+          if (res && res.conflict) {
+            // Snapshot périmé REFUSÉ par le serveur : rien n'a été écrit.
+            // Surtout PAS de retry ni de requeue (le même snapshot re-conflicterait).
+            if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+            pendingSavePayloadRef.current = null;
+            conflictRef.current = { serverVersion: res.serverVersion ?? null };
+            setSaveConflict({ serverVersion: res.serverVersion ?? null });
+            setSaveUiState('conflict');
+            // Pas de reload silencieux : l'état local est conservé tel quel,
+            // l'utilisateur recharge explicitement (bouton Recharger).
+            return;
           }
+        } catch (e) {
+          // Échec RPC : état erreur IMMÉDIAT, sans nouvelle tentative.
+          // Le payload N'EST PAS remis en file : un rejeu automatique
+          // risquerait d'écraser des données plus récentes. Les modifications
+          // restent dans l'état local ; la prochaine édition planifiera un
+          // nouveau save avec un snapshot frais.
+          console.error('saveAllPlanningData failed', e);
+          setSaveUiState('error');
         }
       })
       .finally(() => {
         saveDrainingRef.current = false;
+        // Un payload PLUS RÉCENT arrivé pendant le save (timer consommé) doit
+        // quand même partir — une fois, sans retry. Sans cela il resterait
+        // bloqué sans timer. Ce n'est PAS un rejeu : c'est un autre snapshot.
+        if (pendingSavePayloadRef.current) scheduleSaveDrain();
       });
   }
 
