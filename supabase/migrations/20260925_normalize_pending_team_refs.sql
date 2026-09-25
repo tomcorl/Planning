@@ -29,6 +29,21 @@ FROM public.planning_versions
 WHERE id = 1
 FOR UPDATE;
 
+-- Marque la normalisation comme une nouvelle version AVANT les UPDATE.
+-- Au second lancement, les anciens IDs n'existent plus : aucune nouvelle version
+-- n'est créée.
+UPDATE public.planning_versions
+SET version = version + 1,
+    updated_at = now()
+WHERE id = 1
+  AND EXISTS (
+    SELECT 1
+    FROM public.chantiers c
+    WHERE (c.company_id = 'noree'   AND c.equipe IN (1239,1252,1253,1254,1255,1256,1259))
+       OR (c.company_id = 'couvran' AND c.equipe IN (1254,1257,1258,1259,1261))
+       OR (c.company_id = 'rat'     AND c.equipe IN (1258,1259,1261))
+  );
+
 -- ---------------------------------------------------------------------------
 -- Noree
 -- Ancienne ligne 1239 (collision MIGUEL) -> attente 1
@@ -104,19 +119,6 @@ BEGIN
   END IF;
 END;
 $$;
-
--- La modification manuelle doit être visible par OCC comme une nouvelle version.
-UPDATE public.planning_versions
-SET version = version + 1,
-    updated_at = now()
-WHERE id = 1
-  AND EXISTS (
-    SELECT 1
-    FROM public.chantiers c
-    WHERE c.company_id = 'noree' AND c.equipe IN (1239,1252,1253,1254,1255,1256,1259)
-       OR c.company_id = 'couvran' AND c.equipe IN (1254,1257,1258,1259,1261)
-       OR c.company_id = 'rat' AND c.equipe IN (1258,1259,1261)
-  );
 
 COMMIT;
 
