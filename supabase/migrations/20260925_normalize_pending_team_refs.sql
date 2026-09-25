@@ -113,11 +113,9 @@ WHERE id = 1
   AND EXISTS (
     SELECT 1
     FROM public.chantiers c
-    WHERE c.equipe IN (
-      -1000001, -1000002, -1000003, -1000004, -1000005,
-      -1001001, -1001002, -1001003,
-      -1002001, -1002002, -1002003
-    )
+    WHERE c.company_id = 'noree' AND c.equipe IN (1239,1252,1253,1254,1255,1256,1259)
+       OR c.company_id = 'couvran' AND c.equipe IN (1254,1257,1258,1259,1261)
+       OR c.company_id = 'rat' AND c.equipe IN (1258,1259,1261)
   );
 
 COMMIT;
