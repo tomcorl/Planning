@@ -494,6 +494,53 @@ export default function App() {
     // Le serveur a accepté : on ne peut plus être en conflit avec lui.
     conflictRef.current = null;
     setSaveConflict(null);
+    // Remaps d'IDs post-ACK : bookkeeping 100 % local (le serveur a déjà tout).
+    // Sous suppression d'autosave (même pattern que performReload) pour ne PAS
+    // déclencher un 2e snapshot inutile : les remaps ne changent aucune donnée
+    // métier, seulement des IDs temporaires → réels. Se termine toujours
+    // (aucun remap ne recrée de temporaires → pas de boucle).
+    suppressAutoSaveRef.current = true;
+    setTimeout(() => { suppressAutoSaveRef.current = false; }, 100);
+    // Helper : applique une map tmp→réel ({tmp: real}) sur le champ id.
+    // Ne touche JAMAIS un ID existant (lookup miss → inchangé).
+    const applyTmpMap = (setter, map, field = 'id') => {
+      if (!map || typeof map !== 'object') return;
+      setter(prev => {
+        let changed = false;
+        const updated = prev.map(row => {
+          const real = map[String(row[field])];
+          if (real != null && Number(real) !== row[field]) {
+            changed = true;
+            return { ...row, [field]: Number(real) };
+          }
+          return row;
+        });
+        return changed ? updated : prev;
+      });
+    };
+    // P3 : nouveaux chantiers/congés → vrais IDs serveur (déterministe, sans
+    // clé composite ; un 2e save immédiat réutilise le même ID, sans doublon).
+    applyTmpMap(setChantiers, result?.chantier_id_map);
+    applyTmpMap(setConges, result?.conge_id_map);
+    // P4 : équipes — map tmp→réel PRIMAIRE (déterministe), remap nom+company
+    // conservé en fallback pour les cas historiques.
+    const eqTmpMap = (result?.equipe_id_map && typeof result.equipe_id_map === 'object')
+      ? result.equipe_id_map
+      : null;
+    if (eqTmpMap) {
+      const hasTmp = (id) => eqTmpMap[String(id)] != null;
+      setTeams(prev => {
+        let changed = false;
+        const updated = prev.map(t => {
+          const real = eqTmpMap[String(t.id)];
+          if (real != null && Number(real) !== t.id) { changed = true; return { ...t, id: Number(real) }; }
+          return t;
+        });
+        return changed ? updated : prev;
+      });
+      setChantiers(prev => prev.map(c => (hasTmp(c.equipe) ? { ...c, equipe: Number(eqTmpMap[String(c.equipe)]) } : c)));
+      setConges(prev => prev.map(c => (hasTmp(c.equipe) ? { ...c, equipe: Number(eqTmpMap[String(c.equipe)]) } : c)));
+    }
     // Update conducteur/vendeur/type IDs from DB response (new rows get real IDs)
     if (result?.conducteurs) {
       const nomToId = new Map(result.conducteurs.map(r => [r.nom, r.id]));

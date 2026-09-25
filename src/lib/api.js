@@ -55,6 +55,28 @@ export async function logout() {
 // ─── COMPANY DATA LOADING ──────────────────────────────
 
 export async function loadPlanningData() {
+  // OCC : la version est lue AVANT et APRÈS le snapshot. Si un save concurrent
+  // s'intercale entre les deux lectures, le snapshot et la version ne
+  // correspondent plus → on recommence (max 3 tentatives). On ne retourne
+  // JAMAIS un snapshot N associé à une version N+1. Version indisponible des
+  // deux côtés → fail-closed (version null → saves refusées).
+  // Utilisé par le chargement initial ET tous les reloads.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const vBefore = await getPlanningVersion().catch(() => null);
+    const snapshot = await loadSnapshotOnce();
+    const vAfter = await getPlanningVersion().catch(() => null);
+    if (vBefore == null && vAfter == null) return { ...snapshot, version: null };
+    if (vBefore != null && vBefore === vAfter) return { ...snapshot, version: vAfter };
+    if (attempt === 3) {
+      console.error('[load] snapshot/version incohérents après 3 tentatives — version inconnue (saves refusées)');
+      return { ...snapshot, version: null };
+    }
+    // Sinon : un save concurrent s'est intercalé pendant le chargement → on recommence.
+  }
+}
+
+// Corps du chargement snapshot (sans version) : RPC + fallback + normalize.
+async function loadSnapshotOnce() {
   let { data, error } = await supabase.rpc('get_planning_data');
   // Le RPC en prod ne renvoie pas encore vendeurs/types_chantier : on complète en direct.
   if (!error && data && ((!data.vendeurs || data.vendeurs.length === 0) || (!data.types_chantier && !data.typesChantier))) {
@@ -99,10 +121,6 @@ export async function loadPlanningData() {
     conges: dedupedConges,
     customFeries: (data.custom_feries || []).map((f) => ({ ...f, companyId: f.company_id })),
     companiesMigrated: data.companies_migrated || {},
-    // Version OCC du snapshot chargé (get_planning_version). null si le RPC
-    // n'existe pas encore en base → les saves partiront avec baseVersion null
-    // et seront refusées (fail-closed) jusqu'à application de la migration.
-    version: await getPlanningVersion().catch(() => null),
   };
 }
 
@@ -331,13 +349,20 @@ export async function updateUserProfile(userId, updates) {
 
 export async function saveAllPlanningData(data) {
   const { chantiers, conges, equipes, conducteurs, vendeurs = [], typesChantier = [], customFeries, chantierColors, conducteurColors } = data;
+  // OCC : règle uniforme id réel vs temporaire. Seul un entier > 0 est un id
+  // serveur ; tout le reste voyage en clé `tmp` (jamais en `id`) pour un
+  // mapping tmp→réel déterministe côté SQL (plus de clé composite ambiguë).
+  // `undefined` est omis du JSON : une ligne temp n'a aucune clé `id`.
+  const splitId = (id) => (Number.isInteger(id) && id > 0)
+    ? { id, tmp: undefined }
+    : { id: undefined, tmp: id };
   const congeRows = conges.map(c => ({
-    id: Number.isInteger(c.id) && c.id >= -2147483648 && c.id <= 2147483647 ? c.id : undefined,
+    ...splitId(c.id),
     company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
     nom: c.nom || 'Congé', all_equipes: c.allEquipes ? 1 : 0,
   }));
   const equipeRows = equipes.map(e => ({
-    id: Number.isInteger(e.id) && e.id !== 0 ? e.id : undefined,
+    ...splitId(e.id),
     company_id: e.companyId, nom: e.nom, ordre: e.ordre,
   }));
   const conducteurRows = conducteurs.map(c => ({
@@ -351,7 +376,7 @@ export async function saveAllPlanningData(data) {
   // OCC v2 : un seul appel transactionnel (snapshot + vendeurs/types/new-fields
   // + version). Plus d'écritures directes hors RPC après le save.
   const baseRows = chantiers.map(c => ({
-    id: c.id > 0 && c.id <= 2147483647 ? c.id : undefined,
+    ...splitId(c.id),
     company_id: c.company_id, equipe: c.equipe, start: c.start, duree: c.duree,
     nom: c.nom, conducteurId: c.conducteurId || 0, color: c.color || '#b7c6d8',
     note: c.note || '', termine: c.termine ? 1 : 0, linked: c.linked ? 1 : 0,

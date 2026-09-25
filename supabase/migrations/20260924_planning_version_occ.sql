@@ -6,13 +6,15 @@
 -- - Ne fait AUCUN CREATE OR REPLACE / DROP sur les fonctions existantes
 --   (save_all_planning_data 5 et 7 params, get_planning_data, etc. intacts).
 -- - Ne touche ni aux séquences, ni aux RLS/policies, ni aux grants existants.
+-- - planning_versions est VERROUILLÉE : REVOKE total + RLS sans policy
+--   (accès direct refusé) ; seules les 2 nouvelles fonctions SECURITY DEFINER
+--   y accèdent (lecture version / verrou FOR UPDATE + bump).
 -- - En cas de conflit de version : ROLLBACK implicite (aucune écriture),
 --   la fonction retourne {ok:false, conflict:true, version} AVANT tout write.
 -- APPLIQUER via Supabase SQL editor, dans l'ordre du fichier, en UNE fois.
 -- VÉRIFICATION manuelle après application (requêtes en bas de fichier).
--- ROLLBACK : DROP FUNCTION save_all_planning_data_v2(...); DROP FUNCTION
---   get_planning_version(); DROP TABLE planning_versions; (puis re-pointer
---   le frontend sur save_all_planning_data v1).
+-- ROLLBACK : voir bas de fichier (distinguer cas A : v2 jamais utilisée,
+--   et cas B : v2 déjà utilisée — les écritures validées restent).
 -- ============================================================================
 
 -- ── ÉTAPE 2 : table de version globale (le save est un snapshot global) ─────
@@ -26,9 +28,14 @@ CREATE TABLE public.planning_versions (
 -- Aucune donnée métier n'est lue ni modifiée par ces deux ordres.
 INSERT INTO public.planning_versions (id, version) VALUES (1, 1);
 
-GRANT ALL ON TABLE public.planning_versions TO anon;
-GRANT ALL ON TABLE public.planning_versions TO authenticated;
-GRANT ALL ON TABLE public.planning_versions TO service_role;
+-- VERROUILLAGE : planning_versions est une table interne de contrôle OCC.
+-- Aucun droit direct pour anon/authenticated (ni SELECT, ni INSERT, ni
+-- UPDATE, ni DELETE) + RLS activée SANS policy → tout accès direct est
+-- refusé (erreur 42501). La lecture passe UNIQUEMENT par get_planning_version()
+-- et les écritures par save_all_planning_data_v2, toutes deux SECURITY DEFINER
+-- (exécution en tant que owner postgres → RLS contournée légalement).
+REVOKE ALL ON TABLE public.planning_versions FROM anon, authenticated, PUBLIC;
+ALTER TABLE public.planning_versions ENABLE ROW LEVEL SECURITY;
 
 -- ── Version courante (lue au chargement / reload pour amorcer versionRef) ──
 CREATE FUNCTION public.get_planning_version() RETURNS bigint
@@ -72,6 +79,14 @@ DECLARE
   result JSONB;
   v_current BIGINT;
   v_target INT;
+  v_real INT;
+  v_tmp TEXT;
+  -- Mappings déterministes tmp→réel (clé = identifiant temporaire unique par
+  -- session frontend, jamais une clé composite ambiguë). Retournés au frontend
+  -- pour remapper son état local après ACK (plus de recréation en boucle).
+  v_map_ch JSONB := '{}'::jsonb;
+  v_map_co JSONB := '{}'::jsonb;
+  v_map_eq JSONB := '{}'::jsonb;
 BEGIN
   IF EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'lecture') THEN
     RAISE EXCEPTION 'Accès refusé : rôle lecture';
@@ -94,11 +109,15 @@ BEGIN
       SELECT (x->>'id')::INT FROM jsonb_array_elements(p_chantiers) AS x
       WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'company_id') = comp_id
     );
+    -- Lignes réelles uniquement (id entier > 0) : upsert set-based identique v1.
+    -- Les lignes temporaires (id absent/invalide/<=0) sont insérées plus bas
+    -- en boucle avec RETURNING pour un mapping tmp→réel déterministe.
     INSERT INTO chantiers (id, company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
     SELECT COALESCE((x->>'id')::INT, nextval('chantiers_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT,
            (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT, (x->>'conducteurId')::INT, (x->>'color')::TEXT,
            (x->>'note')::TEXT, (x->>'termine')::INT, (x->>'linked')::INT, (x->>'detail')::TEXT, COALESCE((x->>'force_aout')::INT,0)::BOOLEAN
     FROM jsonb_array_elements(p_chantiers) AS x WHERE (x->>'company_id') = comp_id
+      AND (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'id')::INT > 0
     ON CONFLICT (id) DO UPDATE SET company_id=EXCLUDED.company_id, equipe=EXCLUDED.equipe, start=EXCLUDED.start,
       duree=EXCLUDED.duree, nom=EXCLUDED.nom, "conducteurId"=EXCLUDED."conducteurId", color=EXCLUDED.color,
       note=EXCLUDED.note, termine=EXCLUDED.termine, linked=EXCLUDED.linked, detail=EXCLUDED.detail, force_aout=EXCLUDED.force_aout;
@@ -111,25 +130,71 @@ BEGIN
     SELECT COALESCE((x->>'id')::INT, nextval('conges_id_seq'::regclass)), (x->>'company_id')::TEXT, (x->>'equipe')::INT,
            (x->>'start')::TEXT, (x->>'duree')::INT, (x->>'nom')::TEXT, COALESCE((x->>'all_equipes')::INT,0)
     FROM jsonb_array_elements(p_conges) AS x WHERE (x->>'company_id') = comp_id
+      AND (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'id')::INT > 0
     ON CONFLICT (id) DO UPDATE SET company_id=EXCLUDED.company_id, equipe=EXCLUDED.equipe, start=EXCLUDED.start,
       duree=EXCLUDED.duree, nom=EXCLUDED.nom, all_equipes=EXCLUDED.all_equipes;
-
-    INSERT INTO equipes (id, company_id, nom, ordre)
-    SELECT COALESCE(NULLIF((x->>'id')::INT,0), NULLIF((x->>'id')::INT,-2147483648), nextval('equipes_id_seq'::regclass)),
-      (x->>'company_id')::TEXT, (x->>'nom')::TEXT, COALESCE((x->>'ordre')::INT,1)
-    FROM jsonb_array_elements(p_equipes) AS x WHERE (x->>'company_id') = comp_id
-    ON CONFLICT (id) DO UPDATE SET company_id=EXCLUDED.company_id, nom=EXCLUDED.nom, ordre=EXCLUDED.ordre;
 
     DELETE FROM equipes WHERE company_id = comp_id AND id NOT IN (
       SELECT (x->>'id')::INT FROM jsonb_array_elements(p_equipes) AS x
       WHERE (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'company_id') = comp_id
       AND NULLIF((x->>'id')::INT,0) IS NOT NULL AND NULLIF((x->>'id')::INT,-2147483648) IS NOT NULL
     );
+    INSERT INTO equipes (id, company_id, nom, ordre)
+    SELECT COALESCE(NULLIF((x->>'id')::INT,0), NULLIF((x->>'id')::INT,-2147483648), nextval('equipes_id_seq'::regclass)),
+      (x->>'company_id')::TEXT, (x->>'nom')::TEXT, COALESCE((x->>'ordre')::INT,1)
+    FROM jsonb_array_elements(p_equipes) AS x WHERE (x->>'company_id') = comp_id
+      AND (x->>'id') IS NOT NULL AND (x->>'id') ~ '^-?[0-9]+$' AND (x->>'id')::INT > 0
+    ON CONFLICT (id) DO UPDATE SET company_id=EXCLUDED.company_id, nom=EXCLUDED.nom, ordre=EXCLUDED.ordre;
 
     DELETE FROM custom_feries WHERE company_id = comp_id;
     INSERT INTO custom_feries (company_id, nom, date)
     SELECT (x->>'company_id')::TEXT, (x->>'nom')::TEXT, (x->>'date')::TEXT
     FROM jsonb_array_elements(p_custom_feries) AS x WHERE (x->>'company_id') = comp_id;
+  END LOOP;
+
+  -- Lignes temporaires (id absent/invalide/<=0) : INSERT un par un avec
+  -- RETURNING pour un mapping tmp→réel EXACT (pas de clé composite).
+  -- Les lignes réelles (> 0) ont déjà été traitées par les upserts set-based.
+  FOR r IN SELECT elem FROM jsonb_array_elements(p_chantiers) AS elem LOOP
+    IF (r.elem->>'id') IS NOT NULL AND (r.elem->>'id') ~ '^-?[0-9]+$' AND (r.elem->>'id')::INT > 0 THEN
+      CONTINUE;
+    END IF;
+    INSERT INTO chantiers (company_id, equipe, start, duree, nom, "conducteurId", color, note, termine, linked, detail, force_aout)
+    VALUES ((r.elem->>'company_id')::TEXT, (r.elem->>'equipe')::INT,
+      (r.elem->>'start')::TEXT, (r.elem->>'duree')::INT, (r.elem->>'nom')::TEXT, (r.elem->>'conducteurId')::INT, (r.elem->>'color')::TEXT,
+      (r.elem->>'note')::TEXT, (r.elem->>'termine')::INT, (r.elem->>'linked')::INT, (r.elem->>'detail')::TEXT, COALESCE((r.elem->>'force_aout')::INT,0)::BOOLEAN)
+    RETURNING id INTO v_real;
+    v_tmp := r.elem->>'tmp';
+    IF v_tmp IS NOT NULL THEN
+      v_map_ch := v_map_ch || jsonb_build_object(v_tmp, v_real);
+    END IF;
+  END LOOP;
+
+  FOR r IN SELECT elem FROM jsonb_array_elements(p_conges) AS elem LOOP
+    IF (r.elem->>'id') IS NOT NULL AND (r.elem->>'id') ~ '^-?[0-9]+$' AND (r.elem->>'id')::INT > 0 THEN
+      CONTINUE;
+    END IF;
+    INSERT INTO conges (company_id, equipe, start, duree, nom, all_equipes)
+    VALUES ((r.elem->>'company_id')::TEXT, (r.elem->>'equipe')::INT,
+      (r.elem->>'start')::TEXT, (r.elem->>'duree')::INT, (r.elem->>'nom')::TEXT, COALESCE((r.elem->>'all_equipes')::INT,0))
+    RETURNING id INTO v_real;
+    v_tmp := r.elem->>'tmp';
+    IF v_tmp IS NOT NULL THEN
+      v_map_co := v_map_co || jsonb_build_object(v_tmp, v_real);
+    END IF;
+  END LOOP;
+
+  FOR r IN SELECT elem FROM jsonb_array_elements(p_equipes) AS elem LOOP
+    IF (r.elem->>'id') IS NOT NULL AND (r.elem->>'id') ~ '^-?[0-9]+$' AND (r.elem->>'id')::INT > 0 THEN
+      CONTINUE;
+    END IF;
+    INSERT INTO equipes (company_id, nom, ordre)
+    VALUES ((r.elem->>'company_id')::TEXT, (r.elem->>'nom')::TEXT, COALESCE((r.elem->>'ordre')::INT,1))
+    RETURNING id INTO v_real;
+    v_tmp := r.elem->>'tmp';
+    IF v_tmp IS NOT NULL THEN
+      v_map_eq := v_map_eq || jsonb_build_object(v_tmp, v_real);
+    END IF;
   END LOOP;
 
   DELETE FROM conducteurs WHERE id NOT IN (
@@ -168,6 +233,9 @@ BEGIN
   FOR r IN SELECT elem FROM jsonb_array_elements(p_chantiers) AS elem LOOP
     IF (r.elem->>'id') IS NOT NULL AND (r.elem->>'id') ~ '^-?[0-9]+$' AND NULLIF(r.elem->>'id','')::INT > 0 THEN
       v_target := NULLIF(r.elem->>'id','')::INT;
+    ELSIF (r.elem->>'tmp') IS NOT NULL AND (v_map_ch ? (r.elem->>'tmp')) THEN
+      -- Mapping déterministe issu de l'INSERT RETURNING ci-dessus.
+      v_target := (v_map_ch->>(r.elem->>'tmp'))::INT;
     ELSE
       SELECT ch.id INTO v_target FROM chantiers ch
       WHERE ch.company_id = (r.elem->>'company_id')::TEXT
@@ -201,6 +269,7 @@ BEGIN
 
   SELECT jsonb_build_object(
     'ok', true, 'conflict', false, 'version', v_current + 1,
+    'chantier_id_map', v_map_ch, 'conge_id_map', v_map_co, 'equipe_id_map', v_map_eq,
     'chantiers',(SELECT jsonb_agg(to_jsonb(ch) ORDER BY ch.id) FROM chantiers ch),
     'conges',(SELECT jsonb_agg(to_jsonb(co) ORDER BY co.id) FROM conges co),
     'equipes',(SELECT jsonb_agg(jsonb_build_object('id',e.id,'nom',e.nom,'company_id',e.company_id,'ordre',e.ordre) ORDER BY e.ordre) FROM equipes e),
@@ -219,8 +288,12 @@ GRANT ALL ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, json
 GRANT ALL ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint) TO service_role;
 
 -- ============================================================================
--- VÉRIFICATION MANUELLE après application (ne rien exécuter d'autre) :
+-- VÉRIFICATION MANUELLE après application (lecture seule d'abord) :
 --   SELECT * FROM planning_versions;                       -- attendu : (1, 1)
+--   SELECT relrowsecurity FROM pg_class WHERE relname = 'planning_versions';
+--                                                          -- attendu : true (RLS active)
+--   SELECT * FROM pg_policies WHERE tablename = 'planning_versions';
+--                                                          -- attendu : 0 ligne (aucune policy = refus total direct)
 --   SELECT count(*) FROM (
 --     SELECT proname, oidvectortypes(proargtypes) FROM pg_proc
 --     WHERE proname = 'save_all_planning_data') f;          -- attendu : 3 lignes
@@ -232,8 +305,37 @@ GRANT ALL ON FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, json
 --     (SELECT count(*) FROM equipes), (SELECT count(*) FROM conducteurs),
 --     (SELECT count(*) FROM vendeurs), (SELECT count(*) FROM types_chantier),
 --     (SELECT count(*) FROM custom_feries);
--- ROLLBACK (si besoin) :
---   DROP FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint);
---   DROP FUNCTION public.get_planning_version();
---   DROP TABLE public.planning_versions;
+--
+-- VERROUILLAGE (à exécuter UNE PAR UNE, rôle postgres requis pour SET ROLE ;
+-- chaque ordre en écriture DOIT échouer avec 42501, sans rien modifier) :
+--   SET ROLE authenticated;
+--   UPDATE planning_versions SET version = 999 WHERE id = 1;  -- attendu : ERREUR 42501
+--   DELETE FROM planning_versions WHERE id = 1;               -- attendu : ERREUR 42501
+--   INSERT INTO planning_versions (id, version) VALUES (2, 1);-- attendu : ERREUR 42501
+--   SELECT * FROM planning_versions;                          -- attendu : ERREUR 42501
+--   RESET ROLE;
+--   SELECT * FROM planning_versions;  -- attendu : toujours (1, 1), rien n'a bougé
+--
+-- FONCTIONNEMENT via SECURITY DEFINER (zéro écriture métier) :
+--   -- Chemin conflit (base volontairement fausse) : prouve que la v2
+--   -- s'exécute (rôle + version comparée) SANS rien écrire :
+--   SELECT public.save_all_planning_data_v2('[]','[]','[]','[]','[]','{}','{}','[]','[]',0);
+--   -- attendu : {"ok": false, "conflict": true, "version": 1}
+--   SELECT * FROM planning_versions;  -- attendu : toujours (1, 1)
+--   -- Le chemin ok:true (écriture réelle + version 2) ne peut être testé
+--   -- SANS modifier la base : le tester en PREVIEW après application, jamais
+--   -- en aveugle en production.
+--
+-- ROLLBACK — DISTINGUER DEUX CAS :
+--   A. Migration installée mais v2 JAMAIS utilisée (version toujours à 1,
+--      frontend jamais passé sur v2) : suppression complète possible, la base
+--      métier est strictement identique à avant :
+--        DROP FUNCTION public.save_all_planning_data_v2(jsonb, jsonb, jsonb, jsonb, jsonb, text[], text[], jsonb, jsonb, bigint);
+--        DROP FUNCTION public.get_planning_version();
+--        DROP TABLE public.planning_versions;
+--   B. v2 DÉJÀ utilisée (version > 1, saves commits validés) : un retour
+--      frontend vers la v1 est possible (l'ancienne RPC est intacte), MAIS les
+--      écritures déjà validées par la v2 RESTENT dans les tables métier.
+--      Supprimer v2 + planning_versions dans ce cas ne restaure AUCUNE donnée
+--      antérieure — seul un restore du backup pré-migration le ferait.
 -- ============================================================================
