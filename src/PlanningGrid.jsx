@@ -940,6 +940,7 @@ const PlanningGrid = React.memo(function PlanningGrid({
               </React.Fragment>
             );
           })}
+          <div className="planning-footer">Créé par Tom Corlay • v6.2-vitesse+</div>
         </div>
       </div>
     </div>
