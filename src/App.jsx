@@ -45,7 +45,7 @@ const PENDING_EQUIP_BASE = -1000001;
 const PENDING_EQUIP_STRIDE = 1000;
 
 function getPendingCountForCompany(comp) {
-  const normalized = (comp?.nom || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+  const normalized = (comp?.nom || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   return normalized.includes('noree') ? 5 : 3;
 }
 
